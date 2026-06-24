@@ -1,0 +1,121 @@
+{
+  "category": "Fitness",
+  "version": "1.0",
+  "drills": [
+    {
+      "id": "fit_001",
+      "name": "Fat-Burning Sprint Intervals",
+      "level": "Intermediate",
+      "duration_minutes": 20,
+      "objective": "Improve cardiovascular fitness and maximize calorie burn through high-intensity sprint intervals",
+      "equipment": ["Cones", "Stopwatch"],
+      "steps": [
+        { "step": 1, "action": "Dynamic warm-up — leg swings, high knees, butt kicks x 2 mins", "duration_minutes": 2 },
+        { "step": 2, "action": "Sprint intervals — 20m sprint x 10 reps, 30s walking rest between each", "duration_minutes": 8 },
+        { "step": 3, "action": "Shuttle runs — sprint 20m, touch cone, sprint back x 6 reps", "duration_minutes": 7 },
+        { "step": 4, "action": "Cool-down jog and stretch", "duration_minutes": 3 }
+      ],
+      "key_coaching_points": [
+        "Drive with arms — arms power your sprint, not just legs",
+        "Low body angle for first 5m — then rise into upright sprint",
+        "Focus on maximum effort each sprint — rest fully between reps",
+        "Track time for each rep to measure improvement"
+      ],
+      "target_metric": "20m sprint under 3.2 seconds; complete all 10 reps without reducing effort",
+      "suitable_for": ["All fitness levels"],
+      "related_goal": "Fitness"
+    },
+    {
+      "id": "fit_002",
+      "name": "Agility Ladder Drill",
+      "level": "Beginner",
+      "duration_minutes": 15,
+      "objective": "Improve footwork speed, lateral movement, and coordination for overall fitness and fat-burning",
+      "equipment": ["Agility ladder (6m)"],
+      "steps": [
+        { "step": 1, "action": "Single-step — both feet in each rung, quick steps, arms pumping x 3 passes", "duration_minutes": 4 },
+        { "step": 2, "action": "Lateral shuffle — sideways through ladder, two steps per rung x 3 passes", "duration_minutes": 4 },
+        { "step": 3, "action": "In-out drill — feet in, feet out each rung x 3 passes", "duration_minutes": 4 },
+        { "step": 4, "action": "Ickey shuffle pattern x 3 passes", "duration_minutes": 3 }
+      ],
+      "key_coaching_points": [
+        "Stay on balls of feet — do not flat-foot",
+        "Maintain a consistent rhythm before trying to increase speed",
+        "Keep head up — do not look at the ladder",
+        "Arms should mirror foot speed — fast feet = fast arms"
+      ],
+      "target_metric": "Complete 6m single-step ladder under 4 seconds after 4 weeks of training",
+      "suitable_for": ["All positions"],
+      "related_goal": "Fitness"
+    },
+    {
+      "id": "fit_003",
+      "name": "Aerobic Endurance Run",
+      "level": "Intermediate",
+      "duration_minutes": 25,
+      "objective": "Build the aerobic base needed to sustain fat-burning and improve cardiovascular health",
+      "equipment": ["Cones at 20m apart", "Audio file or metronome (Yo-Yo pacing)"],
+      "steps": [
+        { "step": 1, "action": "Warm-up jog — 5 mins at easy conversational pace", "duration_minutes": 5 },
+        { "step": 2, "action": "Shuttle run — 20m shuttle to audio cue; start at Level 5, build to Level 10 over the session", "duration_minutes": 15 },
+        { "step": 3, "action": "Cool-down walk and calf + quad stretch", "duration_minutes": 5 }
+      ],
+      "key_coaching_points": [
+        "Pace yourself — do not sprint early levels, save energy",
+        "Touch the line fully before turning",
+        "Breathe in through nose, out through mouth for efficiency",
+        "Record the level reached each session to track progress"
+      ],
+      "target_metric": "Complete 20-minute run without stopping; build to 30 minutes over 4 weeks",
+      "suitable_for": ["All positions"],
+      "related_goal": "Fitness"
+    },
+    {
+      "id": "fit_004",
+      "name": "Core Strength Circuit",
+      "level": "Beginner",
+      "duration_minutes": 20,
+      "objective": "Build the rotational core strength needed to support fat-loss workouts and prevent lower-back injury",
+      "equipment": ["Yoga mat", "Medicine ball (3–4 kg, optional)"],
+      "steps": [
+        { "step": 1, "action": "Plank hold — 3 sets x 45 seconds, 20s rest between sets", "duration_minutes": 5 },
+        { "step": 2, "action": "Russian twists — 3 sets x 20 reps (with or without medicine ball)", "duration_minutes": 5 },
+        { "step": 3, "action": "Dead bug — 3 sets x 10 reps per side (opposite arm/leg extension)", "duration_minutes": 5 },
+        { "step": 4, "action": "Hollow body hold — 3 sets x 30 seconds", "duration_minutes": 5 }
+      ],
+      "key_coaching_points": [
+        "Lower back must remain flat throughout — no arch",
+        "Breathe continuously — do not hold breath during holds",
+        "Slow and controlled > fast and sloppy",
+        "Engage glutes during plank — prevents hip sagging"
+      ],
+      "target_metric": "Plank hold > 60 seconds; 20 Russian twist reps without losing form",
+      "suitable_for": ["All positions"],
+      "related_goal": "Fitness"
+    },
+    {
+      "id": "fit_005",
+      "name": "Flexibility and Mobility Routine",
+      "level": "Beginner",
+      "duration_minutes": 15,
+      "objective": "Maintain joint mobility and muscle length to prevent injuries and support full range of motion",
+      "equipment": ["Yoga mat", "Foam roller (optional)"],
+      "steps": [
+        { "step": 1, "action": "Hip flexor stretch — lunge position, 45 seconds per side x 2", "duration_minutes": 3 },
+        { "step": 2, "action": "Thoracic spine rotation — seated twist, 10 reps per side x 2 sets", "duration_minutes": 3 },
+        { "step": 3, "action": "Hamstring stretch — seated forward fold, 45 seconds x 2", "duration_minutes": 3 },
+        { "step": 4, "action": "Shoulder cross-body stretch — 30 seconds per arm x 2 sets", "duration_minutes": 3 },
+        { "step": 5, "action": "Child's pose and cat-cow — 10 reps slow breathing", "duration_minutes": 3 }
+      ],
+      "key_coaching_points": [
+        "Never stretch a cold muscle — always after warm-up or training",
+        "Hold stretches for minimum 30 seconds for lasting benefit",
+        "Do not bounce in a stretch — static holds only",
+        "Note any tight areas and report to coach for targeted work"
+      ],
+      "target_metric": "Touch toes from standing (hamstring mobility); 90° torso rotation both sides (spine mobility)",
+      "suitable_for": ["All positions"],
+      "related_goal": "Fitness"
+    }
+  ]
+}

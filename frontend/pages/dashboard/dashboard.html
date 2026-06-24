@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ZITLAS — Home</title>
+  <link rel="stylesheet" href="dashboard.css" />
+  <script src="../../assets/js/i18n.js"></script>
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="../../assets/js/firebase-config.js"></script>
+</head>
+<body>
+
+  <!-- ════════════ HEADER ════════════ -->
+  <header class="dash-header">
+    <a href="../profile/profile.html" class="header-avatar-link" aria-label="Profile">
+      <img
+        src="../../assets/arjun.png"
+        alt="Arjun Patil"
+        class="header-avatar"
+        id="headerAvatar"
+      />
+    </a>
+
+    <span class="logo-text">ZITLAS</span>
+
+    <button class="icon-btn" id="notifBtn" aria-label="Notifications">
+      <div class="notif-wrap">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+          <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+        </svg>
+        <span class="notif-dot" id="notifDot"></span>
+      </div>
+    </button>
+  </header>
+
+  <!-- ════════════ MAIN CONTENT ════════════ -->
+  <main class="main-content">
+
+    <!-- ── GREETING + STREAK ── -->
+    <section class="greeting-section">
+      <div class="greeting-left">
+        <p class="greeting-line" id="greetingLine">Good Morning,</p>
+        <h1 class="greeting-name">Arjun! 👋</h1>
+        <p class="greeting-sub" data-i18n="dash_greeting_sub">Discipline today, victory tomorrow.</p>
+      </div>
+      <div class="streak-card">
+        <span class="streak-fire">🔥</span>
+        <span class="streak-num">12</span>
+        <span class="streak-label" data-i18n="dash_day_streak">Day Streak</span>
+      </div>
+    </section>
+
+    <!-- ── CURRENT GOAL CARD ── -->
+    <section class="goal-card" id="goalCard">
+      <div class="goal-content">
+
+        <div class="goal-top-row">
+          <span class="goal-label" data-i18n="dash_current_goal">CURRENT GOAL</span>
+          <button type="button" class="goal-set-btn" id="goalActionBtn">🎯 Set Goal</button>
+        </div>
+
+        <h2 class="goal-title" id="goalTitle">No goal set yet.</h2>
+
+        <div class="goal-ring-row">
+          <div class="goal-ring-wrap">
+            <svg class="goal-ring-svg" viewBox="0 0 80 80">
+              <defs>
+                <linearGradient id="goalGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#FFB347"/>
+                  <stop offset="100%" stop-color="#FF8A00"/>
+                </linearGradient>
+              </defs>
+              <circle class="goal-ring-track" cx="40" cy="40" r="30"/>
+              <circle class="goal-ring-fill"  cx="40" cy="40" r="30" id="goalRing"/>
+            </svg>
+            <div class="goal-ring-center">
+              <span class="goal-pct" id="goalPct">0%</span>
+              <span class="goal-pct-label" data-i18n="dash_complete">Complete</span>
+            </div>
+          </div>
+
+          <div class="goal-stats-col">
+            <div class="goal-stat-row">
+              <span class="gsr-label" id="goalStatLabelA">Current</span>
+              <span class="gsr-val" id="goalCurrent">—</span>
+            </div>
+            <div class="goal-stat-row">
+              <span class="gsr-label" id="goalStatLabelB">Target</span>
+              <span class="gsr-val gsr-accent" id="goalTarget">—</span>
+            </div>
+            <div class="goal-days-badge" id="goalDaysBadge">
+              <span class="days-hourglass">⏳</span>
+              <span id="goalDaysLeft">Set a goal to begin</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="goal-dates-row" id="goalDatesRow">
+          <div class="gdr-block">
+            <span class="gdr-label" data-i18n="dash_started">Started</span>
+            <span class="gdr-val" id="goalStartDate">—</span>
+          </div>
+          <svg class="gdr-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="5" y1="12" x2="19" y2="12"/>
+            <polyline points="12 5 19 12 12 19"/>
+          </svg>
+          <div class="gdr-block">
+            <span class="gdr-label" data-i18n="dash_ends">Ends</span>
+            <span class="gdr-val" id="goalEndDate">—</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Right: player image -->
+      <div class="goal-player-panel">
+        <img
+          src="../../assets/arjun.png"
+          alt=""
+          class="goal-player-img"
+          id="goalPlayerImg"
+        />
+      </div>
+    </section>
+
+    <!-- ── SWOT SUMMARY WIDGET ── -->
+    <section class="swot-widget-section" id="swotWidgetSection">
+      <div class="section-header">
+        <div class="section-header-left">
+          <div class="widget-badge">🧠</div>
+          <div>
+            <h2 class="section-title" data-i18n="dash_swot">SWOT Analysis</h2>
+            <p class="roadmap-sub" id="swotArchetypePill">Take assessment to unlock</p>
+          </div>
+        </div>
+        <a href="./ai-coach/ai-coach.html?view=swot" class="view-link-btn" id="viewSwotBtn" data-i18n="dash_view_full">View Full →</a>
+      </div>
+      <div id="swotWidgetContent">
+        <!-- populated by dashboard.js -->
+      </div>
+    </section>
+
+    <!-- ── TODAY'S TRAINING ── -->
+    <section class="training-widget-section" id="trainingWidgetSection">
+      <div class="section-header">
+        <div class="section-header-left">
+          <div class="widget-badge">💪</div>
+          <div>
+            <h2 class="section-title" data-i18n="dash_todays_training">Today's Training</h2>
+            <p class="roadmap-sub" id="trainingDayLabel">Complete assessment to unlock</p>
+          </div>
+        </div>
+        <button class="view-link-btn" id="viewWeeklyPlanBtn" data-i18n="dash_view_weekly_plan">View Weekly Plan →</button>
+      </div>
+      <div id="trainingWidgetContent">
+        <!-- populated by dashboard.js -->
+      </div>
+    </section>
+
+    <!-- ── RECENT CHATS + NEARBY NUTRITIONISTS ── -->
+    <section class="comms-section">
+      <div class="comms-row">
+
+        <!-- LEFT: RECENT CHATS -->
+        <div class="comms-col">
+          <div class="section-header">
+            <h2 class="section-title" data-i18n="dash_recent_chats">Recent Chats</h2>
+          </div>
+          <div class="dash-chats-list" id="dashChatsList"></div>
+        </div>
+
+
+      </div>
+    </section>
+
+    <!-- ── QUICK STATS ── -->
+    <section class="quick-stats-section">
+      <h2 class="section-title-sm" data-i18n="dash_quick_stats">Quick Stats</h2>
+      <div class="stats-row">
+        <div class="qs-card">
+          <span class="qs-icon">🔥</span>
+          <span class="qs-val">7</span>
+          <span class="qs-label" data-i18n="dash_streak">Day Streak</span>
+        </div>
+        <div class="qs-card">
+          <span class="qs-icon">🥗</span>
+          <span class="qs-val">5</span>
+          <span class="qs-label" data-i18n="dash_meals">Meals Tracked</span>
+        </div>
+        <div class="qs-card">
+          <span class="qs-icon">💪</span>
+          <span class="qs-val">3</span>
+          <span class="qs-label" data-i18n="dash_workouts">Workouts</span>
+        </div>
+        <div class="qs-card">
+          <span class="qs-icon">⭐</span>
+          <span class="qs-val qs-rating">4.50</span>
+          <span class="qs-label" data-i18n="dash_rating">Rating</span>
+        </div>
+      </div>
+    </section>
+
+
+  </main>
+
+  <!-- TOAST -->
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <!-- ════════════ SET GOAL MODAL ════════════ -->
+  <div class="modal-overlay" id="setGoalModal" role="dialog" aria-modal="true" aria-label="Set Goal">
+    <div class="modal-card set-goal-modal-card">
+      <div class="modal-handle"></div>
+
+      <button class="modal-close-btn" id="closeSetGoalModal" aria-label="Close">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+
+      <h3 class="modal-title" data-i18n="goal_set_title">Set Your Goal</h3>
+      <p class="modal-subtitle" data-i18n="goal_set_subtitle">Define what you're working towards this season.</p>
+
+      <div class="goal-form">
+
+        <label class="form-label" data-i18n="goal_type_label">Goal Type</label>
+        <div class="goal-type-pills" id="goalTypePills">
+          <button class="goal-type-pill active" data-type="Weight Loss">⚖️ Weight Loss</button>
+          <button class="goal-type-pill" data-type="Nutrition">🥗 Nutrition</button>
+          <button class="goal-type-pill" data-type="Fitness">💪 Fitness</button>
+          <button class="goal-type-pill" data-type="Habits">⭐ Habits</button>
+          <button class="goal-type-pill" data-type="Custom">✏️ Custom</button>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="goalCurrentInput" data-i18n="goal_current_val">Current Value</label>
+            <input class="form-input" type="number" id="goalCurrentInput" placeholder="e.g. 42" min="0" max="9999"/>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="goalTargetInput" data-i18n="goal_target_val">Target Value</label>
+            <input class="form-input" type="number" id="goalTargetInput" placeholder="e.g. 60" min="1" max="9999"/>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="goalTargetDateInput" data-i18n="goal_end_date">Goal End Date</label>
+          <input class="form-input" type="date" id="goalTargetDateInput"/>
+        </div>
+
+        <button class="save-goal-btn" id="saveGoalBtn" data-i18n="goal_save_btn">Save Goal</button>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════ RESET GOAL MODAL ════════════ -->
+  <div class="modal-overlay" id="resetGoalModal" role="dialog" aria-modal="true" aria-label="Reset Goal">
+    <div class="modal-card reset-goal-modal-card">
+      <div class="modal-handle"></div>
+      <div class="reset-icon-wrap">
+        <span class="reset-icon">🔄</span>
+      </div>
+      <h3 class="modal-title" data-i18n="goal_reset_title">Reset Your Goal?</h3>
+      <p class="modal-subtitle" data-i18n="goal_reset_sub">Are you sure you want to reset your current goal? This action cannot be undone.</p>
+      <div class="reset-actions">
+        <button class="cancel-btn" id="cancelResetBtn" data-i18n="btn_cancel">Cancel</button>
+        <button class="confirm-reset-btn" id="confirmResetBtn" data-i18n="goal_reset_confirm">Reset Goal</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════ LOGIN MODAL ════════════ -->
+  <div class="modal-overlay" id="loginModal" role="dialog" aria-modal="true" aria-labelledby="loginModalTitle">
+    <div class="modal-card login-modal-card">
+      <div class="modal-handle"></div>
+
+      <button class="modal-close-btn" id="closeLoginModal" aria-label="Close">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+
+      <!-- Logo + header -->
+      <div class="lm-header">
+        <span class="lm-logo">ZITLAS</span>
+        <h3 class="modal-title" id="loginModalTitle" data-i18n="lm_title">Sign In to Continue</h3>
+        <p class="modal-subtitle" id="loginModalSubtitle" data-i18n="lm_subtitle">Sign in to set your goal and start your weight-loss journey.</p>
+      </div>
+
+      <!-- Form -->
+      <form class="lm-form" id="loginModalForm" novalidate>
+
+        <div class="lm-input-group" id="lmEmailGroup">
+          <span class="lm-input-icon">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+              <polyline points="22,6 12,13 2,6"/>
+            </svg>
+          </span>
+          <input type="email" id="lmEmailInput" class="form-input lm-input" data-i18n-ph="lm_email_ph" placeholder="Email or Mobile Number" autocomplete="email" inputmode="email" />
+        </div>
+
+        <div class="lm-input-group" id="lmPasswordGroup">
+          <span class="lm-input-icon">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+          </span>
+          <input type="password" id="lmPasswordInput" class="form-input lm-input" data-i18n-ph="lm_password_ph" placeholder="Password" autocomplete="current-password" />
+          <button type="button" class="lm-pw-toggle" id="lmPwToggle" aria-label="Toggle password">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="lmEyeIcon">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+            </svg>
+          </button>
+        </div>
+
+        <button type="submit" class="save-goal-btn lm-submit-btn" id="lmLoginBtn">
+          <span id="lmBtnText" data-i18n="lm_sign_in">Sign In</span>
+          <svg class="lm-spinner" id="lmSpinner" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true" style="display:none">
+            <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+          </svg>
+        </button>
+
+      </form>
+
+      <!-- Divider -->
+      <div class="lm-divider"><span class="lm-divider-text" data-i18n="lm_divider">or continue with</span></div>
+
+      <!-- Google -->
+      <button class="lm-google-btn" id="lmGoogleBtn" type="button">
+        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+        </svg>
+        <span data-i18n="lm_google">Continue with Google</span>
+      </button>
+
+      <!-- Footer links -->
+      <div class="lm-footer">
+        <a href="../login/login.html" class="lm-create-link" data-i18n="lm_create">Create Account</a>
+        <span class="lm-footer-sep">·</span>
+        <button type="button" class="lm-skip-btn" id="lmSkipBtn" data-i18n="lm_skip">Skip for Now →</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ════════════ WEEKLY PLAN MODAL ════════════ -->
+  <div class="modal-overlay" id="weeklyPlanModal" role="dialog" aria-modal="true" aria-label="Weekly Workout Plan">
+    <div class="modal-card weekly-plan-modal-card">
+      <div class="modal-handle"></div>
+
+      <button class="modal-close-btn" id="closeWeeklyPlanModal" aria-label="Close">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+
+      <div class="wpm-header">
+        <h3 class="modal-title">💪 Weekly Plan</h3>
+        <p class="modal-subtitle" id="weeklyPlanSubtitle">7-day personalised schedule</p>
+      </div>
+
+      <div class="wpm-list" id="weeklyPlanList">
+        <!-- populated by dashboard.js -->
+      </div>
+
+      <a href="./ai-coach/ai-coach.html?view=workout" class="wpm-full-btn">Open Full Workout Plan →</a>
+    </div>
+  </div>
+
+  <script src="../../components/wallet.js"></script>
+  <script src="../../components/navbar.js"></script>
+  <script src="dashboard.js"></script>
+</body>
+</html>

@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ZITLAS — Diet Plan</title>
+  <link rel="stylesheet" href="diet.css" />
+  <script src="../../assets/js/i18n.js"></script>
+</head>
+<body>
+
+  <!-- ════════════ HEADER ════════════ -->
+  <header class="diet-header">
+    <button class="icon-btn" id="backBtn" aria-label="Go back">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="19" y1="12" x2="5" y2="12"/>
+        <polyline points="12 19 5 12 12 5"/>
+      </svg>
+    </button>
+    <div class="header-center">
+      <h1 class="header-title" id="dietPageTitle" data-i18n="diet_title">Diet Plan</h1>
+      <p class="header-subtitle" id="dietPageSubtitle" data-i18n="diet_sub">Personalized nutrition for your goals 💪</p>
+    </div>
+    <button class="icon-btn" id="infoBtn" aria-label="Information">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="12"/>
+        <line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+    </button>
+  </header>
+
+  <!-- ════════════ MAIN CONTENT ════════════ -->
+  <main class="main-content">
+
+    <!-- ── LOADING STATE (shown while AI generates plan) ── -->
+    <div class="diet-loading" id="dietLoading" style="display:none">
+      <div class="diet-loading-orb">
+        <div class="diet-loading-ring diet-loading-ring-1"></div>
+        <div class="diet-loading-ring diet-loading-ring-2"></div>
+        <div class="diet-loading-ring diet-loading-ring-3"></div>
+        <span class="diet-loading-icon">🥗</span>
+      </div>
+      <p class="diet-loading-title"><span data-i18n="diet_generating_title">Generating Your</span><br><span class="diet-loading-accent" data-i18n="diet_generating_accent">Personalised Meal Plan</span></p>
+      <p class="diet-loading-sub" data-i18n="diet_generating_sub">Nutrition Brain is building your 7-day plan…</p>
+    </div>
+
+    <!-- ── DIET CONTENT (populated dynamically) ── -->
+    <div id="dietContent">
+
+      <!-- ── EXPERT REVIEW NOTIFICATION BANNER ── -->
+      <div id="expertReviewBanner" class="er-banner" style="display:none" role="alert">
+        <div class="er-banner-left">
+          <span class="er-banner-icon">👨‍⚕️</span>
+          <div class="er-banner-text">
+            <span class="er-banner-title">Your nutritionist updated your plan</span>
+            <span class="er-banner-sub" id="erBannerSub"></span>
+          </div>
+        </div>
+        <div class="er-banner-btns">
+          <button class="er-banner-btn er-banner-btn--view" id="erViewBtn">View Changes</button>
+          <button class="er-banner-btn er-banner-btn--accept" id="erAcceptBtn">Accept</button>
+        </div>
+      </div>
+
+      <!-- ── PLAN META (goal / generated date / valid until / reset goal) ── -->
+      <div id="planMetaStrip" class="plan-meta-strip" style="display:none"></div>
+
+      <!-- ── TODAY'S FOCUS CARD ── -->
+      <section class="focus-card" id="focusCard">
+        <div class="focus-left">
+          <span class="focus-tag" id="focusTag" data-i18n="diet_today_focus">Today's Focus</span>
+          <h2 class="focus-title" id="focusTitle">High Performance</h2>
+          <p class="focus-desc" id="focusDesc">Balanced nutrition to fuel your<br>training and recovery.</p>
+        </div>
+        <div class="focus-right">
+          <div class="ring-wrap">
+            <svg class="ring-svg" viewBox="0 0 120 120">
+              <defs>
+                <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#FFB347"/>
+                  <stop offset="100%" stop-color="#FF8A00"/>
+                </linearGradient>
+              </defs>
+              <circle class="ring-track" cx="60" cy="60" r="50"/>
+              <circle class="ring-fill" cx="60" cy="60" r="50" id="focusRing"/>
+            </svg>
+            <div class="ring-label-wrap">
+              <span class="ring-pct" id="ringPct">—</span>
+              <span class="ring-sub" data-i18n="diet_nutrition_score">Nutrition Score</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── HYDRATION BAR ── -->
+      <section class="metrics-section" id="hydrationSection" style="display:none">
+        <div class="diet-hydration-card">
+          <span class="diet-hydration-icon">💧</span>
+          <div class="diet-hydration-text">
+            <span class="diet-hydration-label" data-i18n="diet_hydration_label">Daily Hydration Target</span>
+            <span class="diet-hydration-val" id="hydrationTarget">—</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── VERIFY BY NUTRITIONIST ── -->
+      <section class="vn-section" id="verifyNutriSection" style="display:none">
+
+        <!-- Header -->
+        <div class="vn-section-header">
+          <div class="vn-header-top">
+            <span class="vn-premium-tag">⭐ PREMIUM</span>
+            <span class="vn-sponsored-label">Sponsored</span>
+          </div>
+          <h2 class="vn-section-title">Verify By Nutritionist</h2>
+          <p class="vn-section-sub">Get your AI plan reviewed and certified by an expert</p>
+        </div>
+
+        <!-- Status Banner (shown after submit) -->
+        <div class="vn-status-banner" id="vnStatusBanner" style="display:none">
+          <span class="vn-status-icon" id="vnStatusIcon">⏳</span>
+          <div class="vn-status-text">
+            <span class="vn-status-title" id="vnStatusTitle">Request Sent</span>
+            <span class="vn-status-sub" id="vnStatusSub">Your plan is pending review</span>
+          </div>
+          <span class="vn-status-pill" id="vnStatusPill">Pending</span>
+        </div>
+
+        <!-- Verified Banner (shown when approved) -->
+        <div class="vn-verified-banner" id="vnVerifiedBanner" style="display:none">
+          <span class="vn-verified-icon">✅</span>
+          <div class="vn-verified-text">
+            <span class="vn-verified-title">Expert Verified Plan</span>
+            <a href="#" class="vn-verified-link" id="vnVerifiedLink">View Expert</a>
+          </div>
+          <span class="vn-verified-chip">Certified</span>
+        </div>
+
+        <!-- Nutritionist Cards -->
+        <div class="vn-scroll-rail" id="vnNutriRail">
+          <!-- Injected by diet.js renderVerifyNutriSection() -->
+        </div>
+
+      </section>
+
+      <!-- ── WEEKLY MEAL PLAN ── -->
+      <section class="plan-section">
+
+        <!-- Section Header -->
+        <div class="plan-header">
+          <div class="plan-header-left">
+            <svg class="plan-cal-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+              <line x1="16" y1="2" x2="16" y2="6"/>
+              <line x1="8" y1="2" x2="8" y2="6"/>
+              <line x1="3" y1="10" x2="21" y2="10"/>
+            </svg>
+            <h2 class="plan-title" data-i18n="diet_weekly_plan">Weekly Meal Plan</h2>
+          </div>
+          <span class="plan-ai-badge" id="planAiBadge" data-i18n="diet_ai_badge">AI Generated</span>
+          <span class="plan-verified-badge" id="planVerifiedBadge" style="display:none">Expert Reviewed ✔</span>
+        </div>
+        <!-- Expert plan attribution (shown when planSource === 'expert') -->
+        <div class="expert-plan-info" id="expertPlanInfo" style="display:none">
+          <span class="epi-label">Reviewed by:</span>
+          <span class="epi-name" id="epiName">—</span>
+          <span class="epi-sep">·</span>
+          <span class="epi-label">On:</span>
+          <span class="epi-date" id="epiDate">—</span>
+        </div>
+
+        <!-- Expert Change Summary (shown when planSource === 'expert') -->
+        <div class="expert-change-summary" id="expertChangeSummary" style="display:none"></div>
+
+        <!-- Day Selector -->
+        <div class="day-scroll-wrap">
+          <div class="day-selector" id="daySelector">
+            <button class="day-pill active" data-day-index="0"><span class="day-name">MON</span><span class="day-sub" id="daySub0">Day 1</span></button>
+            <button class="day-pill" data-day-index="1"><span class="day-name">TUE</span></button>
+            <button class="day-pill" data-day-index="2"><span class="day-name">WED</span></button>
+            <button class="day-pill" data-day-index="3"><span class="day-name">THU</span></button>
+            <button class="day-pill" data-day-index="4"><span class="day-name">FRI</span></button>
+            <button class="day-pill" data-day-index="5"><span class="day-name">SAT</span></button>
+            <button class="day-pill" data-day-index="6"><span class="day-name">SUN</span></button>
+          </div>
+        </div>
+
+        <!-- Day theme label -->
+        <div class="day-theme-wrap" id="dayThemeWrap" style="display:none">
+          <span class="day-theme-tag" id="dayThemeTag"></span>
+          <span class="day-type-tag" id="dayTypeTag"></span>
+        </div>
+
+        <!-- Meal Cards (populated dynamically) -->
+        <div class="meal-list" id="mealList">
+          <!-- populated by diet.js -->
+        </div>
+
+      </section><!-- /plan-section -->
+
+      <!-- ── NUTRITION TIP ── -->
+      <section class="tip-section" id="tipSection">
+        <div class="tip-card">
+          <div class="tip-icon-wrap">💡</div>
+          <div class="tip-content">
+            <h3 class="tip-title" data-i18n="diet_nutrition_tip">Nutrition Tip</h3>
+            <p class="tip-text" id="tipText">Stay hydrated and eat balanced meals to maintain energy levels throughout the day.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── WEEKLY NOTES ── -->
+      <section class="tip-section" id="weeklyNotesSection" style="display:none">
+        <div class="tip-card">
+          <div class="tip-icon-wrap">📋</div>
+          <div class="tip-content">
+            <h3 class="tip-title" data-i18n="diet_weekly_notes">Your Weekly Nutrition Notes</h3>
+            <p class="tip-text" id="weeklyNotesText"></p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── PLAN VERSION HISTORY ── -->
+      <section id="versionHistorySection" class="version-history-section" style="display:none">
+        <div class="version-history-header">
+          <h2 class="version-history-title">Plan Version History</h2>
+          <span class="version-active-label" id="versionActiveLabel"></span>
+        </div>
+        <div id="versionHistoryList" class="version-history-list"></div>
+      </section>
+
+      <!-- ── CONSULT A DIETITIAN ── -->
+      <section class="consult-section">
+        <a href="../dietitian/dietitian.html" class="consult-cta">
+          <div class="consult-cta-left">
+            <span class="consult-cta-icon">🥗</span>
+            <div class="consult-cta-text">
+              <span class="consult-cta-title" data-i18n="diet_consult_title">Consult a Dietitian</span>
+              <span class="consult-cta-sub" data-i18n="diet_consult_sub">Talk to a real sports nutritionist</span>
+            </div>
+          </div>
+          <svg class="consult-cta-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </a>
+      </section>
+
+    </div><!-- /#dietContent -->
+
+    <!-- ════════════ NUTRITIONIST VIEW (academy role only) ════════════ -->
+    <div id="nutriView" style="display:none">
+
+      <!-- List count header -->
+      <div class="nutri-list-header" id="nutriListHeader">
+        <span class="nutri-count" id="nutriCount"></span>
+      </div>
+
+      <!-- Nutritionist Cards (populated by diet.js) -->
+      <div class="nutri-list" id="nutriList"></div>
+
+      <!-- Empty State -->
+      <div class="nutri-empty" id="nutriEmpty" style="display:none">
+        <div class="nutri-empty-icon">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+        </div>
+        <p class="nutri-empty-title">No nutritionists available yet.</p>
+        <p class="nutri-empty-sub">We're onboarding certified specialists — check back soon.</p>
+      </div>
+
+    </div><!-- /#nutriView -->
+
+  </main>
+
+  <!-- ════════════ SWAP MODAL ════════════ -->
+  <div class="modal-overlay" id="swapModal" role="dialog" aria-modal="true" aria-label="Why can't you eat this?">
+    <div class="modal-card" id="swapModalCard">
+
+      <!-- Phase A: Choose reason -->
+      <div id="swapPhaseA">
+        <div class="modal-header">
+          <div class="modal-title-wrap">
+            <h3 class="modal-title" data-i18n="swap_title">Can't eat this?</h3>
+            <p class="modal-meal-tag" id="swapMealName"></p>
+          </div>
+          <button class="modal-close-btn" id="swapClose" aria-label="Close">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <p class="modal-subtitle" data-i18n="swap_subtitle">Tell us why — we'll find something that works for you:</p>
+        <div class="swap-options">
+          <button class="swap-option" data-reason="Not available near me">
+            <span class="swap-opt-icon">📍</span>
+            <div class="swap-opt-text">
+              <span class="swap-opt-title" data-i18n="swap_not_avail">Not Available</span>
+              <span class="swap-opt-desc" data-i18n="swap_not_avail_desc">Can't get this where I live</span>
+            </div>
+            <svg class="swap-opt-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+          <button class="swap-option" data-reason="Too expensive for my budget">
+            <span class="swap-opt-icon">💸</span>
+            <div class="swap-opt-text">
+              <span class="swap-opt-title" data-i18n="swap_expensive">Too Expensive</span>
+              <span class="swap-opt-desc" data-i18n="swap_expensive_desc">Out of my daily budget</span>
+            </div>
+            <svg class="swap-opt-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+          <button class="swap-option" data-reason="My hostel mess doesn't provide this">
+            <span class="swap-opt-icon">🏫</span>
+            <div class="swap-opt-text">
+              <span class="swap-opt-title" data-i18n="swap_hostel">Hostel Doesn't Provide</span>
+              <span class="swap-opt-desc" data-i18n="swap_hostel_desc">Not served in my mess</span>
+            </div>
+            <svg class="swap-opt-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+          <button class="swap-option" data-reason="I don't like this food">
+            <span class="swap-opt-icon">😬</span>
+            <div class="swap-opt-text">
+              <span class="swap-opt-title" data-i18n="swap_dont_like">Don't Like It</span>
+              <span class="swap-opt-desc" data-i18n="swap_dont_like_desc">Not a fan of this</span>
+            </div>
+            <svg class="swap-opt-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+          <button class="swap-option" data-reason="I am allergic to this">
+            <span class="swap-opt-icon">⚠️</span>
+            <div class="swap-opt-text">
+              <span class="swap-opt-title" data-i18n="swap_allergic">Allergic</span>
+              <span class="swap-opt-desc" data-i18n="swap_allergic_desc">I can't eat this for health reasons</span>
+            </div>
+            <svg class="swap-opt-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+          <button class="swap-option" data-reason="I am vegetarian and need a veg option">
+            <span class="swap-opt-icon">🌿</span>
+            <div class="swap-opt-text">
+              <span class="swap-opt-title" data-i18n="swap_veg">Vegetarian Option</span>
+              <span class="swap-opt-desc" data-i18n="swap_veg_desc">I don't eat meat or non-veg</span>
+            </div>
+            <svg class="swap-opt-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+          <button class="swap-option" data-reason="Religious or cultural reason">
+            <span class="swap-opt-icon">🙏</span>
+            <div class="swap-opt-text">
+              <span class="swap-opt-title" data-i18n="swap_religious">Religious / Cultural</span>
+              <span class="swap-opt-desc" data-i18n="swap_religious_desc">Not allowed for me to eat this</span>
+            </div>
+            <svg class="swap-opt-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+
+          <button class="swap-option swap-option--nutri" id="swapNutriBtn">
+            <span class="swap-opt-icon">👨‍⚕️</span>
+            <div class="swap-opt-text">
+              <span class="swap-opt-title">Ask Nutritionist</span>
+              <span class="swap-opt-desc">Get expert help choosing an alternative</span>
+            </div>
+            <svg class="swap-opt-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Phase B: Loading while AI generates swap -->
+      <div id="swapPhaseB" style="display:none">
+        <div class="swap-loading-wrap">
+          <span class="swap-loading-icon">🥗</span>
+          <p class="swap-loading-title" data-i18n="swap_loading_title">Finding a better option for you…</p>
+          <p class="swap-loading-sub" data-i18n="swap_loading_sub">The AI is picking something you can actually eat.</p>
+        </div>
+      </div>
+
+      <!-- Phase C: Show the new meal -->
+      <div id="swapPhaseC" style="display:none">
+        <div class="modal-header">
+          <h3 class="modal-title" data-i18n="swap_result_title">Here's your swap!</h3>
+          <button class="modal-close-btn" id="swapCloseC" aria-label="Close">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <div class="swap-result-card" id="swapResultCard">
+          <!-- Populated by diet.js -->
+        </div>
+        <div class="swap-result-actions">
+          <button class="swap-accept-btn" id="swapAcceptBtn" data-i18n="swap_use_meal">Use This Meal ✓</button>
+          <button class="swap-reject-btn" id="swapRejectBtn" data-i18n="swap_try_again">Try Again</button>
+        </div>
+        <div class="swap-keep-wrap">
+          <button class="swap-keep-btn" id="swapKeepBtn" data-i18n="swap_keep">Keep original meal</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ════════════ NUTRITIONIST SELECT MODAL ════════════ -->
+  <div class="modal-overlay" id="nutriSelectModal" role="dialog" aria-modal="true" aria-label="Select a nutritionist">
+    <div class="modal-card nutri-select-card">
+
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <h3 class="modal-title">Ask a Nutritionist</h3>
+          <p class="modal-meal-tag" id="nutriSelectMealTag"></p>
+        </div>
+        <button class="modal-close-btn" id="nutriSelectClose" aria-label="Close">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      <p class="modal-subtitle">Choose a certified nutritionist to get a personalised meal recommendation.</p>
+
+      <!-- Context pill — shows which meal + reason -->
+      <div class="nutri-select-context" id="nutriSelectContext"></div>
+
+      <!-- Scrollable nutritionist list -->
+      <div class="nutri-select-list" id="nutriSelectList"></div>
+
+    </div>
+  </div>
+
+  <!-- ════════════ DIET COMPARISON SHEET ════════════ -->
+  <div class="dc-overlay" id="dcSheet" role="dialog" aria-modal="true" style="display:none">
+    <div class="dc-card">
+      <div class="dc-handle"></div>
+      <div class="dc-header">
+        <h3 class="dc-title">Expert vs Original Plan</h3>
+        <button class="dc-close-btn" id="dcCloseBtn" aria-label="Close">✕</button>
+      </div>
+      <div class="dc-tabs">
+        <button class="dc-tab dc-tab--active" id="dcTabOriginal">Original Plan</button>
+        <button class="dc-tab" id="dcTabReviewed">Expert's Version</button>
+      </div>
+      <!-- Day pills for the comparison -->
+      <div class="dc-day-pills" id="dcDayPills"></div>
+      <!-- Content panes -->
+      <div class="dc-panes">
+        <div class="dc-pane" id="dcPaneOriginal"></div>
+        <div class="dc-pane dc-pane--active" id="dcPaneReviewed" style="display:none"></div>
+      </div>
+      <button class="dc-accept-btn" id="dcAcceptBtn">✅ Accept Expert's Changes</button>
+    </div>
+  </div>
+
+  <!-- TOAST -->
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="../../components/wallet.js"></script>
+  <script src="../../components/navbar.js"></script>
+  <script src="diet.js"></script>
+</body>
+</html>

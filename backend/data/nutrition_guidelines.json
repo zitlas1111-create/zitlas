@@ -1,0 +1,85 @@
+{
+  "category": "Nutrition",
+  "version": "1.0",
+  "sport": "Weight Loss & Fitness",
+  "guidelines": {
+    "daily_calorie_ranges": {
+      "light_training":   { "min": 2200, "max": 2600, "note": "Recovery or skill-only day" },
+      "moderate_training": { "min": 2700, "max": 3100, "note": "Standard net session + gym" },
+      "heavy_training":   { "min": 3200, "max": 3800, "note": "Double session or pre-season" },
+      "match_day":         { "min": 3000, "max": 3500, "note": "Full match day (batting + fielding)" },
+      "rest_day":          { "min": 2000, "max": 2400, "note": "Active recovery or complete rest" }
+    },
+    "macronutrient_ratios": {
+      "carbohydrates_pct": { "light": 45, "moderate": 50, "heavy": 55, "match": 55, "rest": 40 },
+      "protein_pct":       { "light": 30, "moderate": 28, "heavy": 25, "match": 25, "rest": 35 },
+      "fat_pct":           { "light": 25, "moderate": 22, "heavy": 20, "match": 20, "rest": 25 }
+    },
+    "protein_targets": {
+      "grams_per_kg_bodyweight": 1.8,
+      "max_per_meal_g": 40,
+      "note": "Spread across 4–5 meals for optimal absorption"
+    },
+    "hydration": {
+      "baseline_daily_litres": 3.0,
+      "per_hour_training_litres": 0.6,
+      "electrolyte_note": "Add electrolytes (sodium, potassium) during sessions > 60 minutes",
+      "urine_colour_target": "Pale straw yellow — dark yellow indicates dehydration"
+    },
+    "meal_timing": {
+      "pre_training": {
+        "window": "90–120 minutes before session",
+        "focus": "Carbohydrates for fuel, moderate protein, low fat and fibre",
+        "example_foods": ["Oats with banana", "Brown rice with grilled chicken", "Whole wheat toast with eggs"]
+      },
+      "during_training": {
+        "window": "Every 30–45 minutes if session > 60 mins",
+        "focus": "Fast carbohydrates, hydration",
+        "example_foods": ["Sports drink", "Banana", "Energy gel", "Dates"]
+      },
+      "post_training": {
+        "window": "Within 30 minutes of finishing",
+        "focus": "Protein + fast carbohydrates for recovery and glycogen replenishment",
+        "example_foods": ["Whey protein shake with banana", "Chocolate milk", "Greek yoghurt with rice cakes", "Egg whites with toast"]
+      },
+      "match_day_breakfast": {
+        "window": "3 hours before match starts",
+        "focus": "High carb, moderate protein, easy to digest",
+        "example_foods": ["Porridge with honey and fruit", "Scrambled eggs on toast", "Banana pancakes with maple syrup"]
+      },
+      "match_day_tea_interval": {
+        "focus": "Top up carbs, avoid heavy foods",
+        "example_foods": ["Fruit and nut mix", "Protein bar", "Banana", "Sandwiches (low fat)"]
+      }
+    },
+    "recommended_foods": {
+      "carbohydrates": ["Brown rice", "Oats", "Sweet potato", "Whole wheat bread", "Quinoa", "Bananas", "Dates", "Fruit"],
+      "proteins": ["Chicken breast", "Eggs", "Greek yoghurt", "Paneer", "Lentils (dal)", "Chickpeas", "Whey protein", "Salmon"],
+      "fats": ["Almonds", "Walnuts", "Olive oil", "Avocado", "Flaxseeds", "Peanut butter (natural)"],
+      "vegetables": ["Spinach", "Broccoli", "Tomato", "Cucumber", "Carrots", "Capsicum"],
+      "hydration": ["Water", "Coconut water", "ORS", "Low-sugar sports drinks", "Lemon water with salt"]
+    },
+    "foods_to_limit": {
+      "before_match_or_training": ["High-fat meals", "Fried foods", "High-fibre raw vegetables", "Carbonated drinks", "Alcohol"],
+      "general": ["Processed sugar", "Deep-fried snacks", "Fast food", "Excessive dairy before play", "Alcohol within 48h of match"]
+    },
+    "supplements": {
+      "recommended": [
+        { "name": "Whey Protein", "purpose": "Post-training muscle recovery", "timing": "Within 30 mins post-session" },
+        { "name": "Creatine Monohydrate", "purpose": "Explosive power and sprint performance", "timing": "5g daily with water" },
+        { "name": "Vitamin D3", "purpose": "Bone health and immune function (especially indoor players)", "timing": "Morning with food" },
+        { "name": "Omega-3 Fish Oil", "purpose": "Reduces inflammation, joint health", "timing": "With meals" },
+        { "name": "Magnesium", "purpose": "Muscle recovery, sleep quality", "timing": "Before bed" },
+        { "name": "Electrolyte Tablets", "purpose": "Hydration during long play", "timing": "During sessions > 1 hour" }
+      ],
+      "caution": "Always consult a registered sports dietitian before starting supplements. Check for WADA-banned substances."
+    },
+    "weight_categories": {
+      "note": "Adjust calorie totals based on player weight and body composition goal",
+      "under_65kg":  { "calorie_multiplier": 0.9, "protein_grams_per_kg": 2.0 },
+      "65_to_80kg":  { "calorie_multiplier": 1.0, "protein_grams_per_kg": 1.8 },
+      "80_to_95kg":  { "calorie_multiplier": 1.1, "protein_grams_per_kg": 1.7 },
+      "over_95kg":   { "calorie_multiplier": 1.2, "protein_grams_per_kg": 1.6 }
+    }
+  }
+}

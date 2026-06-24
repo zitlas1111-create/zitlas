@@ -1,0 +1,2648 @@
+/* =============================================
+   ZITLAS Nutritionist Profile — cprofile.js
+   ============================================= */
+
+(function () {
+  'use strict';
+
+  /* ══════════════════════════════════════════
+     NUTRITIONIST DATABASE
+  ══════════════════════════════════════════ */
+  const COACH_DB = {
+
+    rahul: {
+      id:          'rahul',
+      name:        'Rahul Sharma',
+      firstName:   'Rahul',
+      role:        'Weight Loss Nutritionist',
+      rating:      '4.9',
+      reviewCount: 128,
+      experience:  '8+ Years Experience',
+      achievement: 'Former State Player',
+      image:       '../../assets/coach1.png',
+      initials:    'RS',
+      colorAccent: '#FF8A00',
+      fee:         149,
+      duration:    '15 Min',
+      studentCount: '+124',
+      stats: [
+        { value: '1.2K+', label: 'Sessions' },
+        { value: '850+',  label: 'Clients' },
+        { value: '98%',   label: 'Success Rate' },
+        { value: '8+',    label: 'Years' },
+      ],
+      expertise: [
+        { icon: '🥗', label: 'Meal Planning' },
+        { icon: '🎯', label: 'Calorie Targeting' },
+        { icon: '⚡', label: 'Metabolism Boost' },
+        { icon: '📊', label: 'Macro Tracking' },
+      ],
+      about: 'Certified nutritionist with over 8 years of experience helping clients lose weight through sustainable meal plans. Specializes in building calorie-smart eating habits that fit real Indian lifestyles.',
+      quote: 'My goal is to make healthy eating feel effortless and delicious for you.',
+      reviews: [
+        {
+          name: 'Arjun Mehta', initials: 'AM', color: '#3B82F6', rating: 5.0,
+          text: "Rahul sir's meal plans completely changed my relationship with food. Lost 8 kg in 3 months with zero hunger!",
+        },
+        {
+          name: 'Priya Singh', initials: 'PS', color: '#22C55E', rating: 4.8,
+          text: 'Outstanding nutritionist! My eating habits improved dramatically within just 3 weeks of following his guidance.',
+        },
+      ],
+    },
+
+    arjun: {
+      id:          'arjun',
+      name:        'Arjun Nair',
+      firstName:   'Arjun',
+      role:        'Sports Dietitian',
+      rating:      '4.8',
+      reviewCount: 96,
+      experience:  '8+ Years Experience',
+      achievement: 'Former National-Level Player',
+      image:       '../../assets/coach2.png',
+      initials:    'AN',
+      colorAccent: '#3B82F6',
+      fee:         229,
+      duration:    '20 Min',
+      studentCount: '+112',
+      stats: [
+        { value: '1.0K+', label: 'Sessions' },
+        { value: '780+',  label: 'Clients' },
+        { value: '97%',   label: 'Success Rate' },
+        { value: '8+',    label: 'Years' },
+      ],
+      expertise: [
+        { icon: '📊', label: 'Performance Analysis' },
+        { icon: '🧠', label: 'Mental Conditioning' },
+        { icon: '🎯', label: 'Diet Strategy' },
+        { icon: '🏆', label: 'Precision Nutrition' },
+      ],
+      about: 'Sports dietitian with 8+ years of experience in holistic wellness transformation. Specializes in combining mental conditioning, habit analysis, and structured goal-setting for sustainable weight loss.',
+      quote: 'True transformation happens when your mind and body work together.',
+      reviews: [
+        {
+          name: 'Karan Mehta', initials: 'KM', color: '#FF8A00', rating: 5.0,
+          text: "Arjun sir's guidance elevated my entire wellness journey. His mental conditioning techniques kept me consistent for months!",
+        },
+        {
+          name: 'Riya Sharma', initials: 'RS', color: '#22C55E', rating: 4.8,
+          text: 'Outstanding nutritionist! Arjun sir helped me understand my body and my habits at a much deeper level than I ever had before.',
+        },
+      ],
+    },
+
+    vikas: {
+      id:          'vikas',
+      name:        'Vikas Saxena',
+      firstName:   'Vikas',
+      role:        'Meal Planning Expert',
+      rating:      '4.7',
+      reviewCount: 80,
+      experience:  '6+ Years Experience',
+      achievement: 'Former Fitness Trainer',
+      image:       '../../assets/coach2.png',
+      initials:    'VS',
+      colorAccent: '#EAB308',
+      fee:         129,
+      duration:    '15 Min',
+      studentCount: '+96',
+      stats: [
+        { value: '950+', label: 'Sessions' },
+        { value: '620+', label: 'Clients' },
+        { value: '96%',  label: 'Success Rate' },
+        { value: '6+',   label: 'Years' },
+      ],
+      expertise: [
+        { icon: '💪', label: 'Strength Training' },
+        { icon: '🏋️', label: 'Core Exercises' },
+        { icon: '🏃', label: 'Agility Drills' },
+        { icon: '💯', label: 'Fitness Assessment' },
+      ],
+      about: 'Certified strength & conditioning specialist with 6+ years of experience building fat-loss and fitness programs. Expert in resistance training, metabolic conditioning, and injury-prevention for weight-loss clients.',
+      quote: 'Your body is your greatest tool — I help you train it to burn fat and build strength at the same time.',
+      reviews: [
+        {
+          name: 'Rohit Kumar', initials: 'RK', color: '#FF8A00', rating: 5.0,
+          text: "Vikas sir's training completely changed my physique. My stamina and strength improved dramatically in just 6 weeks!",
+        },
+        {
+          name: 'Sneha Patel', initials: 'SP', color: '#8B5CF6', rating: 4.7,
+          text: 'The best fitness specialist I have worked with. His scientific approach to fat loss and muscle building is truly unmatched.',
+        },
+      ],
+    },
+
+    rohit: {
+      id:          'rohit',
+      name:        'Rohit Deshmukh',
+      firstName:   'Rohit',
+      role:        'Fat Loss Nutritionist',
+      rating:      '4.8',
+      reviewCount: 72,
+      experience:  '7+ Years Experience',
+      achievement: 'Certified Fat-Loss Specialist',
+      image:       '../../assets/coach3.png',
+      initials:    'RD',
+      colorAccent: '#FF8A00',
+      fee:         199,
+      duration:    '20 Min',
+      studentCount: '+108',
+      stats: [
+        { value: '1.1K+', label: 'Sessions' },
+        { value: '720+',  label: 'Clients' },
+        { value: '97%',   label: 'Success Rate' },
+        { value: '7+',    label: 'Years' },
+      ],
+      expertise: [
+        { icon: '📉', label: 'Calorie Deficit' },
+        { icon: '🏃', label: 'Cardio Planning' },
+        { icon: '🎯', label: 'Fat-Loss Strategy' },
+        { icon: '📊', label: 'Progress Tracking' },
+      ],
+      about: 'Certified fat-loss nutritionist with 7+ years of experience helping clients achieve sustainable weight loss. Specializes in calorie deficit planning, cardio programming, and long-term body composition changes.',
+      quote: 'Every kilo lost starts with a well-planned strategy. I teach you the plan and how to stick to it.',
+      reviews: [
+        {
+          name: 'Amit Shah', initials: 'AS', color: '#22C55E', rating: 4.8,
+          text: "Rohit sir transformed my body completely. His structured deficit plan helped me lose 12 kg without giving up the foods I love.",
+        },
+        {
+          name: 'Kavya Nair', initials: 'KN', color: '#3B82F6', rating: 5.0,
+          text: 'Exceptional nutritionist! My body fat dropped significantly and I finally understand how to maintain my results.',
+        },
+      ],
+    },
+
+    aman: {
+      id:          'aman',
+      name:        'Aman Verma',
+      firstName:   'Aman',
+      role:        'Habit & Wellness Expert',
+      rating:      '4.6',
+      reviewCount: 54,
+      experience:  '5+ Years Experience',
+      achievement: 'Behaviour Change Specialist',
+      image:       '../../assets/coach4.png',
+      initials:    'AV',
+      colorAccent: '#22C55E',
+      fee:         99,
+      duration:    '10 Min',
+      studentCount: '+84',
+      stats: [
+        { value: '780+', label: 'Sessions' },
+        { value: '530+', label: 'Clients' },
+        { value: '95%',  label: 'Success Rate' },
+        { value: '5+',   label: 'Years' },
+      ],
+      expertise: [
+        { icon: '⭐', label: 'Habit Building' },
+        { icon: '🧠', label: 'Mindset Wellness' },
+        { icon: '🎯', label: 'Goal Setting' },
+        { icon: '📅', label: 'Daily Routine Design' },
+      ],
+      about: 'Behaviour change specialist with 5+ years of experience helping clients build lasting health habits. Known for designing simple daily routines that make weight loss feel automatic rather than effortful.',
+      quote: 'Lasting weight loss is not a diet — it is a lifestyle. I build the habits that make it stick for life.',
+      reviews: [
+        {
+          name: 'Dev Patel', initials: 'DP', color: '#FF8A00', rating: 4.7,
+          text: "Aman sir's habit programme is intense but incredibly effective. My consistency improved dramatically in just a month.",
+        },
+        {
+          name: 'Sanya Mehta', initials: 'SM', color: '#8B5CF6', rating: 5.0,
+          text: 'Best wellness expert I have worked with! His attention to behaviour and routine design is truly world-class.',
+        },
+      ],
+    },
+
+    prakash: {
+      id:          'prakash',
+      name:        'Prakash Sir',
+      firstName:   'Prakash',
+      role:        'Head Nutritionist',
+      rating:      '4.9',
+      reviewCount: 210,
+      experience:  '12+ Years Experience',
+      achievement: 'Head Nutritionist — ZITLAS Wellness',
+      image:       '../../assets/ac1.png',
+      initials:    'PS',
+      colorAccent: '#FF8A00',
+      fee:         299,
+      duration:    '30 Min',
+      studentCount: '+200',
+      stats: [
+        { value: '2.0K+', label: 'Sessions' },
+        { value: '1.2K+', label: 'Clients' },
+        { value: '99%',   label: 'Success Rate' },
+        { value: '12+',   label: 'Years' },
+      ],
+      expertise: [
+        { icon: '🥗', label: 'Nutrition Strategy' },
+        { icon: '🧠', label: 'Mental Strength' },
+        { icon: '🎯', label: 'Member Development' },
+        { icon: '🏆', label: 'Goal Achievement' },
+      ],
+      about: 'Head of the ZITLAS Wellness nutrition team with 12+ years of experience. Specializes in holistic member development, mental conditioning, and guiding clients to achieve sustainable weight-loss and nutrition goals.',
+      quote: 'Every great journey starts from zero. My job is to build the foundation that lasts a lifetime.',
+      reviews: [
+        {
+          name: 'Rahul Mehta', initials: 'RM', color: '#FF8A00', rating: 5.0,
+          text: 'Prakash sir is the backbone of our platform. His holistic approach transformed not just my eating habits but my entire mindset.',
+        },
+        {
+          name: 'Sneha Desai', initials: 'SD', color: '#22C55E', rating: 5.0,
+          text: 'The best nutritionist I have ever worked with. His understanding of each member\'s potential is extraordinary.',
+        },
+      ],
+    },
+
+    ramesh: {
+      id:          'ramesh',
+      name:        'Ramesh Patil',
+      firstName:   'Ramesh',
+      role:        'Weight Loss Nutritionist',
+      rating:      '4.8',
+      reviewCount: 145,
+      experience:  '9+ Years Experience',
+      achievement: 'Certified Weight-Loss Specialist',
+      image:       '../../assets/ac2.png',
+      initials:    'RP',
+      colorAccent: '#22C55E',
+      fee:         249,
+      duration:    '25 Min',
+      studentCount: '+140',
+      stats: [
+        { value: '1.4K+', label: 'Sessions' },
+        { value: '900+',  label: 'Clients' },
+        { value: '97%',   label: 'Success Rate' },
+        { value: '9+',    label: 'Years' },
+      ],
+      expertise: [
+        { icon: '📉', label: 'Fat Loss Planning' },
+        { icon: '🎯', label: 'Deficit Strategy' },
+        { icon: '⚡', label: 'Metabolism Training' },
+        { icon: '🧘', label: 'Mindful Eating' },
+      ],
+      about: 'Certified weight-loss nutritionist with 9+ years of dedicated experience. Known for his patient and structured approach to building sustainable calorie deficits and healthy eating foundations in clients of all ages.',
+      quote: 'A solid plan is the base of every transformation. We build yours together, one week at a time.',
+      reviews: [
+        {
+          name: 'Arjun Patil', initials: 'AP', color: '#3B82F6', rating: 4.9,
+          text: "Ramesh sir's weight-loss plans are methodical and effective. My eating habits and body composition have improved dramatically under his guidance.",
+        },
+        {
+          name: 'Kavya Shah', initials: 'KS', color: '#8B5CF6', rating: 4.8,
+          text: 'Brilliant nutritionist! His focus on the fundamentals built a strong healthy lifestyle that I can sustain permanently.',
+        },
+      ],
+    },
+
+    vivek: {
+      id:          'vivek',
+      name:        'Vivek Sharma',
+      firstName:   'Vivek',
+      role:        'Fitness Specialist',
+      rating:      '4.8',
+      reviewCount: 118,
+      experience:  '8+ Years Experience',
+      achievement: 'Certified Personal Trainer',
+      image:       '../../assets/ac3.png',
+      initials:    'VS',
+      colorAccent: '#3B82F6',
+      fee:         179,
+      duration:    '20 Min',
+      studentCount: '+110',
+      stats: [
+        { value: '1.1K+', label: 'Sessions' },
+        { value: '760+',  label: 'Clients' },
+        { value: '97%',   label: 'Success Rate' },
+        { value: '8+',    label: 'Years' },
+      ],
+      expertise: [
+        { icon: '💪', label: 'Strength Training' },
+        { icon: '🏃', label: 'Cardio Programming' },
+        { icon: '🎯', label: 'Progressive Overload' },
+        { icon: '🔄', label: 'Recovery Protocols' },
+      ],
+      about: 'Certified personal trainer with 8+ years of fitness expertise. Expert in teaching proper form, progressive strength training, and building cardiovascular endurance for sustainable fat loss and body recomposition.',
+      quote: 'Fitness is a skill. I teach you the form, the consistency, and the confidence to push your limits safely.',
+      reviews: [
+        {
+          name: 'Siddharth Rao', initials: 'SR', color: '#FF8A00', rating: 4.8,
+          text: 'Vivek sir transformed my fitness entirely. His progressive training approach helped me build real strength I never thought possible.',
+        },
+        {
+          name: 'Pooja Nair', initials: 'PN', color: '#22C55E', rating: 4.9,
+          text: 'Our platform is so lucky to have Vivek sir. His technical knowledge of training and fat loss programming is exceptional.',
+        },
+      ],
+    },
+
+    sanjay: {
+      id:          'sanjay',
+      name:        'Sanjay Kulkarni',
+      firstName:   'Sanjay',
+      role:        'Habit & Wellness Expert',
+      rating:      '4.7',
+      reviewCount: 98,
+      experience:  '7+ Years Experience',
+      achievement: 'Certified Behaviour Specialist',
+      image:       '../../assets/ac4.png',
+      initials:    'SK',
+      colorAccent: '#8B5CF6',
+      fee:         149,
+      duration:    '15 Min',
+      studentCount: '+95',
+      stats: [
+        { value: '980+', label: 'Sessions' },
+        { value: '640+', label: 'Clients' },
+        { value: '96%',  label: 'Success Rate' },
+        { value: '7+',   label: 'Years' },
+      ],
+      expertise: [
+        { icon: '⭐', label: 'Habit Design' },
+        { icon: '🧠', label: 'Behaviour Change' },
+        { icon: '📅', label: 'Routine Building' },
+        { icon: '⚡', label: 'Motivation Systems' },
+      ],
+      about: 'Certified behaviour specialist with 7+ years of habit coaching experience. Renowned for his practical systems that help clients build automatic healthy routines, eliminate self-sabotage, and stay consistent with their weight-loss goals.',
+      quote: 'Every healthy habit compounds. I help you build the small wins that create the big transformation.',
+      reviews: [
+        {
+          name: 'Manish Kulkarni', initials: 'MK', color: '#FF8A00', rating: 4.8,
+          text: "Sanjay sir's habit sessions are intense and incredibly productive. My consistency has never been better!",
+        },
+        {
+          name: 'Anita Joshi', initials: 'AJ', color: '#3B82F6', rating: 4.7,
+          text: 'Best wellness expert on our platform. His systems build automatic behaviours that make weight loss feel effortless.',
+        },
+      ],
+    },
+
+    abhishek: {
+      id:          'abhishek',
+      name:        'Abhishek More',
+      firstName:   'Abhishek',
+      role:        'Fitness Specialist',
+      rating:      '4.8',
+      reviewCount: 132,
+      experience:  '6+ Years Experience',
+      achievement: 'Certified Sports Fitness Trainer',
+      image:       '../../assets/ac5.png',
+      initials:    'AM',
+      colorAccent: '#EAB308',
+      fee:         199,
+      duration:    '20 Min',
+      studentCount: '+125',
+      stats: [
+        { value: '1.2K+', label: 'Sessions' },
+        { value: '820+',  label: 'Clients' },
+        { value: '98%',   label: 'Success Rate' },
+        { value: '6+',    label: 'Years' },
+      ],
+      expertise: [
+        { icon: '💪', label: 'Strength Training' },
+        { icon: '🏃', label: 'Speed & Agility' },
+        { icon: '🧘', label: 'Flexibility' },
+        { icon: '💯', label: 'Fitness Assessment' },
+      ],
+      about: 'Certified sports fitness specialist with 6+ years of experience building fat-loss fitness programs. Specializes in strength, agility, HIIT, and injury prevention for weight-loss clients at all fitness levels.',
+      quote: 'Your body is your tool. I help you sharpen it so you can burn fat and feel incredible every single day.',
+      reviews: [
+        {
+          name: 'Rohan More', initials: 'RM', color: '#22C55E', rating: 5.0,
+          text: "Abhishek sir's fitness program is game-changing. My stamina and body composition improved dramatically within weeks!",
+        },
+        {
+          name: 'Shruti Pawar', initials: 'SP', color: '#8B5CF6', rating: 4.7,
+          text: 'The most dedicated fitness specialist I have trained with. He designs programs specifically around fat-loss and long-term health.',
+        },
+      ],
+    },
+  };
+
+  /* ══════════════════════════════════════════
+     THEME
+  ══════════════════════════════════════════ */
+  const THEME_KEY = 'zitlas_theme';
+  const html = document.documentElement;
+
+  function getSystemTheme() {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+
+  function applyTheme(pref) {
+    const resolved = pref === 'system' ? getSystemTheme() : pref;
+    html.setAttribute('data-theme', resolved);
+  }
+
+  function loadTheme() {
+    applyTheme(localStorage.getItem(THEME_KEY) || 'dark');
+  }
+
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if ((localStorage.getItem(THEME_KEY) || 'dark') === 'system') applyTheme('system');
+  });
+
+  /* ══════════════════════════════════════════
+     TOAST
+  ══════════════════════════════════════════ */
+  let toastTimer = null;
+
+  function showToast(msg, duration = 2800) {
+    const el = document.getElementById('toast');
+    if (!el) return;
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), duration);
+  }
+
+  /* ══════════════════════════════════════════
+     GET COACH ID FROM URL
+  ══════════════════════════════════════════ */
+  function getCoachId() {
+    const params = new URLSearchParams(window.location.search);
+    return (params.get('id') || 'rahul').toLowerCase().trim();
+  }
+
+  /* ══════════════════════════════════════════
+     RENDER HELPER — safe set text/attr
+  ══════════════════════════════════════════ */
+  function setText(id, text) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+  }
+
+  function setAttr(id, attr, val) {
+    const el = document.getElementById(id);
+    if (el) el.setAttribute(attr, val);
+  }
+
+  /* ══════════════════════════════════════════
+     HEX → RGBA
+  ══════════════════════════════════════════ */
+  function hexToRgba(hex, alpha) {
+    var r = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return r
+      ? 'rgba(' + parseInt(r[1],16) + ',' + parseInt(r[2],16) + ',' + parseInt(r[3],16) + ',' + alpha + ')'
+      : 'rgba(255,138,0,' + alpha + ')';
+  }
+
+  /* ══════════════════════════════════════════
+     FALLBACK SVG for broken images
+  ══════════════════════════════════════════ */
+  function makeFallbackSVG(initials, color, size) {
+    return `data:image/svg+xml,${encodeURIComponent(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+        <rect width="${size}" height="${size}" fill="${color}"/>
+        <text x="50%" y="52%" dominant-baseline="central" text-anchor="middle"
+              font-size="${Math.round(size * 0.35)}" font-weight="800" fill="white"
+              font-family="-apple-system,sans-serif">${initials}</text>
+      </svg>`
+    )}`;
+  }
+
+  /* ══════════════════════════════════════════
+     SECTION RENDERERS
+  ══════════════════════════════════════════ */
+  function renderMetrics(coach) {
+    var grid = document.getElementById('statsGrid');
+    if (!grid) return;
+    var icons = ['🏆', '👥', '✅', '⏳'];
+    grid.innerHTML = coach.stats.map(function(s, i) {
+      return '<div class="cp-metric-card">' +
+        '<span class="cp-metric-val">' + esc(s.value) + '</span>' +
+        '<span class="cp-metric-lbl">' + esc(s.label) + '</span>' +
+        '<span class="cp-metric-icon">' + (icons[i] || '★') + '</span>' +
+      '</div>';
+    }).join('');
+  }
+
+  function renderExpertise(coach) {
+    var wrap = document.getElementById('expertiseGrid');
+    if (!wrap) return;
+    wrap.innerHTML = coach.expertise.map(function(e) {
+      return '<span class="cp-tag"><span class="cp-tag-icon">' + e.icon + '</span>' + esc(e.label) + '</span>';
+    }).join('');
+  }
+
+  function renderReviews(coach) {
+    var list = document.getElementById('reviewsList');
+    if (!list) return;
+    (coach.reviews || []).slice(0, 3).forEach(function(r) {
+      var stars = '★'.repeat(Math.round(r.rating)) + '☆'.repeat(5 - Math.round(r.rating));
+      var card = document.createElement('div');
+      card.className = 'cp-review-card';
+      card.innerHTML =
+        '<div class="cp-review-header">' +
+          '<div class="cp-review-avatar" style="background:' + r.color + '">' + esc(r.initials) + '</div>' +
+          '<div class="cp-review-meta">' +
+            '<span class="cp-review-name">' + esc(r.name) + '</span>' +
+            '<div class="cp-review-info-row">' +
+              '<span class="cp-review-stars">' + stars + '</span>' +
+              '<span class="cp-review-date">' + esc(r.date || '2 weeks ago') + '</span>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+        '<p class="cp-review-text">' + esc(r.text) + '</p>';
+      list.appendChild(card);
+    });
+  }
+
+  function renderRatingBars(coach) {
+    var el = document.getElementById('ratingBars');
+    if (!el) return;
+    var total = coach.reviewCount || 1;
+    var dist = coach.ratingDist || [
+      Math.round(total * 0.72),
+      Math.round(total * 0.18),
+      Math.round(total * 0.06),
+      Math.round(total * 0.03),
+      Math.round(total * 0.01),
+    ];
+    var labels = ['5 ★', '4 ★', '3 ★', '2 ★', '1 ★'];
+    el.innerHTML = dist.map(function(count, i) {
+      var pct = Math.round((count / total) * 100);
+      return '<div class="cp-rbar-row">' +
+        '<span class="cp-rbar-label">' + labels[i] + '</span>' +
+        '<div class="cp-rbar-track"><div class="cp-rbar-fill" style="width:' + pct + '%"></div></div>' +
+        '<span class="cp-rbar-count">' + count + '</span>' +
+      '</div>';
+    }).join('');
+  }
+
+  function renderGallery(coach) {
+    var el = document.getElementById('galleryScroll');
+    if (!el) return;
+    var gallery = coach.gallery || [
+      { before: '89 kg', after: '72 kg', duration: '3 months', note: 'Sustainable fat loss with Indian meal plan' },
+      { before: '78 kg', after: '65 kg', duration: '2.5 months', note: 'No gym — home workouts only' },
+      { before: '95 kg', after: '81 kg', duration: '4 months', note: 'Hostel-friendly diet + consistency' },
+      { before: '67 kg', after: '58 kg', duration: '2 months', note: 'Office worker, minimal time investment' },
+    ];
+    el.innerHTML = gallery.map(function(card) {
+      return '<div class="cp-gallery-card">' +
+        '<div class="cp-gallery-ba">' +
+          '<div class="cp-gallery-stat"><span class="cp-gallery-stat-lbl">Before</span><span class="cp-gallery-stat-val before">' + esc(card.before) + '</span></div>' +
+          '<span class="cp-gallery-arrow">→</span>' +
+          '<div class="cp-gallery-stat"><span class="cp-gallery-stat-lbl">After</span><span class="cp-gallery-stat-val after">' + esc(card.after) + '</span></div>' +
+        '</div>' +
+        '<span class="cp-gallery-duration">' + esc(card.duration) + '</span>' +
+        '<p class="cp-gallery-note">' + esc(card.note) + '</p>' +
+      '</div>';
+    }).join('');
+  }
+
+  function renderServices(coach) {
+    var el = document.getElementById('servicesList');
+    if (!el) return;
+    var chatRate = coach.chatRate || coach.fee;
+    var callRate = coach.callRate || (coach.fee + 30);
+    var services = [
+      { icon: '💬', name: 'Chat Consultation', desc: 'Text-based, async — ideal for quick questions and plan updates', price: '₹' + chatRate, unit: '/min' },
+      { icon: '📞', name: 'Voice Call', desc: 'Real-time audio for detailed plan discussions and motivation', price: '₹' + callRate, unit: '/min' },
+      { icon: '🎥', name: 'Video Consultation', desc: 'Face-to-face video for form correction and in-depth review', price: '₹' + (callRate + 20), unit: '/min' },
+    ];
+    el.innerHTML = services.map(function(s) {
+      return '<div class="cp-service-card">' +
+        '<div class="cp-service-icon-wrap">' + s.icon + '</div>' +
+        '<div class="cp-service-info">' +
+          '<span class="cp-service-name">' + esc(s.name) + '</span>' +
+          '<span class="cp-service-desc">' + esc(s.desc) + '</span>' +
+        '</div>' +
+        '<div class="cp-service-right">' +
+          '<span class="cp-service-price">' + esc(s.price) + '</span>' +
+          '<span class="cp-service-unit">' + esc(s.unit) + '</span>' +
+          '<button class="cp-service-btn serviceBookBtn">Book</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+    el.querySelectorAll('.serviceBookBtn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var chatBtn = document.getElementById('inlineChatBtn');
+        if (chatBtn) chatBtn.click();
+      });
+    });
+  }
+
+  function renderAvailability(coach) {
+    var el = document.getElementById('cpAvailSection');
+    if (!el) return;
+    var avail = coach.availability || { isAvailableToday: true, slots: ['9:00 AM', '11:00 AM', '2:00 PM', '4:30 PM', '7:00 PM'] };
+    var isOnline = avail.isAvailableToday !== false;
+    var slots = avail.slots || [];
+    el.innerHTML =
+      '<div class="cp-avail-header">' +
+        '<div class="cp-avail-status' + (isOnline ? '' : ' busy') + '">' +
+          '<span class="cp-avail-status-dot"></span>' +
+          (isOnline ? 'Online Now' : 'Away') +
+        '</div>' +
+      '</div>' +
+      '<div class="cp-slots-grid">' +
+        slots.map(function(slot) {
+          return '<button class="cp-slot available">' + esc(slot) + '</button>';
+        }).join('') +
+      '</div>';
+    el.querySelectorAll('.cp-slot').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var chatBtn = document.getElementById('inlineChatBtn');
+        if (chatBtn) chatBtn.click();
+      });
+    });
+  }
+
+  /* ══════════════════════════════════════════
+     POPULATE PAGE
+  ══════════════════════════════════════════ */
+  function populatePage(coach) {
+    document.title = 'ZITLAS — ' + coach.name;
+
+    /* Hero image */
+    var heroImg      = document.getElementById('coachImg');
+    var heroInitials = document.getElementById('cpHeroInitials');
+    if (heroImg) {
+      heroImg.src = coach.image;
+      heroImg.alt = coach.name;
+      heroImg.addEventListener('error', function() {
+        heroImg.style.display = 'none';
+        if (heroInitials) heroInitials.classList.add('show');
+      });
+    }
+    if (heroInitials) {
+      heroInitials.textContent = coach.initials ||
+        (coach.name || 'E').split(' ').map(function(w) { return w[0] || ''; }).join('').slice(0, 2).toUpperCase();
+    }
+
+    /* Hero gradient & ring tint */
+    var heroGrad = document.getElementById('cpHeroGradient');
+    if (heroGrad) {
+      heroGrad.style.background =
+        'radial-gradient(ellipse at 50% 0%, ' + hexToRgba(coach.colorAccent || '#FF8A00', 0.28) + ' 0%, transparent 68%),' +
+        'linear-gradient(180deg, #0f0800 0%, #0A0A0A 100%)';
+    }
+    var ring = document.getElementById('cpProfileRing');
+    if (ring) ring.style.borderColor = coach.colorAccent || '#FF8A00';
+
+    /* Text fields */
+    setText('coachName',    coach.name);
+    setText('coachRole',    coach.role);
+    setText('coachRating',  coach.rating);
+    setText('coachReviews', '(' + coach.reviewCount + ' reviews)');
+    setText('coachExp',     coach.experience);
+    setText('cpHdrName',    coach.firstName || (coach.name || '').split(' ')[0]);
+    setText('cpLang',       coach.languages || 'EN, HI');
+    setText('cpChatRate',   '₹' + (coach.chatRate || coach.fee));
+    setText('cpCallRate',   '₹' + (coach.callRate || (coach.fee + 30)));
+    setText('cpStickyAmt',  '₹' + (coach.chatRate || coach.fee) + '/min');
+    setText('cpRbVal',      coach.rating);
+    setText('reviewTotalCount', String(coach.reviewCount));
+    setText('aboutText',    coach.about);
+
+    /* Stars */
+    var fullStar = Math.round(parseFloat(coach.rating));
+    setText('coachStars', '★'.repeat(fullStar) + '☆'.repeat(5 - fullStar));
+
+    /* Availability pill */
+    var avail       = coach.availability;
+    var availToday  = !avail || avail.isAvailableToday !== false;
+    var availPill   = document.getElementById('cpAvailPill');
+    var availText   = document.getElementById('cpAvailText');
+    if (availPill && availText) {
+      if (availToday) {
+        availText.textContent = 'Available Today';
+        availPill.classList.remove('busy');
+      } else {
+        availText.textContent = 'Next: ' + (avail && avail.nextSlot ? avail.nextSlot : 'Tomorrow');
+        availPill.classList.add('busy');
+      }
+    }
+
+    /* Sections */
+    renderMetrics(coach);
+    renderExpertise(coach);
+    renderReviews(coach);
+    renderRatingBars(coach);
+    renderGallery(coach);
+    renderServices(coach);
+    renderAvailability(coach);
+
+    /* Context modal */
+    var modalImg = document.getElementById('modalCoachImg');
+    if (modalImg) {
+      modalImg.src = coach.image;
+      modalImg.alt = coach.name;
+      modalImg.addEventListener('error', function() {
+        modalImg.src = makeFallbackSVG(coach.initials, coach.colorAccent, 52);
+      });
+    }
+    setText('modalCoachTag',  'with ' + coach.name);
+    setText('modalCoachName', coach.name);
+    setText('modalCoachRole', coach.role);
+
+    var ctxFeeEl = document.getElementById('ctxFeeVal');
+    if (ctxFeeEl) ctxFeeEl.textContent = '₹' + coach.fee;
+
+    /* Chat overlay header */
+    setText('chatHdrName', coach.name);
+    setText('chatHdrRole', coach.role);
+    var av = document.getElementById('chatHdrAvatar');
+    if (av) av.textContent = (coach.name || 'E').split(' ').map(function(w) { return w[0] || ''; }).join('').slice(0, 2).toUpperCase();
+  }
+
+  /* ══════════════════════════════════════════
+     STAT CARD COUNT-UP
+  ══════════════════════════════════════════ */
+  function countUp(el, target, suffix, duration = 900) {
+    const start   = performance.now();
+    const isFloat = target % 1 !== 0;
+
+    function tick(now) {
+      const p       = Math.min((now - start) / duration, 1);
+      const eased   = 1 - Math.pow(1 - p, 3);
+      const current = isFloat
+        ? (target * eased).toFixed(1)
+        : Math.round(target * eased);
+      el.textContent = current + suffix;
+      if (p < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+
+  function initStatCountUp(coach) {
+    setTimeout(function() {
+      document.querySelectorAll('.cp-metric-val').forEach(function(el, i) {
+        var raw    = coach.stats[i] ? coach.stats[i].value : '';
+        var num    = parseFloat(raw.replace(/[^0-9.]/g, ''));
+        var suffix = raw.replace(/[0-9.]/g, '');
+        if (!isNaN(num)) {
+          el.textContent = '0' + suffix;
+          setTimeout(function() { countUp(el, num, suffix, 800); }, 100 + i * 80);
+        }
+      });
+    }, 400);
+  }
+
+  /* ══════════════════════════════════════════
+     HTML ESCAPE HELPER
+  ══════════════════════════════════════════ */
+  function esc(str) {
+    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function capitalize(str) {
+    if (!str) return '';
+    return str.charAt(0).toUpperCase() + str.slice(1);
+  }
+
+  /* ══════════════════════════════════════════
+     BUILD CONTEXT PACKAGE FROM LOCALSTORAGE
+  ══════════════════════════════════════════ */
+  function buildContextPackage() {
+    const ctx = {};
+    const keys = {
+      assessment:   'zitlas_assessment',
+      calculations: 'zitlas_calculations',
+      swot:         'zitlas_swot',
+      diet_plan:    'zitlas_diet_plan',
+      workout_plan: 'zitlas_workout_plan',
+      survey:       'zitlas_survey',
+    };
+    Object.keys(keys).forEach((k) => {
+      try { ctx[k] = JSON.parse(localStorage.getItem(keys[k]) || 'null'); } catch(_) {}
+    });
+    return ctx;
+  }
+
+  /* ══════════════════════════════════════════
+     BUILD SYSTEM MESSAGE TEXT
+  ══════════════════════════════════════════ */
+  function buildSystemMessage(ctx, question) {
+    const lines = ['📋 User Profile Shared\n'];
+    const a = ctx.assessment || ctx.survey || {};
+    const c = ctx.calculations || {};
+
+    if (a.age)              lines.push('Age: ' + a.age);
+    if (a.gender)           lines.push('Gender: ' + capitalize(a.gender));
+    if (a.height_cm)        lines.push('Height: ' + a.height_cm + ' cm');
+    if (a.weight_kg)        lines.push('Weight: ' + a.weight_kg + ' kg');
+    if (a.goal_weight_kg)   lines.push('Goal Weight: ' + a.goal_weight_kg + ' kg');
+    if (a.activity_level)   lines.push('Activity: ' + capitalize(String(a.activity_level).replace(/_/g,' ')));
+    if (a.diet_preference)  lines.push('Diet: ' + capitalize(String(a.diet_preference).replace(/_/g,' ')));
+    if (a.workout_preference) lines.push('Workout: ' + capitalize(String(a.workout_preference).replace(/_/g,' ')));
+
+    if (c.bmi) {
+      lines.push('\n📊 Fitness Snapshot');
+      lines.push('BMI: ' + parseFloat(c.bmi).toFixed(1));
+      if (c.bmi_category)                 lines.push('Category: ' + c.bmi_category);
+      if (c.bmr_kcal)                     lines.push('BMR: ' + Math.round(c.bmr_kcal) + ' kcal');
+      if (c.tdee_kcal)                    lines.push('TDEE: ' + Math.round(c.tdee_kcal) + ' kcal');
+      if (c.weight_loss_calories_kcal)    lines.push('Target Calories: ' + c.weight_loss_calories_kcal + ' kcal');
+      if (c.protein_target_g)             lines.push('Protein Target: ' + c.protein_target_g + 'g');
+      if (c.water_target_liters)          lines.push('Water Target: ' + c.water_target_liters + 'L');
+      if (c.daily_steps_goal)             lines.push('Steps Goal: ' + Number(c.daily_steps_goal).toLocaleString());
+    }
+
+    if (ctx.swot) {
+      const s = ctx.swot.swot || ctx.swot;
+      function swotText(item) { return typeof item === 'object' ? (item.title || '') : String(item || ''); }
+      lines.push('\n🎯 SWOT Summary');
+      if (s.strengths    && s.strengths[0])      lines.push('Strength: '    + swotText(s.strengths[0]));
+      if (s.weaknesses   && s.weaknesses[0])     lines.push('Weakness: '    + swotText(s.weaknesses[0]));
+      if (s.opportunities && s.opportunities[0]) lines.push('Opportunity: '+ swotText(s.opportunities[0]));
+      if (s.threats      && s.threats[0])        lines.push('Threat: '      + swotText(s.threats[0]));
+    }
+
+    if (ctx.diet_plan)    lines.push('\n🥗 Diet Plan Attached');
+    if (ctx.workout_plan) lines.push('\n💪 Workout Plan Attached');
+
+    if (question) lines.push('\n💬 User Question:\n"' + question + '"');
+
+    return lines.join('\n');
+  }
+
+  /* ══════════════════════════════════════════
+     REVIEW CHAT CARDS
+     All posted automatically in 'review' mode.
+  ══════════════════════════════════════════ */
+
+  /* ── 1. Case file header summary ── */
+  function createCaseFileSummary(ctx, note, coach) {
+    const div = document.createElement('div');
+    div.className = 'chat-msg chat-msg--review-confirm';
+
+    const a = ctx.assessment || ctx.survey || {};
+    const c = ctx.calculations || {};
+
+    const currentWeight = a.weight_kg;
+    const goalWeight    = a.goal_weight_kg;
+    const goalLabel     = (currentWeight && goalWeight)
+      ? (parseFloat(goalWeight) < parseFloat(currentWeight) ? 'Lose Weight' : 'Gain Weight')
+      : 'Weight Management';
+
+    const docItems = [
+      { label: 'Assessment',       has: !!ctx.assessment },
+      { label: 'Fitness Snapshot', has: !!ctx.calculations },
+      { label: 'SWOT Report',      has: !!ctx.swot },
+      { label: 'AI Diet Plan',     has: !!ctx.diet_plan },
+      { label: 'AI Workout Plan',  has: !!ctx.workout_plan },
+    ].filter(function(i) { return i.has; });
+
+    const docsHtml = docItems.map(function(i) {
+      return '<div class="rcm-item"><span class="rcm-check">✅</span>' + esc(i.label) + '</div>';
+    }).join('');
+
+    const noteHtml = note
+      ? '<div class="rcm-user-note">💬 &ldquo;' + esc(note) + '&rdquo;</div>'
+      : '';
+
+    const fee        = coach && coach.fee ? '₹' + coach.fee : '—';
+    const expertName = coach && coach.name ? coach.name : 'Expert';
+
+    const statsHtml = [
+      goalLabel     ? '<div class="rcm-stat"><span class="rcm-stat-label">Goal</span><span class="rcm-stat-val">' + esc(goalLabel) + '</span></div>' : '',
+      currentWeight ? '<div class="rcm-stat"><span class="rcm-stat-label">Current Weight</span><span class="rcm-stat-val">' + esc(String(currentWeight)) + ' kg</span></div>' : '',
+      goalWeight    ? '<div class="rcm-stat"><span class="rcm-stat-label">Target Weight</span><span class="rcm-stat-val">' + esc(String(goalWeight)) + ' kg</span></div>' : '',
+      c.weight_loss_calories_kcal ? '<div class="rcm-stat"><span class="rcm-stat-label">Target Calories</span><span class="rcm-stat-val">' + esc(String(c.weight_loss_calories_kcal)) + ' kcal</span></div>' : '',
+      c.protein_target_g ? '<div class="rcm-stat"><span class="rcm-stat-label">Protein</span><span class="rcm-stat-val">' + esc(String(c.protein_target_g)) + 'g</span></div>' : '',
+    ].filter(Boolean).join('');
+
+    div.innerHTML =
+      '<div class="review-confirm-card">' +
+        '<div class="rcm-header">' +
+          '<span class="rcm-icon">📋</span>' +
+          '<div>' +
+            '<div class="rcm-title">Diet Plan Review Request</div>' +
+            '<div class="rcm-sub">Shared with ' + esc(expertName) + '</div>' +
+          '</div>' +
+        '</div>' +
+        (statsHtml ? '<div class="rcm-user-stats">' + statsHtml + '</div>' : '') +
+        '<div class="rcm-attach-label">Attached Documents:</div>' +
+        '<div class="rcm-items">' + docsHtml + '</div>' +
+        noteHtml +
+        '<div class="rcm-divider"></div>' +
+        '<div class="rcm-fee-row">' +
+          '<span class="rcm-fee-label">Review Fee</span>' +
+          '<span class="rcm-fee-val">' + esc(fee) + '</span>' +
+        '</div>' +
+        '<div class="rcm-status-row">' +
+          '<span class="rcm-status-dot rcm-status--pending"></span>' +
+          '<span class="rcm-status-text">Waiting for Expert Review</span>' +
+        '</div>' +
+      '</div>';
+
+    return div;
+  }
+
+  /* ── 2. Fitness Snapshot + Assessment card ── */
+  function createFitnessCard(ctx) {
+    const div = document.createElement('div');
+    div.className = 'chat-msg chat-msg--card';
+    div.id = 'chatFitnessCard';
+
+    const a = ctx.assessment || ctx.survey || {};
+    const c = ctx.calculations || {};
+
+    const age      = a.age    ? String(a.age) + ' yrs' : '';
+    const gender   = capitalize(a.gender || '');
+    const height   = a.height_cm ? a.height_cm + ' cm' : '';
+    const weight   = a.weight_kg ? a.weight_kg + ' kg' : '';
+    const goal     = a.goal_weight_kg ? a.goal_weight_kg + ' kg' : '';
+    const activity = a.activity_level  ? capitalize(String(a.activity_level).replace(/_/g, ' '))  : '';
+    const diet     = a.diet_preference ? capitalize(String(a.diet_preference).replace(/_/g, ' ')) : '';
+
+    const bmi       = c.bmi ? parseFloat(c.bmi).toFixed(1) : '';
+    const bmiCat    = c.bmi_category || '';
+    const bmr       = c.bmr_kcal  ? Math.round(c.bmr_kcal) + ' kcal'  : '';
+    const tdee      = c.tdee_kcal ? Math.round(c.tdee_kcal) + ' kcal' : '';
+    const targetCal = c.weight_loss_calories_kcal ? c.weight_loss_calories_kcal + ' kcal' : '';
+    const protein   = c.protein_target_g   ? c.protein_target_g + 'g'   : '';
+    const water     = c.water_target_liters ? c.water_target_liters + 'L' : '';
+    const steps     = c.daily_steps_goal   ? Number(c.daily_steps_goal).toLocaleString() + '/day' : '';
+
+    const statItems = [
+      bmi       ? { val: bmi + (bmiCat ? ' · ' + bmiCat : ''), label: 'BMI',             accent: false } : null,
+      bmr       ? { val: bmr,       label: 'BMR',             accent: false } : null,
+      tdee      ? { val: tdee,      label: 'TDEE',            accent: false } : null,
+      targetCal ? { val: targetCal, label: 'Target Calories', accent: true  } : null,
+      protein   ? { val: protein,   label: 'Protein Target',  accent: true  } : null,
+      water     ? { val: water,     label: 'Water Target',    accent: false } : null,
+      steps     ? { val: steps,     label: 'Steps Goal',      accent: false } : null,
+    ].filter(Boolean);
+
+    const statsHtml = statItems.map(function(s) {
+      return '<div class="cfc-stat' + (s.accent ? ' cfc-stat--accent' : '') + '">' +
+        '<span class="cfc-stat-val">' + esc(s.val) + '</span>' +
+        '<span class="cfc-stat-label">' + esc(s.label) + '</span>' +
+      '</div>';
+    }).join('');
+
+    const profileLine = [age, gender, height].filter(Boolean).join(' · ');
+    const weightRow   = weight && goal ? '⚖️ ' + weight + '  →  Goal: ' + goal
+                        : weight ? '⚖️ ' + weight : '';
+    const metaTags    = [activity, diet].filter(Boolean).map(function(t) {
+      return '<span class="cfc-meta-tag">' + esc(t) + '</span>';
+    }).join('');
+
+    div.innerHTML =
+      '<div class="chat-content-card">' +
+        '<div class="ccc-header">' +
+          '<span class="ccc-icon">📊</span>' +
+          '<div class="ccc-title-group">' +
+            '<span class="ccc-title">Fitness Snapshot</span>' +
+            (profileLine ? '<span class="ccc-sub">' + esc(profileLine) + '</span>' : '') +
+          '</div>' +
+        '</div>' +
+        (weightRow  ? '<div class="cfc-weight-row">' + esc(weightRow) + '</div>' : '') +
+        (metaTags   ? '<div class="cfc-meta-row">' + metaTags + '</div>' : '') +
+        (statsHtml  ? '<div class="cfc-stats-grid">' + statsHtml + '</div>' : '') +
+      '</div>';
+
+    return div;
+  }
+
+  /* ── 3. SWOT card ── */
+  function createSwotChatCard(ctx) {
+    const div = document.createElement('div');
+    div.className = 'chat-msg chat-msg--card';
+    div.id = 'chatSwotCard';
+
+    const swotOuter = ctx.swot;
+    if (!swotOuter) return div;
+    const swot = swotOuter.swot || swotOuter;
+
+    const quadrants = [
+      { key: 'strengths',     icon: '💪', label: 'Strengths',     cls: 'csc-strength'    },
+      { key: 'weaknesses',    icon: '⚠️', label: 'Weaknesses',    cls: 'csc-weakness'    },
+      { key: 'opportunities', icon: '🎯', label: 'Opportunities', cls: 'csc-opportunity' },
+      { key: 'threats',       icon: '🔴', label: 'Threats',       cls: 'csc-threat'      },
+    ];
+
+    const quadrantsHtml = quadrants.map(function(q) {
+      const items = swot[q.key] || [];
+      return '<div class="csc-quadrant ' + q.cls + '">' +
+        '<div class="csc-qlabel">' + q.icon + ' ' + esc(q.label) + '</div>' +
+        '<ul class="csc-qlist">' +
+          items.slice(0, 3).map(function(item) {
+            var text = typeof item === 'object' ? (item.title || '') : String(item || '');
+            return '<li>' + esc(text) + '</li>';
+          }).join('') +
+        '</ul>' +
+      '</div>';
+    }).join('');
+
+    div.innerHTML =
+      '<div class="chat-content-card">' +
+        '<div class="ccc-header">' +
+          '<span class="ccc-icon">🎯</span>' +
+          '<div class="ccc-title-group">' +
+            '<span class="ccc-title">SWOT Analysis</span>' +
+            (swotOuter.priority_action
+              ? '<span class="ccc-sub">Priority: ' + esc(swotOuter.priority_action.slice(0, 80)) + (swotOuter.priority_action.length > 80 ? '…' : '') + '</span>'
+              : '') +
+          '</div>' +
+        '</div>' +
+        '<div class="csc-grid">' + quadrantsHtml + '</div>' +
+      '</div>';
+
+    return div;
+  }
+
+  /* ── 4. Diet Plan card ── */
+  function createDietPlanChatCard(dietPlan) {
+    const div = document.createElement('div');
+    div.className = 'chat-msg chat-msg--card';
+    div.id = 'chatDietCard';
+
+    if (!dietPlan || !dietPlan.days) return div;
+
+    const days       = dietPlan.days;
+    const calTarget  = dietPlan.daily_calories_target || '';
+    const protTarget = dietPlan.daily_protein_target_g || '';
+    const dayNames   = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+    function getMealFoods(meal) {
+      if (Array.isArray(meal.foods) && meal.foods.length > 0) return meal.foods.join(', ');
+      if (meal.food_items) return String(meal.food_items);
+      return '';
+    }
+
+    function renderDayMeals(dayData) {
+      return (dayData.meals || []).map(function(meal) {
+        const foods  = getMealFoods(meal);
+        const calStr = meal.calories && meal.protein_g
+          ? meal.calories + ' kcal · ' + meal.protein_g + 'g protein'
+          : meal.calories ? meal.calories + ' kcal' : '';
+        return '<div class="cdpc-meal-row">' +
+          '<div class="cdpc-meal-hdr">' +
+            '<span class="cdpc-meal-emoji">' + esc(meal.emoji || '🍽️') + '</span>' +
+            '<span class="cdpc-meal-name">' + esc(meal.meal_name || 'Meal') + '</span>' +
+            (meal.time ? '<span class="cdpc-meal-time">' + esc(meal.time) + '</span>' : '') +
+          '</div>' +
+          (foods   ? '<div class="cdpc-meal-foods">' + esc(foods) + '</div>' : '') +
+          (calStr  ? '<div class="cdpc-meal-meta">' + esc(calStr) + '</div>' : '') +
+        '</div>';
+      }).join('');
+    }
+
+    const pillsHtml = days.map(function(d, i) {
+      return '<button class="cdpc-day-pill' + (i === 0 ? ' active' : '') + '" data-cdpc-day="' + i + '">' +
+        esc(dayNames[i] || ('D' + (i + 1))) +
+      '</button>';
+    }).join('');
+
+    const fullPlanHtml = days.map(function(d, i) {
+      return '<div class="cdpc-full-day">' +
+        '<div class="cdpc-full-day-hdr">' +
+          '<span class="cdpc-full-day-name">' + esc(d.day || ('Day ' + (i + 1))) + '</span>' +
+          (d.theme ? '<span class="cdpc-full-day-theme">' + esc(d.theme) + '</span>' : '') +
+          (d.total_calories ? '<span class="cdpc-full-day-cal">' + d.total_calories + ' kcal</span>' : '') +
+        '</div>' +
+        renderDayMeals(d) +
+      '</div>';
+    }).join('<div class="cdpc-day-sep"></div>');
+
+    var subText = '7-Day Plan';
+    if (calTarget)  subText += ' · ' + calTarget + ' kcal/day';
+    if (protTarget) subText += ' · ' + protTarget + 'g protein';
+
+    div.innerHTML =
+      '<div class="chat-content-card">' +
+        '<div class="ccc-header">' +
+          '<span class="ccc-icon">🥗</span>' +
+          '<div class="ccc-title-group">' +
+            '<span class="ccc-title">' + esc(dietPlan.plan_name || 'AI Diet Plan') + '</span>' +
+            '<span class="ccc-sub">' + esc(subText) + '</span>' +
+          '</div>' +
+        '</div>' +
+        '<div class="cdpc-day-pills" id="cdpcPills">' + pillsHtml + '</div>' +
+        '<div class="cdpc-day-meals" id="cdpcMeals">' + renderDayMeals(days[0]) + '</div>' +
+        '<div class="cdpc-full-plan" id="cdpcFull" style="display:none">' + fullPlanHtml + '</div>' +
+        '<div class="ccc-actions">' +
+          '<button class="cpc-expand-btn" data-target="cdpcFull" data-label-expand="View Full Plan ↓" data-label-collapse="Hide Full Plan ↑">View Full Plan ↓</button>' +
+        '</div>' +
+      '</div>';
+
+    return div;
+  }
+
+  /* ── 5. Workout Plan card ── */
+  function createWorkoutPlanChatCard(workoutPlan) {
+    const div = document.createElement('div');
+    div.className = 'chat-msg chat-msg--card';
+    div.id = 'chatWorkoutCard';
+
+    if (!workoutPlan) return div;
+
+    const planName = workoutPlan.plan_name || 'AI Workout Plan';
+    const wDays    = workoutPlan.weekly_plan || workoutPlan.days || [];
+    if (!wDays.length) return div;
+
+    const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+    function getDayActivity(d) {
+      return d.focus || d.theme || d.type || d.activity || 'Training';
+    }
+    function getDayDuration(d) {
+      return d.duration_minutes ? d.duration_minutes + ' min' : (d.totalTime || '');
+    }
+
+    const gridHtml = wDays.map(function(d, i) {
+      const activity = getDayActivity(d);
+      const duration = getDayDuration(d);
+      const isRest   = /rest|recovery/i.test(activity);
+      return '<div class="cwpc-day-cell' + (isRest ? ' cwpc-day-rest' : '') + '">' +
+        '<span class="cwpc-day-name">' + esc(dayNames[i] || ('D' + (i + 1))) + '</span>' +
+        '<span class="cwpc-day-activity">' + esc(activity) + '</span>' +
+        (duration ? '<span class="cwpc-day-dur">' + esc(duration) + '</span>' : '') +
+      '</div>';
+    }).join('');
+
+    const fullHtml = wDays.map(function(d, i) {
+      const exercises = d.exercises || d.drills || [];
+      const activity  = getDayActivity(d);
+      const duration  = getDayDuration(d);
+      const tip       = d.daily_tip || d.tip || '';
+
+      const exHtml = exercises.map(function(ex) {
+        const name    = ex.name || ex.drill_name || 'Exercise';
+        const sets    = ex.sets ? ex.sets + ' sets' : '';
+        const reps    = ex.reps_or_duration || ex.reps || ex.duration || '';
+        const details = [sets, reps].filter(Boolean).join(' × ');
+        return '<div class="cwpc-exercise">' +
+          '<span class="cwpc-ex-name">' + esc(name) + '</span>' +
+          (details ? '<span class="cwpc-ex-detail">' + esc(details) + '</span>' : '') +
+        '</div>';
+      }).join('');
+
+      return '<div class="cwpc-full-day">' +
+        '<div class="cwpc-full-day-hdr">' +
+          '<span class="cwpc-full-day-name">' + esc(d.day || d.dayName || ('Day ' + (i + 1))) + '</span>' +
+          '<span class="cwpc-full-day-type">' + esc(activity + (duration ? ' · ' + duration : '')) + '</span>' +
+        '</div>' +
+        (exHtml || '<div class="cwpc-rest-label">Rest / Recovery Day</div>') +
+        (tip ? '<div class="cwpc-day-tip">💡 ' + esc(tip) + '</div>' : '') +
+      '</div>';
+    }).join('<div class="cdpc-day-sep"></div>');
+
+    div.innerHTML =
+      '<div class="chat-content-card">' +
+        '<div class="ccc-header">' +
+          '<span class="ccc-icon">💪</span>' +
+          '<div class="ccc-title-group">' +
+            '<span class="ccc-title">' + esc(planName) + '</span>' +
+            '<span class="ccc-sub">7-Day Training Schedule</span>' +
+          '</div>' +
+        '</div>' +
+        '<div class="cwpc-week-grid">' + gridHtml + '</div>' +
+        '<div class="cwpc-full-plan" id="cwpcFull" style="display:none">' + fullHtml + '</div>' +
+        '<div class="ccc-actions">' +
+          '<button class="cpc-expand-btn" data-target="cwpcFull" data-label-expand="View Full Plan ↓" data-label-collapse="Hide Full Plan ↑">View Full Plan ↓</button>' +
+        '</div>' +
+      '</div>';
+
+    return div;
+  }
+
+  /* ── Wire all review-chat interactions ── */
+  function wireReviewChatInteractions(container) {
+    /* Expand / collapse toggles */
+    container.querySelectorAll('.cpc-expand-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        const targetId = btn.dataset.target;
+        const target   = document.getElementById(targetId);
+        if (!target) return;
+        const expanded = target.style.display !== 'none';
+        target.style.display = expanded ? 'none' : 'block';
+        btn.textContent = expanded ? btn.dataset.labelExpand : btn.dataset.labelCollapse;
+      });
+    });
+
+    /* Diet day-pill switching */
+    const pillsWrap = document.getElementById('cdpcPills');
+    const mealsWrap = document.getElementById('cdpcMeals');
+    if (pillsWrap && mealsWrap) {
+      pillsWrap.addEventListener('click', function(e) {
+        const pill = e.target.closest('[data-cdpc-day]');
+        if (!pill) return;
+        const dayIdx = parseInt(pill.dataset.cdpcDay, 10);
+        pillsWrap.querySelectorAll('.cdpc-day-pill').forEach(function(p) {
+          p.classList.toggle('active', p === pill);
+        });
+        /* Pull meal HTML from the matching full-plan day */
+        const fullDays = document.querySelectorAll('#cdpcFull .cdpc-full-day');
+        if (fullDays[dayIdx]) {
+          const cloned = Array.from(fullDays[dayIdx].querySelectorAll('.cdpc-meal-row'));
+          mealsWrap.innerHTML = '';
+          cloned.forEach(function(m) { mealsWrap.appendChild(m.cloneNode(true)); });
+        }
+      });
+    }
+
+    /* Badge clicks → scroll to card */
+    const badgeMap = {
+      badgeAssessment: 'chatFitnessCard',
+      badgeFitness:    'chatFitnessCard',
+      badgeSwot:       'chatSwotCard',
+      badgeDiet:       'chatDietCard',
+      badgeWorkout:    'chatWorkoutCard',
+    };
+    Object.keys(badgeMap).forEach(function(badgeId) {
+      const badge = document.getElementById(badgeId);
+      if (!badge) return;
+      badge.style.cursor = 'pointer';
+      badge.title = 'Tap to view';
+      badge.onclick = function() {
+        const card = document.getElementById(badgeMap[badgeId]);
+        if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      };
+    });
+  }
+
+  /* ══════════════════════════════════════════
+     ZC CHAT HELPERS — day separators, grouping, typing
+  ══════════════════════════════════════════ */
+  function buildZcDaySep(timestamp) {
+    var el = document.createElement('div');
+    el.className = 'zc-day-sep';
+    var d = timestamp ? new Date(timestamp) : new Date();
+    var today = new Date(); today.setHours(0,0,0,0);
+    var yest  = new Date(today); yest.setDate(yest.getDate() - 1);
+    var day   = new Date(d); day.setHours(0,0,0,0);
+    var label;
+    if (day.getTime() === today.getTime())      label = 'Today';
+    else if (day.getTime() === yest.getTime())  label = 'Yesterday';
+    else label = d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+    el.innerHTML = '<span class="zc-day-sep-lbl">' + label + '</span>';
+    return el;
+  }
+
+  function zcIsGrouped(prevMsg, currMsg) {
+    if (!prevMsg || prevMsg.senderType !== currMsg.senderType) return false;
+    if (!prevMsg.timestamp || !currMsg.timestamp) return false;
+    return (new Date(currMsg.timestamp) - new Date(prevMsg.timestamp)) < 5 * 60 * 1000;
+  }
+
+  function showZcTyping(container, initials) {
+    hideZcTyping(container);
+    var el = document.createElement('div');
+    el.className = 'zc-typing'; el.id = 'zcTypingEl';
+    el.innerHTML =
+      '<div class="zc-av">' + esc(initials || '?') + '</div>' +
+      '<div class="zc-typing-bbl">' +
+        '<span class="zc-typing-dot"></span><span class="zc-typing-dot"></span><span class="zc-typing-dot"></span>' +
+      '</div>';
+    container.appendChild(el);
+    container.scrollTop = container.scrollHeight;
+  }
+
+  function hideZcTyping(container) {
+    var old = container ? container.querySelector('#zcTypingEl') : document.getElementById('zcTypingEl');
+    if (old) old.remove();
+  }
+
+  /* ══════════════════════════════════════════
+     CHAT MESSAGE FACTORIES
+  ══════════════════════════════════════════ */
+  function createSystemMsg(text) {
+    const div = document.createElement('div');
+    div.className = 'zc-system-card';
+    div.innerHTML = '<span class="zc-sys-text">' + esc(text).replace(/\n/g, '<br>') + '</span>';
+    return div;
+  }
+
+  function createUserMsg(text, timestamp, grouped) {
+    const div = document.createElement('div');
+    div.className = 'zc-msg zc-msg--out ' + (grouped ? 'zc-msg--grouped' : 'zc-msg--first');
+    var ts = '';
+    try { if (timestamp) ts = new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); } catch(_) {}
+    div.innerHTML =
+      '<div class="zc-bbl">' +
+        '<span class="zc-bbl-txt">' + esc(text).replace(/\n/g, '<br>') + '</span>' +
+        (ts ? '<span class="zc-bbl-ts">' + esc(ts) + '</span>' : '') +
+      '</div>';
+    return div;
+  }
+
+  function createExpertReplyMsg(text, expertName, timestamp, grouped) {
+    const div = document.createElement('div');
+    div.className = 'zc-msg zc-msg--in ' + (grouped ? 'zc-msg--grouped' : 'zc-msg--first');
+    var initials = (expertName || 'E').split(' ').map(function(w) { return w[0] || ''; }).join('').slice(0, 2).toUpperCase();
+    var ts = '';
+    try { if (timestamp) ts = new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); } catch(_) {}
+    var avHtml = grouped ? '<div class="zc-av-ghost"></div>' : '<div class="zc-av">' + esc(initials) + '</div>';
+    div.innerHTML =
+      avHtml +
+      '<div class="zc-bbl">' +
+        '<span class="zc-bbl-txt">' + esc(text).replace(/\n/g, '<br>') + '</span>' +
+        (ts ? '<span class="zc-bbl-ts">' + esc(ts) + '</span>' : '') +
+      '</div>';
+    return div;
+  }
+
+  /* ══════════════════════════════════════════
+     CHAT PERSISTENCE HELPERS
+  ══════════════════════════════════════════ */
+
+  let _currentChatCoach = null;
+
+  function getAthleteId() {
+    var id = localStorage.getItem('zitlas_athlete_id');
+    if (id) return id;
+    try {
+      var fb = JSON.parse(localStorage.getItem('zitlas_firebase_user') || 'null');
+      if (fb && fb.uid) { localStorage.setItem('zitlas_athlete_id', fb.uid); return fb.uid; }
+    } catch(_) {}
+    id = 'athlete_' + Date.now().toString(36);
+    localStorage.setItem('zitlas_athlete_id', id);
+    return id;
+  }
+
+  function getAthleteName() {
+    try {
+      var fb = JSON.parse(localStorage.getItem('zitlas_firebase_user') || 'null');
+      if (fb && fb.name) return fb.name;
+    } catch(_) {}
+    return 'Athlete';
+  }
+
+  function getConversationId(coachId) {
+    return 'chat_' + getAthleteId() + '_' + coachId;
+  }
+
+  function loadConversation(conversationId) {
+    try {
+      var all = JSON.parse(localStorage.getItem('zitlas_chats') || '{}');
+      return all[conversationId] || null;
+    } catch(_) { return null; }
+  }
+
+  function ensureConversation(coachId, coachName) {
+    var conversationId = getConversationId(coachId);
+    try {
+      var all = JSON.parse(localStorage.getItem('zitlas_chats') || '{}');
+      if (!all[conversationId]) {
+        all[conversationId] = {
+          conversationId:  conversationId,
+          athleteId:       getAthleteId(),
+          athleteName:     getAthleteName(),
+          expertId:        coachId,
+          expertName:      coachName,
+          messages:        [],
+          lastMessage:     '',
+          lastMessageAt:   null,
+          unreadByExpert:  0,
+        };
+        localStorage.setItem('zitlas_chats', JSON.stringify(all));
+      }
+    } catch(_) {}
+    return conversationId;
+  }
+
+  function persistReviewPacket(conversationId, request) {
+    try {
+      var all  = JSON.parse(localStorage.getItem('zitlas_chats') || '{}');
+      var conv = all[conversationId];
+      if (!conv) return;
+      if (conv.messages && conv.messages.some(function(m) { return m.type === 'review_packet'; })) return;
+      var packet = {
+        id:             'msg_review_' + Date.now(),
+        conversationId: conversationId,
+        type:           'review_packet',
+        payload:        request,
+        timestamp:      request.submittedAt || new Date().toISOString(),
+      };
+      conv.messages = [packet].concat(conv.messages || []);
+      localStorage.setItem('zitlas_chats', JSON.stringify(all));
+      console.log('[ZITLAS] Review packet injected into conversation:', packet.id);
+      console.log('[ZITLAS] Athlete Review Packet', packet.payload);
+    } catch(e) { console.error('[ZITLAS] persistReviewPacket failed:', e); }
+  }
+
+  function persistChatMessage(conversationId, senderType, text) {
+    var athleteId = getAthleteId();
+    var msg = {
+      id:             'msg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 5),
+      conversationId: conversationId,
+      senderId:       senderType === 'athlete' ? athleteId : (_currentChatCoach ? _currentChatCoach.id : 'expert'),
+      senderType:     senderType,
+      text:           text,
+      timestamp:      new Date().toISOString(),
+    };
+    console.log("ATHLETE SAVING TO", conversationId);
+    console.log("ATHLETE MESSAGE", msg);
+    try {
+      var all = JSON.parse(localStorage.getItem('zitlas_chats') || '{}');
+      if (!all[conversationId]) {
+        console.warn("ATHLETE: conversation missing in localStorage for key", conversationId);
+        return msg;
+      }
+      all[conversationId].messages.push(msg);
+      all[conversationId].lastMessage    = text;
+      all[conversationId].lastMessageAt  = msg.timestamp;
+      if (senderType === 'athlete') {
+        all[conversationId].unreadByExpert = (all[conversationId].unreadByExpert || 0) + 1;
+      }
+      localStorage.setItem('zitlas_chats', JSON.stringify(all));
+    } catch(_) {}
+    console.log('Message Sent', msg);
+    return msg;
+  }
+
+  /* ══════════════════════════════════════════
+     UPDATE CHIP PRESENCE (green if data exists)
+     containerId: 'ctxChips' or 'verifyCtxChips'
+  ══════════════════════════════════════════ */
+  function updateChipPresence(ctx, containerId) {
+    const map = {
+      assessment: !!ctx.assessment,
+      fitness:    !!ctx.calculations,
+      swot:       !!ctx.swot,
+      diet:       !!ctx.diet_plan,
+      workout:    !!ctx.workout_plan,
+      goal:       !!(ctx.survey || ctx.assessment),
+    };
+    const id = containerId || 'ctxChips';
+    document.querySelectorAll('#' + id + ' .ctx-chip').forEach((el) => {
+      const key = el.dataset.key;
+      if (key) el.classList.toggle('present', !!map[key]);
+    });
+  }
+
+  /* ══════════════════════════════════════════
+     CONTEXT MODAL
+  ══════════════════════════════════════════ */
+  function initContextModal(coach) {
+    const modal   = document.getElementById('contextModal');
+    const openBtn = document.getElementById('bookNowBtn');
+    const closeBtn = document.getElementById('closeModal');
+    const sendBtn  = document.getElementById('sendExpertBtn');
+    if (!modal) return;
+
+    function openModal() {
+      updateChipPresence(buildContextPackage(), 'ctxChips');
+      modal.classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+    function closeModal() {
+      modal.classList.remove('open');
+      document.body.style.overflow = '';
+    }
+
+    if (openBtn)  openBtn.addEventListener('click', openModal);
+    if (closeBtn) closeBtn.addEventListener('click', closeModal);
+    modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+    modal.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+
+    if (sendBtn) {
+      sendBtn.addEventListener('click', () => {
+        const question = (document.getElementById('userQuestion')?.value || '').trim();
+        const ctx = buildContextPackage();
+        closeModal();
+        openChatOverlay(question, ctx, 'chat', coach);
+      });
+    }
+  }
+
+  /* ══════════════════════════════════════════
+     OPEN EXPERT CHAT OVERLAY
+     mode: 'chat' (default) | 'review'
+  ══════════════════════════════════════════ */
+  function openChatOverlay(question, ctx, mode, coach) {
+    const overlay = document.getElementById('chatOverlay');
+    if (!overlay) return;
+
+    /* Track which expert we're chatting with */
+    _currentChatCoach = coach || null;
+
+    const badgeMap = {
+      badgeAssessment: !!ctx.assessment,
+      badgeFitness:    !!ctx.calculations,
+      badgeSwot:       !!ctx.swot,
+      badgeDiet:       !!ctx.diet_plan,
+      badgeWorkout:    !!ctx.workout_plan,
+    };
+    Object.keys(badgeMap).forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.classList.toggle('visible', badgeMap[id]);
+    });
+
+    /* Review status badge in header */
+    const reviewStatusEl = document.getElementById('chatReviewStatus');
+    if (reviewStatusEl) {
+      if (mode === 'review') {
+        reviewStatusEl.textContent = '🟡 Under Review';
+        reviewStatusEl.className = 'chat-review-status chat-review-status--pending';
+        reviewStatusEl.style.display = 'inline-flex';
+      } else {
+        reviewStatusEl.style.display = 'none';
+      }
+    }
+
+    const container = document.getElementById('chatMessages');
+    container.innerHTML = '';
+
+    if (mode === 'chat') {
+      container.appendChild(createSystemMsg(buildSystemMessage(ctx, question)));
+    }
+    /* review cards come from the review_packet message injected into conv.messages below */
+
+    /* Load persisted chat messages (text messages only, not the context cards above) */
+    if (coach) {
+      const conversationId = ensureConversation(coach.id, coach.name);
+      const conv = loadConversation(conversationId);
+      if (conv && conv.messages && conv.messages.length) {
+        console.log('Conversation Loaded', conv);
+        /* Only show messages AFTER the athlete's clear point (if any) */
+        var hiddenCutoff = conv.hiddenForAthlete || null;
+        var prevMsg = null;
+        var prevDay = null;
+        conv.messages.forEach(function(msg) {
+          /* Skip messages at or before the clear timestamp */
+          if (hiddenCutoff && msg.timestamp && msg.timestamp <= hiddenCutoff) return;
+          /* Review packet — render full context cards */
+          if (msg.type === 'review_packet') {
+            var pld  = msg.payload || {};
+            var pCtx = pld.context || {};
+            var pCoach = { id: pld.expertId, name: pld.expertName, fee: pld.fee };
+            container.appendChild(createCaseFileSummary(pCtx, pld.note, pCoach));
+            if (pCtx.assessment || pCtx.calculations) container.appendChild(createFitnessCard(pCtx));
+            if (pCtx.swot)         container.appendChild(createSwotChatCard(pCtx));
+            if (pCtx.diet_plan)    container.appendChild(createDietPlanChatCard(pCtx.diet_plan));
+            if (pCtx.workout_plan) container.appendChild(createWorkoutPlanChatCard(pCtx.workout_plan));
+            wireReviewChatInteractions(container);
+            console.log('[ZITLAS] Athlete Review Packet', pld);
+            prevMsg = null;
+            return;
+          }
+
+          var msgDay = msg.timestamp ? new Date(msg.timestamp).toDateString() : null;
+          if (msgDay && msgDay !== prevDay) {
+            container.appendChild(buildZcDaySep(msg.timestamp));
+            prevDay = msgDay;
+          }
+          var grouped = zcIsGrouped(prevMsg, msg);
+          var el = msg.senderType === 'athlete'
+            ? createUserMsg(msg.text, msg.timestamp, grouped)
+            : createExpertReplyMsg(msg.text, conv.expertName, msg.timestamp, grouped);
+          el.dataset.msgId = msg.id;
+          container.appendChild(el);
+          prevMsg = msg;
+        });
+
+        /* If everything was filtered out, show the cleared state */
+        if (!container.children.length) {
+          var clearedEl = document.createElement('div');
+          clearedEl.className = 'zc-empty';
+          clearedEl.textContent = 'Chat cleared. New messages will appear here.';
+          container.appendChild(clearedEl);
+        }
+      }
+    }
+
+    /* Hide the bottom navbar so chat is truly full-screen */
+    const navbar = document.getElementById('zitlas-navbar');
+    if (navbar) navbar.style.display = 'none';
+
+    overlay.classList.add('open');
+    document.body.style.overflow = 'hidden';
+    container.scrollTop = container.scrollHeight;
+
+    setTimeout(() => {
+      const input = document.getElementById('chatInput');
+      if (input) input.focus();
+    }, 380);
+  }
+
+  /* ══════════════════════════════════════════
+     VERIFY DIET PLAN MODAL
+  ══════════════════════════════════════════ */
+  function initVerifyModal(coach) {
+    const modal    = document.getElementById('verifyModal');
+    const openBtn  = document.getElementById('verifyDietBtn');
+    const closeBtn = document.getElementById('closeVerifyModal');
+    const sendBtn  = document.getElementById('sendReviewBtn');
+    const fileInput = document.getElementById('verifyFileInput');
+    const fileName  = document.getElementById('verifyFileName');
+    const feeEl     = document.getElementById('verifyFeeVal');
+    if (!modal) return;
+
+    if (feeEl) feeEl.textContent = '₹' + coach.fee;
+    setText('verifyCoachTag', 'Review by ' + coach.name);
+
+    function openModal() {
+      updateChipPresence(buildContextPackage(), 'verifyCtxChips');
+      modal.classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+    function closeModal() {
+      modal.classList.remove('open');
+      document.body.style.overflow = '';
+    }
+
+    if (openBtn)  openBtn.addEventListener('click', openModal);
+    if (closeBtn) closeBtn.addEventListener('click', closeModal);
+    modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+    modal.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+
+    if (fileInput) {
+      fileInput.addEventListener('change', () => {
+        const f = fileInput.files[0];
+        if (fileName) fileName.textContent = f ? f.name : '';
+      });
+    }
+
+    if (sendBtn) {
+      sendBtn.addEventListener('click', () => {
+        console.log('[ZITLAS] Review submit clicked — coach:', coach.id, coach.name);
+        const ctx = buildContextPackage();
+        const note = (document.getElementById('verifyNote')?.value || '').trim();
+
+        console.log('[ZITLAS] Context package keys:', Object.keys(ctx).filter(function(k) { return !!ctx[k]; }));
+
+        if (!ctx.diet_plan) {
+          showToast('⚠️ No AI diet plan found. Generate your plan first.');
+          console.warn('[ZITLAS] Blocked: no diet plan in context');
+          return;
+        }
+
+        /* Resolve athlete name from Firebase session or localStorage */
+        let athleteName = 'Athlete';
+        try {
+          const fbUser = JSON.parse(localStorage.getItem('zitlas_firebase_user') || 'null');
+          if (fbUser && fbUser.name) athleteName = fbUser.name;
+        } catch (_) {}
+
+        const request = {
+          id:           'REQ_' + Date.now(),
+          athlete_name: athleteName,
+          expertId:     coach.id,
+          expertName:   coach.name,
+          expertRole:   coach.role,
+          expertImg:    coach.image,
+          submittedAt:  new Date().toISOString(),
+          status:       'pending',
+          note:         note,
+          hasFile:      !!(fileInput?.files[0]),
+          fileName:     fileInput?.files[0]?.name || '',
+          planId:       localStorage.getItem('zitlas_plan_id') || null,
+          context: {
+            assessment:   ctx.assessment,
+            calculations: ctx.calculations,
+            swot:         ctx.swot,
+            diet_plan:    ctx.diet_plan,
+            workout_plan: ctx.workout_plan,
+            survey:       ctx.survey,
+          },
+          modifiedPlan: null,
+          expertNotes:  '',
+          changeCount:  0,
+          approvedAt:   null,
+        };
+
+        console.log('[ZITLAS] reviewPayload:', request);
+
+        /* Submitting a new review request invalidates any prior expert approval —
+           the expert review only belongs to the exact plan version it reviewed. */
+        [
+          'zitlas_expert_review', 'zitlas_plan_versions',
+          'expert_review', 'expert_diet_override', 'reviewed_diet_plan',
+          'modifiedBy', 'expertApproval',
+          'expertDiet', 'expertOverride', 'dietOverride', 'reviewStatus',
+          'expertReviewedPlan', 'approvedPlan', 'expertWorkoutOverride',
+        ].forEach(function (k) { localStorage.removeItem(k); });
+        console.log('[ZITLAS] New review request — prior expert modifications cleared');
+
+        try {
+          localStorage.setItem('zitlas_review_request', JSON.stringify(request));
+          console.log('[ZITLAS] Saved to localStorage key: zitlas_review_request');
+        } catch(e) {
+          console.error('[ZITLAS] localStorage save failed:', e);
+        }
+
+        /* Inject the review packet as msg[0] of the conversation so both sides share it */
+        var reviewConvId = ensureConversation(coach.id, coach.name);
+        persistReviewPacket(reviewConvId, request);
+
+        /* Also persist to Firestore for real-time cross-device sync */
+        if (typeof ZitlasDB !== 'undefined') {
+          try {
+            const firestoreDoc = Object.assign({}, request, {
+              created_at: firebase.firestore.FieldValue.serverTimestamp(),
+            });
+            ZitlasDB.collection('review_requests').doc(request.id).set(firestoreDoc)
+              .catch(function(e) { console.warn('[ZITLAS] Firestore review save failed:', e); });
+          } catch (_) {}
+        }
+
+        sendBtn.textContent = 'Sent ✓';
+        sendBtn.disabled = true;
+        setTimeout(() => {
+          closeModal();
+          sendBtn.textContent = 'Send for Review →';
+          sendBtn.disabled = false;
+          showToast('Your plan has been sent for expert review.');
+        }, 900);
+      });
+    }
+  }
+
+  /* ══════════════════════════════════════════
+     REVIEW COMPARISON SHEET (athlete side)
+  ══════════════════════════════════════════ */
+  function openReviewComparisonSheet(coach, reviewOverride) {
+    var sheet = document.getElementById('rcSheet');
+    if (!sheet) return;
+
+    var review = reviewOverride || _getMyLatestPlanReview(coach);
+    if (!review || !review.reviewedDietPlan) {
+      showToast('Expert review is not available yet.');
+      return;
+    }
+
+    var expertName = review.expertName || 'Expert';
+    var reviewType = review.reviewType || 'diet';
+
+    /* ── Populate tabs ── */
+    var originalTab = document.getElementById('rcTabOriginal');
+    var reviewedTab = document.getElementById('rcTabReviewed');
+    var originalPane = document.getElementById('rcPaneOriginal');
+    var reviewedPane = document.getElementById('rcPaneReviewed');
+    var titleEl = document.getElementById('rcTitle');
+    var acceptBtn = document.getElementById('rcAcceptBtn');
+
+    if (titleEl) titleEl.textContent = expertName + '\'s Review';
+
+    /* Build original plan HTML */
+    if (originalPane) {
+      originalPane.innerHTML = buildComparisonPlanHTML(review.planData, null, reviewType);
+    }
+    /* Build reviewed plan HTML with highlights */
+    if (reviewedPane) {
+      reviewedPane.innerHTML = buildComparisonPlanHTML(review.reviewedDietPlan, review.planData, reviewType);
+    }
+
+    /* Tab switching */
+    function setTab(tab) {
+      [originalTab, reviewedTab].forEach(function(t) { if (t) t.classList.remove('rc-tab--active'); });
+      [originalPane, reviewedPane].forEach(function(p) { if (p) p.style.display = 'none'; });
+      if (tab === 'original') {
+        if (originalTab) originalTab.classList.add('rc-tab--active');
+        if (originalPane) originalPane.style.display = '';
+      } else {
+        if (reviewedTab) reviewedTab.classList.add('rc-tab--active');
+        if (reviewedPane) reviewedPane.style.display = '';
+      }
+    }
+    if (originalTab) originalTab.onclick = function() { setTab('original'); };
+    if (reviewedTab) reviewedTab.onclick = function() { setTab('reviewed'); };
+    setTab('reviewed');
+
+    /* Day-pill wiring inside each pane */
+    [originalPane, reviewedPane].forEach(function(pane) {
+      if (!pane) return;
+      pane.querySelectorAll('[data-rc-day-pill]').forEach(function(pill) {
+        pill.addEventListener('click', function() {
+          var idx = parseInt(pill.dataset.rcDayPill, 10);
+          pane.querySelectorAll('[data-rc-day-pill]').forEach(function(p) { p.classList.remove('active'); });
+          pill.classList.add('active');
+          pane.querySelectorAll('[data-rc-day-content]').forEach(function(c) {
+            c.style.display = parseInt(c.dataset.rcDayContent, 10) === idx ? 'block' : 'none';
+          });
+        });
+      });
+    });
+
+    /* Accept Changes */
+    if (acceptBtn) {
+      acceptBtn.onclick = function() {
+        try {
+          localStorage.setItem('zitlas_diet_plan', JSON.stringify(review.reviewedDietPlan));
+        } catch (_) {}
+        /* Mark the review as athlete_accepted */
+        var all = [];
+        try { all = JSON.parse(localStorage.getItem('expert_plan_reviews') || '[]'); } catch (_) {}
+        var idx = all.findIndex(function(r) { return r.id === review.id; });
+        if (idx !== -1) {
+          all[idx].athleteAccepted = true;
+          try { localStorage.setItem('expert_plan_reviews', JSON.stringify(all)); } catch (_) {}
+        }
+        closeComparisonSheet();
+        showToast('✅ Expert\'s plan has been applied to your profile.');
+        updateVerifyBtnState(coach);
+      };
+    }
+
+    function closeComparisonSheet() {
+      sheet.classList.remove('open');
+      document.body.style.overflow = '';
+    }
+
+    var closeBtn = document.getElementById('rcCloseBtn');
+    if (closeBtn) closeBtn.onclick = closeComparisonSheet;
+    sheet.addEventListener('click', function(e) { if (e.target === sheet) closeComparisonSheet(); });
+
+    sheet.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function buildComparisonPlanHTML(plan, originalPlan, reviewType) {
+    if (!plan) return '<p class="rc-no-data">Plan not available.</p>';
+    var days = plan.days || [];
+    if (!days.length) return '<p class="rc-no-data">No plan data.</p>';
+    var origDays = (originalPlan && originalPlan.days) || [];
+    var labels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+
+    var pills = '<div class="erc-day-pills">';
+    days.forEach(function(d, i) {
+      pills += '<button class="erc-day-pill' + (i === 0 ? ' active' : '') + '" data-rc-day-pill="' + i + '">' + (labels[i] || 'D'+(i+1)) + '</button>';
+    });
+    pills += '</div>';
+
+    var content = '';
+    days.forEach(function(day, di) {
+      content += '<div data-rc-day-content="' + di + '" style="display:' + (di === 0 ? 'block' : 'none') + '">';
+      if (day.total_calories) content += '<div class="erc-day-total">' + day.total_calories + ' kcal total</div>';
+      var origMeals = (origDays[di] && origDays[di].meals) || [];
+      (day.meals || []).forEach(function(meal, mi) {
+        var wasEdited = meal._edited;
+        var origMeal  = origMeals[mi];
+        var foods = Array.isArray(meal.foods) ? meal.foods.join(', ') : (meal.food_items || '');
+        var meta  = [meal.calories ? meal.calories + ' kcal' : '', meal.protein_g ? meal.protein_g + 'g protein' : ''].filter(Boolean).join(' · ');
+
+        content += '<div class="erc-meal-row' + (wasEdited ? ' rc-meal-edited' : '') + '">';
+        content += '<div class="erc-meal-hdr">';
+        content += '<span class="erc-meal-emoji">' + esc(meal.emoji || '🍽️') + '</span>';
+        content += '<span class="erc-meal-name">' + esc(meal.meal_name || 'Meal') + '</span>';
+        if (meal.time) content += '<span class="erc-meal-time">' + esc(meal.time) + '</span>';
+        if (wasEdited) content += '<span class="rc-edited-badge">✏ Edited by Expert</span>';
+        content += '</div>';
+        if (foods) content += '<div class="erc-meal-foods">' + esc(foods) + '</div>';
+        if (meta)  content += '<div class="erc-meal-meta">' + esc(meta) + '</div>';
+        if (meal.notes) content += '<div class="rc-meal-notes">📝 ' + esc(meal.notes) + '</div>';
+        content += '</div>';
+      });
+      content += '</div>';
+    });
+
+    return pills + content;
+  }
+
+  /* ══════════════════════════════════════════
+     VERIFY PLAN — status-aware button + bottom sheet
+  ══════════════════════════════════════════ */
+
+  /* SVG icons shared between updateVerifyBtnState and the button */
+  var VP_SVG = {
+    check:   '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
+    clock:   '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
+    chat:    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
+    fileDoc: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>',
+  };
+
+  function _getMyUserId() {
+    var uid = null;
+    try {
+      var fbUser = JSON.parse(localStorage.getItem('zitlas_firebase_user') || 'null');
+      if (fbUser && fbUser.uid) uid = fbUser.uid;
+    } catch (_) {}
+    return uid || localStorage.getItem('zitlas_athlete_id') || null;
+  }
+
+  function _getAllMyPlanReviews(coach) {
+    var reviews = [];
+    try { reviews = JSON.parse(localStorage.getItem('expert_plan_reviews') || '[]'); } catch (_) {}
+    var uid = _getMyUserId();
+    return reviews.filter(function(r) {
+      return r.expertId === coach.id && (!uid || r.userId === uid);
+    });
+  }
+
+  function _getMyLatestPlanReview(coach) {
+    var all = _getAllMyPlanReviews(coach);
+    if (!all.length) return null;
+    /* An active (pending/accepted) review blocks new submissions */
+    var active = all.find(function(r) {
+      return r.status === 'pending' || r.status === 'accepted';
+    });
+    return active || all[0]; /* all[0] = most recently submitted (we unshift) */
+  }
+
+  function updateVerifyBtnState(coach) {
+    var btn         = document.getElementById('verifyPlanBtn');
+    var againWrap   = document.getElementById('verifyAgainWrap');
+    var prevSection = document.getElementById('prevReviewsSection');
+    if (!btn) return;
+
+    var allRevs = _getAllMyPlanReviews(coach);
+    var review  = _getMyLatestPlanReview(coach);
+
+    /* Reset secondary elements */
+    if (againWrap)   againWrap.style.display   = 'none';
+    if (prevSection) prevSection.style.display = 'none';
+    btn.disabled = false;
+
+    if (!review) {
+      btn.dataset.vpStatus = '';
+      btn.className = 'cp-cta cp-cta--verify';
+      btn.innerHTML = VP_SVG.check + ' Verify Plan';
+      return;
+    }
+
+    var st = review.status;
+    btn.dataset.vpStatus = st;
+
+    if (st === 'pending') {
+      btn.disabled  = true;
+      btn.className = 'cp-cta cp-cta--verify cp-cta--vp-pending';
+      btn.innerHTML = VP_SVG.clock + ' Verification Pending';
+    } else if (st === 'accepted') {
+      btn.className = 'cp-cta cp-cta--verify cp-cta--vp-accepted';
+      btn.innerHTML = VP_SVG.chat + ' Chat with Expert';
+    } else if (st === 'completed' || st === 'review_completed') {
+      /* Completed in any form → orange "Review Again" so user can immediately re-verify */
+      btn.className = 'cp-cta cp-cta--verify';
+      btn.innerHTML = VP_SVG.check + ' Review Again';
+    } else if (st === 'rejected') {
+      btn.className = 'cp-cta cp-cta--verify';
+      btn.innerHTML = VP_SVG.check + ' Verify Plan';
+    } else {
+      btn.disabled  = true;
+      btn.className = 'cp-cta cp-cta--verify cp-cta--vp-pending';
+      btn.innerHTML = VP_SVG.clock + ' Under Review';
+    }
+
+    /* Show "View Previous Reviews" link when any review has been completed */
+    var doneRevs = allRevs.filter(function(r) {
+      return r.status === 'completed' || r.status === 'review_completed';
+    });
+    if (prevSection && doneRevs.length > 0) {
+      renderPrevReviews(doneRevs, coach);
+      prevSection.style.display = '';
+    }
+  }
+
+  /* ── Render previous completed reviews list ── */
+  function renderPrevReviews(reviews, coach) {
+    var section = document.getElementById('prevReviewsSection');
+    if (!section) return;
+
+    var total = reviews.length;
+    section.innerHTML =
+      '<button class="cp-prev-toggle" id="prevReviewsToggle">' +
+        '<span class="cp-prev-label">View Previous Reviews (' + total + ')</span>' +
+        '<svg class="cp-prev-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>' +
+      '</button>' +
+      '<div class="cp-prev-list" id="prevReviewsList" style="display:none">' +
+        reviews.map(function(r) {
+          var typeLabel  = r.reviewType === 'diet' ? '🥗 Diet' : '💪 Workout';
+          var ver        = r.version ? 'Review #' + r.version : 'Review';
+          var date       = r.createdAt
+            ? new Date(r.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+            : '';
+          var stLabel    = r.status === 'review_completed' ? 'Expert Reviewed' : 'Completed';
+          return '<button class="cp-prev-item" data-prev-rid="' + esc(r.id) + '">' +
+            '<div class="cp-prev-item-left">' +
+              '<span class="cp-prev-item-ver">' + esc(ver) + '</span>' +
+              '<span class="cp-prev-item-type">' + typeLabel + '</span>' +
+            '</div>' +
+            '<div class="cp-prev-item-right">' +
+              '<span class="cp-prev-item-date">' + esc(date) + '</span>' +
+              '<span class="cp-prev-item-status">' + esc(stLabel) + '</span>' +
+            '</div>' +
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>' +
+          '</button>';
+        }).join('') +
+      '</div>';
+
+    /* Wire toggle */
+    var toggle = section.querySelector('#prevReviewsToggle');
+    var list   = section.querySelector('#prevReviewsList');
+    if (toggle && list) {
+      toggle.addEventListener('click', function() {
+        var open = list.style.display !== 'none';
+        list.style.display = open ? 'none' : '';
+        toggle.classList.toggle('cp-prev-toggle--open', !open);
+      });
+    }
+
+    /* Wire item clicks */
+    if (list) {
+      list.querySelectorAll('[data-prev-rid]').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          var rid = btn.dataset.prevRid;
+          var rev = reviews.find(function(r) { return r.id === rid; });
+          if (!rev) return;
+          if (rev.status === 'review_completed' && rev.reviewedDietPlan) {
+            openReviewComparisonSheet(coach, rev);
+          } else {
+            openChatOverlay('', buildContextPackage(), 'chat', coach);
+          }
+        });
+      });
+    }
+  }
+
+  function initVerifyPlanBtn(coach) {
+    var openBtn      = document.getElementById('verifyPlanBtn');
+    var verifyAgain  = document.getElementById('verifyAgainBtn');
+    var sheet        = document.getElementById('vpSheet');
+    var cancelBtn    = document.getElementById('vpCancelBtn');
+    var submitBtn    = document.getElementById('vpSubmitBtn');
+    var optDiet      = document.getElementById('vpOptDiet');
+    var optWorkout   = document.getElementById('vpOptWorkout');
+    if (!sheet || !openBtn) return;
+
+    var _selectedType = null;
+
+    function openSheet() {
+      _selectedType = null;
+      [optDiet, optWorkout].forEach(function(b) { if (b) b.classList.remove('selected'); });
+      if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Send for Review →'; }
+      sheet.classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+    function closeSheet() {
+      sheet.classList.remove('open');
+      document.body.style.overflow = '';
+    }
+
+    /* "Verify Again" button always opens the review-type selector sheet */
+    if (verifyAgain) {
+      verifyAgain.addEventListener('click', function() {
+        openSheet();
+      });
+    }
+
+    /* Main button click — only accepted goes to chat, everything else opens the review sheet */
+    openBtn.addEventListener('click', function() {
+      var st = openBtn.dataset.vpStatus || '';
+      if (st === 'accepted') {
+        openChatOverlay('', buildContextPackage(), 'chat', coach);
+        return;
+      }
+      if (!openBtn.disabled) openSheet();
+    });
+
+    if (cancelBtn) cancelBtn.addEventListener('click', closeSheet);
+    sheet.addEventListener('click', function(e) { if (e.target === sheet) closeSheet(); });
+
+    [optDiet, optWorkout].forEach(function(btn) {
+      if (!btn) return;
+      btn.addEventListener('click', function() {
+        _selectedType = btn.dataset.type;
+        [optDiet, optWorkout].forEach(function(b) { if (b) b.classList.remove('selected'); });
+        btn.classList.add('selected');
+        if (submitBtn) submitBtn.disabled = false;
+      });
+    });
+
+    if (submitBtn) {
+      submitBtn.addEventListener('click', function() {
+        if (!_selectedType) return;
+
+        var ctx       = buildContextPackage();
+        var planData  = _selectedType === 'diet' ? ctx.diet_plan : ctx.workout_plan;
+        var planLabel = _selectedType === 'diet' ? 'diet' : 'workout';
+
+        if (!planData) {
+          showToast('No ' + planLabel + ' plan found. Generate your plan first.');
+          return;
+        }
+
+        var a      = ctx.assessment || ctx.survey || {};
+        var userId = _getMyUserId();
+
+        /* Calculate version number for this user+expert+type combination */
+        var allForType = _getAllMyPlanReviews(coach).filter(function(r) {
+          return r.reviewType === _selectedType;
+        });
+        var maxVersion = allForType.reduce(function(max, r) {
+          return Math.max(max, r.version || 0);
+        }, 0);
+
+        var review = {
+          id:         'PR_' + Date.now(),
+          userId:     userId,
+          expertId:   coach.id,
+          expertName: coach.name,
+          expertRole: coach.role,
+          reviewType: _selectedType,
+          version:    maxVersion + 1,
+          planData:   planData,
+          assessmentData: {
+            assessment:   ctx.assessment   || null,
+            calculations: ctx.calculations || null,
+            swot:         ctx.swot         || null,
+          },
+          profileBasics: {
+            age:                  a.age                  || null,
+            gender:               a.gender               || null,
+            weight_kg:            a.weight_kg            || null,
+            height_cm:            a.height_cm            || null,
+            goal_weight_kg:       a.goal_weight_kg       || null,
+            activity_level:       a.activity_level       || null,
+            diet_preference:      a.diet_preference      || null,
+            workout_preference:   a.workout_preference   || null,
+            fitness_goal:         a.fitness_goal         || null,
+            transformation_goal:  a.transformation_goal  || null,
+            goal_duration_months: a.goal_duration_months || null,
+            fitness_level:        a.fitness_level        || null,
+            stress_level:         a.stress_level         || null,
+            available_time:       a.available_time       || null,
+            target_body_fat_pct:  a.target_body_fat_pct  || null,
+            biggest_struggle:     a.biggest_struggle     || a.struggle || null,
+          },
+          status:      'pending',
+          createdAt:   new Date().toISOString(),
+          completedAt: null,
+        };
+
+        /* Only remove currently-pending requests to avoid duplicates.
+           Completed/rejected reviews are kept as permanent history. */
+        var existing = [];
+        try { existing = JSON.parse(localStorage.getItem('expert_plan_reviews') || '[]'); } catch (_) {}
+        existing = existing.filter(function(r) {
+          return !(r.userId === userId && r.expertId === coach.id &&
+                   r.reviewType === _selectedType &&
+                   r.status === 'pending');
+        });
+        existing.unshift(review);
+        try { localStorage.setItem('expert_plan_reviews', JSON.stringify(existing)); } catch (_) {}
+
+        submitBtn.textContent = 'Sent ✓';
+        submitBtn.disabled    = true;
+
+        setTimeout(function() {
+          closeSheet();
+          showToast('Your plan has been sent for review.');
+          updateVerifyBtnState(coach);
+        }, 700);
+      });
+    }
+
+    /* Detect expert accepting or first message arriving (cross-tab via storage) */
+    window.addEventListener('storage', function(e) {
+      if (e.key === 'expert_plan_reviews') updateVerifyBtnState(coach);
+      if (e.key === 'zitlas_chats') {
+        /* If a chat message from this expert arrives while in pending state,
+           treat it as an implicit accept so the button unlocks */
+        var review = _getMyLatestPlanReview(coach);
+        if (!review || review.status !== 'pending') return;
+        try {
+          var chats = JSON.parse(e.newValue || '{}');
+          var convoKey = 'chat_' + (review.userId || '') + '_' + coach.id;
+          var msgs = (chats[convoKey] && chats[convoKey].messages) || [];
+          var hasExpertMsg = msgs.some(function(m) { return m.senderType === 'expert' || m.sender === 'expert'; });
+          if (hasExpertMsg) {
+            var all = JSON.parse(localStorage.getItem('expert_plan_reviews') || '[]');
+            var idx = all.findIndex(function(r) { return r.id === review.id; });
+            if (idx !== -1 && all[idx].status === 'pending') {
+              all[idx].status = 'accepted';
+              localStorage.setItem('expert_plan_reviews', JSON.stringify(all));
+            }
+          }
+        } catch (_) {}
+      }
+    });
+
+    /* Set initial button state on page load */
+    updateVerifyBtnState(coach);
+  }
+
+  /* ══════════════════════════════════════════
+     CHAT INPUT WIRING
+  ══════════════════════════════════════════ */
+  function initChatInput() {
+    const overlay  = document.getElementById('chatOverlay');
+    const backBtn  = document.getElementById('chatBackBtn');
+    const input    = document.getElementById('chatInput');
+    const sendBtn  = document.getElementById('chatSendBtn');
+
+    if (backBtn) {
+      backBtn.addEventListener('click', () => {
+        overlay.classList.remove('open');
+        document.body.style.overflow = '';
+        const navbar = document.getElementById('zitlas-navbar');
+        if (navbar) navbar.style.display = '';
+        /* Navigate back to the Experts listing */
+        window.location.href = 'coaches.html';
+      });
+    }
+
+    /* ── ⋮ Menu ── */
+    const menuBtn   = document.getElementById('chatMenuBtn');
+    const dropdown  = document.getElementById('chatDropdown');
+    const clearBtn  = document.getElementById('chatClearBtn');
+    const viewCoach = document.getElementById('chatViewCoachBtn');
+    const backdrop  = document.getElementById('chatClearBackdrop');
+    const cancelBtn = document.getElementById('chatClearCancel');
+    const confirmBtn = document.getElementById('chatClearConfirm');
+
+    function closeDropdown() { dropdown && dropdown.classList.remove('open'); }
+
+    if (menuBtn && dropdown) {
+      menuBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        dropdown.classList.toggle('open');
+      });
+      /* Close when clicking outside the menu */
+      document.addEventListener('click', function(e) {
+        if (!e.target.closest('#chatMenuWrap')) closeDropdown();
+      });
+    }
+
+    /* "View Coach Profile" — close chat overlay (already on the coach profile page) */
+    if (viewCoach) {
+      viewCoach.addEventListener('click', function() {
+        closeDropdown();
+        overlay.classList.remove('open');
+        document.body.style.overflow = '';
+        const navbar = document.getElementById('zitlas-navbar');
+        if (navbar) navbar.style.display = '';
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+    }
+
+    /* "Clear Chat" — show confirmation modal */
+    if (clearBtn && backdrop) {
+      clearBtn.addEventListener('click', function() {
+        closeDropdown();
+        backdrop.classList.add('open');
+      });
+    }
+    if (cancelBtn && backdrop) {
+      cancelBtn.addEventListener('click', function() { backdrop.classList.remove('open'); });
+    }
+    backdrop && backdrop.addEventListener('click', function(e) {
+      if (e.target === backdrop) backdrop.classList.remove('open');
+    });
+
+    if (confirmBtn) {
+      confirmBtn.addEventListener('click', function() {
+        if (!_currentChatCoach) { backdrop.classList.remove('open'); return; }
+        var conversationId = getConversationId(_currentChatCoach.id);
+        /* Stamp hiddenForAthlete — never delete actual messages */
+        try {
+          var all = JSON.parse(localStorage.getItem('zitlas_chats') || '{}');
+          if (all[conversationId]) {
+            all[conversationId].hiddenForAthlete = new Date().toISOString();
+            localStorage.setItem('zitlas_chats', JSON.stringify(all));
+          }
+        } catch(_) {}
+        backdrop.classList.remove('open');
+        /* Re-render chat showing only messages after the clear point */
+        var container = document.getElementById('chatMessages');
+        if (container) container.innerHTML = '';
+        console.log('[CHAT] Athlete cleared chat for', conversationId);
+      });
+    }
+
+    /* ── 📞 Call button (WebRTC-ready stub) ── */
+    var callBtn = document.getElementById('chatCallBtn');
+    var _callActive = false;
+    if (callBtn) {
+      callBtn.addEventListener('click', function() {
+        if (_callActive) {
+          /* End call */
+          _callActive = false;
+          callBtn.classList.remove('zc-call-btn--calling');
+          callBtn.setAttribute('aria-label', 'Voice call');
+          console.log('[CALL] Athlete ended call with', _currentChatCoach ? _currentChatCoach.name : 'coach');
+          /* TODO: hangup WebRTC peer connection */
+        } else {
+          /* Initiate call */
+          _callActive = true;
+          callBtn.classList.add('zc-call-btn--calling');
+          callBtn.setAttribute('aria-label', 'End call');
+          console.log('[CALL] Athlete calling', _currentChatCoach ? _currentChatCoach.name : 'coach');
+          /* TODO: initiate WebRTC offer → signal via zitlas_chats or Firestore */
+        }
+      });
+    }
+
+    function sendMessage() {
+      const text = (input?.value || '').trim();
+      if (!text) return;
+      const container = document.getElementById('chatMessages');
+      const now = new Date().toISOString();
+
+      /* Determine grouping against last persisted message */
+      var grouped = false;
+      if (_currentChatCoach) {
+        var conv = loadConversation(getConversationId(_currentChatCoach.id));
+        if (conv && conv.messages && conv.messages.length) {
+          var last = conv.messages[conv.messages.length - 1];
+          grouped = zcIsGrouped(last, { senderType: 'athlete', timestamp: now });
+        }
+      }
+
+      /* Day separator if needed */
+      var lastDaySep = container.querySelector('.zc-day-sep:last-of-type');
+      var lastDayLabel = lastDaySep ? lastDaySep.querySelector('.zc-day-sep-lbl') : null;
+      var todayLabel = buildZcDaySep(now).querySelector('.zc-day-sep-lbl').textContent;
+      if (!lastDayLabel || lastDayLabel.textContent !== todayLabel) {
+        container.appendChild(buildZcDaySep(now));
+      }
+
+      const msgEl = createUserMsg(text, now, grouped);
+      container.appendChild(msgEl);
+      input.value = '';
+      input.style.height = 'auto';
+      container.scrollTop = container.scrollHeight;
+
+      /* Persist to localStorage */
+      if (_currentChatCoach) {
+        const conversationId = getConversationId(_currentChatCoach.id);
+        const msg = persistChatMessage(conversationId, 'athlete', text);
+        if (msg) msgEl.dataset.msgId = msg.id;
+      }
+    }
+
+    if (sendBtn) sendBtn.addEventListener('click', sendMessage);
+
+    if (input) {
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+      });
+      input.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+      });
+    }
+
+    /* Real-time: receive expert replies via storage event (cross-tab / cross-window) */
+    var _zcTypingTimer = null;
+    window.addEventListener('storage', function(e) {
+      if (e.key !== 'zitlas_chats' || !_currentChatCoach) return;
+      try {
+        var all  = JSON.parse(e.newValue || '{}');
+        var conv = all[getConversationId(_currentChatCoach.id)];
+        if (!conv || !conv.messages) return;
+        var container = document.getElementById('chatMessages');
+        if (!container) return;
+
+        var rendered = new Set();
+        container.querySelectorAll('[data-msg-id]').forEach(function(el) { rendered.add(el.dataset.msgId); });
+        var newMsgs = conv.messages.filter(function(m) { return !rendered.has(m.id); });
+        if (!newMsgs.length) return;
+
+        /* Show typing for expert messages */
+        var hasExpert = newMsgs.some(function(m) { return m.senderType !== 'athlete'; });
+        if (hasExpert) {
+          var expertInitials = (conv.expertName || 'E').split(' ').map(function(w) { return w[0] || ''; }).join('').slice(0, 2).toUpperCase();
+          showZcTyping(container, expertInitials);
+          clearTimeout(_zcTypingTimer);
+          _zcTypingTimer = setTimeout(function() {
+            hideZcTyping(container);
+            appendNewMessages(container, newMsgs, conv, rendered);
+          }, 1200);
+        } else {
+          appendNewMessages(container, newMsgs, conv, rendered);
+        }
+      } catch(_) {}
+    });
+
+    function appendNewMessages(container, newMsgs, conv, rendered) {
+      var allMsgEls = container.querySelectorAll('[data-msg-id]');
+      var lastRenderedId = allMsgEls.length ? allMsgEls[allMsgEls.length - 1].dataset.msgId : null;
+      var lastMsg = lastRenderedId ? conv.messages.find(function(m) { return m.id === lastRenderedId; }) : null;
+      var prevDay = null;
+      /* Track last known day from already-rendered separators */
+      var daySeps = container.querySelectorAll('.zc-day-sep-lbl');
+      if (daySeps.length) prevDay = daySeps[daySeps.length - 1].textContent;
+
+      newMsgs.forEach(function(msg) {
+        var msgDay = msg.timestamp ? new Date(msg.timestamp).toDateString() : null;
+        var dayLabel = buildZcDaySep(msg.timestamp).querySelector('.zc-day-sep-lbl').textContent;
+        if (msgDay && dayLabel !== prevDay) {
+          container.appendChild(buildZcDaySep(msg.timestamp));
+          prevDay = dayLabel;
+        }
+        var grouped = zcIsGrouped(lastMsg, msg);
+        var el = msg.senderType === 'athlete'
+          ? createUserMsg(msg.text, msg.timestamp, grouped)
+          : createExpertReplyMsg(msg.text, conv.expertName, msg.timestamp, grouped);
+        el.dataset.msgId = msg.id;
+        container.appendChild(el);
+        lastMsg = msg;
+      });
+      container.scrollTop = container.scrollHeight;
+    }
+  }
+
+  /* ══════════════════════════════════════════
+     HEADER BUTTONS
+  ══════════════════════════════════════════ */
+  function initHeader() {
+    var backBtn = document.getElementById('backBtn');
+    if (backBtn) {
+      backBtn.addEventListener('click', function() {
+        if (document.referrer && document.referrer.includes('coaches')) {
+          history.back();
+        } else {
+          window.location.href = 'coaches.html';
+        }
+      });
+    }
+  }
+
+  /* ══════════════════════════════════════════
+     VIEW ALL BUTTONS
+  ══════════════════════════════════════════ */
+  function initViewAlls() {
+    var reviewsBtn = document.getElementById('viewAllReviews');
+    if (reviewsBtn) reviewsBtn.addEventListener('click', function() { showToast('All reviews — coming soon'); });
+  }
+
+  /* ══════════════════════════════════════════
+     BOTTOM NAV — block placeholder links
+  ══════════════════════════════════════════ */
+  function initBottomNav() {
+    document.querySelectorAll('.nav-item:not(.active)').forEach((item) => {
+      const href = item.getAttribute('href');
+      if (!href || href === '#') {
+        item.addEventListener('click', (e) => {
+          e.preventDefault();
+          showToast('Navigation — coming soon');
+        });
+      }
+    });
+  }
+
+  /* ══════════════════════════════════════════
+     READ MORE TOGGLE
+  ══════════════════════════════════════════ */
+  function initReadMore() {
+    var btn  = document.getElementById('readMoreBtn');
+    var text = document.getElementById('aboutText');
+    if (!btn || !text) return;
+    var expanded = false;
+    btn.addEventListener('click', function() {
+      expanded = !expanded;
+      text.classList.toggle('expanded', expanded);
+      btn.textContent = expanded ? 'Read Less ▴' : 'Read More ▾';
+    });
+  }
+
+  /* ══════════════════════════════════════════
+     STICKY BOTTOM BAR
+  ══════════════════════════════════════════ */
+  function initStickyBottom() {
+    var bar   = document.getElementById('cpStickyBottom');
+    var ctas  = document.getElementById('cpPrimaryCtas');
+    if (!bar || !ctas) return;
+    var obs = new IntersectionObserver(function(entries) {
+      entries.forEach(function(entry) {
+        bar.classList.toggle('visible', !entry.isIntersecting);
+      });
+    }, { threshold: 0 });
+    obs.observe(ctas);
+  }
+
+  /* ══════════════════════════════════════════
+     SCROLL HEADER (add .scrolled class)
+  ══════════════════════════════════════════ */
+  function initScrollHeader() {
+    var header = document.getElementById('cpHeader');
+    if (!header) return;
+    window.addEventListener('scroll', function() {
+      header.classList.toggle('scrolled', window.scrollY > 50);
+    }, { passive: true });
+  }
+
+  /* ══════════════════════════════════════════
+     MORE MENU
+  ══════════════════════════════════════════ */
+  function initMoreMenu() {
+    var menuBtn = document.getElementById('menuBtn');
+    var menu    = document.getElementById('cpMoreMenu');
+    var overlay = document.getElementById('cpMoreOverlay');
+    if (!menuBtn || !menu) return;
+
+    function openMenu()  { menu.classList.add('open');    if (overlay) overlay.classList.add('active'); }
+    function closeMenu() { menu.classList.remove('open'); if (overlay) overlay.classList.remove('active'); }
+
+    menuBtn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      menu.classList.contains('open') ? closeMenu() : openMenu();
+    });
+    if (overlay) overlay.addEventListener('click', closeMenu);
+
+    var shareBtn = document.getElementById('shareProfileBtn');
+    if (shareBtn) {
+      shareBtn.addEventListener('click', function() {
+        closeMenu();
+        if (navigator.share) {
+          navigator.share({ title: document.title, url: window.location.href }).catch(function() {});
+        } else if (navigator.clipboard) {
+          navigator.clipboard.writeText(window.location.href).then(function() { showToast('Profile link copied'); });
+        } else {
+          showToast('Share — coming soon');
+        }
+      });
+    }
+    var saveBtn = document.getElementById('saveExpertBtn');
+    if (saveBtn) {
+      saveBtn.addEventListener('click', function() { closeMenu(); showToast('Expert saved to your list'); });
+    }
+  }
+
+  /* ══════════════════════════════════════════
+     CTA BUTTONS
+  ══════════════════════════════════════════ */
+  function initCTAs(coach) {
+    function openChatModal() {
+      updateChipPresence(buildContextPackage(), 'ctxChips');
+      var modal = document.getElementById('contextModal');
+      if (modal) { modal.classList.add('open'); document.body.style.overflow = 'hidden'; }
+    }
+    function openCallStub() { showToast('Voice call — launching soon'); }
+
+    ['inlineChatBtn', 'stickyChatBtn'].forEach(function(id) {
+      var btn = document.getElementById(id);
+      if (btn) btn.addEventListener('click', openChatModal);
+    });
+    ['inlineCallBtn', 'stickyCallBtn'].forEach(function(id) {
+      var btn = document.getElementById(id);
+      if (btn) btn.addEventListener('click', openCallStub);
+    });
+  }
+
+  /* ══════════════════════════════════════════
+     SCROLL ANIMATIONS
+  ══════════════════════════════════════════ */
+  function initScrollAnimations() {
+    if (!('IntersectionObserver' in window)) return;
+    var observer = new IntersectionObserver(function(entries) {
+      entries.forEach(function(entry) {
+        if (entry.isIntersecting) {
+          entry.target.style.opacity = '1';
+          entry.target.style.transform = 'translateY(0)';
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.1 });
+
+    ['.cp-tag', '.cp-review-card', '.cp-metric-card', '.cp-service-card', '.cp-gallery-card', '.cp-trust-item'].forEach(function(sel) {
+      document.querySelectorAll(sel).forEach(function(el, i) {
+        el.style.opacity = '0';
+        el.style.transform = 'translateY(10px)';
+        el.style.transition = 'opacity 0.35s ease ' + (0.05 * i) + 's, transform 0.4s ease ' + (0.05 * i) + 's';
+        observer.observe(el);
+      });
+    });
+  }
+
+  /* ══════════════════════════════════════════
+     INIT
+  ══════════════════════════════════════════ */
+  function init() {
+    loadTheme();
+
+    var id    = getCoachId();
+    var coach = COACH_DB[id];
+
+    if (!coach) {
+      window.location.href = 'coaches.html';
+      return;
+    }
+
+    populatePage(coach);
+    initContextModal(coach);
+    initVerifyModal(coach);
+    initVerifyPlanBtn(coach);
+    initChatInput();
+    initHeader();
+    initMoreMenu();
+    initCTAs(coach);
+    initReadMore();
+    initStickyBottom();
+    initScrollHeader();
+    initViewAlls();
+    initBottomNav();
+    initStatCountUp(coach);
+
+    /* Deep-link: auto-open when arriving from Experts listing */
+    var action = new URLSearchParams(window.location.search).get('action');
+    if (action === 'ask') {
+      setTimeout(function() {
+        var btn = document.getElementById('inlineChatBtn');
+        if (btn) btn.click();
+      }, 450);
+    } else if (action === 'verify') {
+      setTimeout(function() {
+        var btn = document.getElementById('verifyPlanBtn');
+        if (btn) btn.click();
+      }, 450);
+    }
+
+    requestAnimationFrame(function() { initScrollAnimations(); });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();

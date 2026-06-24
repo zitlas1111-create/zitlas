@@ -1,0 +1,1426 @@
+/* =============================================
+   ZITLAS Dashboard — dashboard.js
+   ============================================= */
+
+(function () {
+  'use strict';
+
+  /* ══════════════════════════════════════════
+     RECENT CHATS
+  ══════════════════════════════════════════ */
+  const MOCK_CHATS = [
+    { initials: 'PS', color: '#FF8A00', name: 'Priya Sharma',    role: 'Nutritionist', msg: 'Your meal plan for this week is ready.',     time: '2 min ago',  unread: 2 },
+    { initials: 'AP', color: '#3B82F6', name: 'Arjun Patil',     role: 'Member',       msg: 'Completed today\'s workout!',                time: '15 min ago', unread: 0 },
+    { initials: 'NK', color: '#22C55E', name: 'Neha Kulkarni',   role: 'Nutritionist', msg: 'Swap your dinner — better protein option.',  time: '1 hour ago', unread: 0 },
+    { initials: 'RD', color: '#A855F7', name: 'Rohan Deshmukh',  role: 'Member',       msg: 'Hit my step goal today 🎉',                  time: '2 hours ago',unread: 0 },
+    { initials: 'AD', color: '#EAB308', name: 'Amit Desai',      role: 'Nutritionist', msg: 'Water intake reminder sent.',                time: 'Yesterday',  unread: 0 },
+  ];
+
+  function renderChats() {
+    console.log('[ZITLAS] renderChats called');
+    const list = document.getElementById('dashChatsList');
+    console.log('[ZITLAS] dashChatsList found:', !!list);
+    if (!list) return;
+    list.innerHTML = MOCK_CHATS.map(c => {
+      const badge = c.unread > 0 ? `<div class="dash-chat-unread">${c.unread}</div>` : '';
+      return `<div class="dash-chat-card${c.unread > 0 ? ' unread' : ''}">`
+        + `<div class="dash-chat-avatar" style="background:${c.color}1F;color:${c.color};border:1.5px solid ${c.color}40;">${c.initials}</div>`
+        + `<div class="dash-chat-info"><div class="dash-chat-name">${c.name}</div><div class="dash-chat-role">${c.role}</div><div class="dash-chat-msg">${c.msg}</div></div>`
+        + `<div class="dash-chat-right"><div class="dash-chat-time">${c.time}</div>${badge}</div>`
+        + `</div>`;
+    }).join('');
+    console.log('[ZITLAS] renderChats innerHTML length:', list.innerHTML.length);
+    list.querySelectorAll('.dash-chat-card').forEach(card => {
+      card.addEventListener('click', () => showToast('Chats — coming soon!'));
+    });
+  }
+
+  /* ══════════════════════════════════════════
+     STORAGE KEYS
+  ══════════════════════════════════════════ */
+  const THEME_KEY      = 'zitlas_theme';
+  const GOAL_KEY       = 'zitlas_goal';
+  const SURVEY_KEY     = 'zitlas_survey';
+  const SURVEY_PROG    = 'zitlas_survey_progress'; /* survey page progress counter */
+  const ROADMAP_KEY    = 'zitlas_roadmap';
+  const RECOMMEND_KEY  = 'zitlas_recommendations';
+
+  /* ══════════════════════════════════════════
+     GOAL TYPE → display name
+  ══════════════════════════════════════════ */
+  const GOAL_NAMES = {
+    'Weight Loss': 'Lose Weight',
+    'Eat Healthier': 'Eat Healthier',
+    Nutrition: 'Improve Nutrition',
+    Fitness:   'Improve Fitness',
+    Habits:    'Build Better Habits',
+    Custom:    'Personal Goal',
+  };
+
+  const GOAL_UNITS = {
+    'Weight Loss': 'kg',
+    'Eat Healthier': 'Score',
+    Nutrition: 'Score',
+    Fitness:   'Score',
+    Habits:    'Streak',
+    Custom:    'Value',
+  };
+
+  /* ══════════════════════════════════════════
+     THEME
+  ══════════════════════════════════════════ */
+  const html = document.documentElement;
+
+  function getSystemTheme() {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+
+  function applyTheme(pref) {
+    const resolved = pref === 'system' ? getSystemTheme() : pref;
+    html.setAttribute('data-theme', resolved);
+  }
+
+  function loadTheme() {
+    applyTheme(localStorage.getItem(THEME_KEY) || 'dark');
+  }
+
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if ((localStorage.getItem(THEME_KEY) || 'dark') === 'system') applyTheme('system');
+  });
+
+  /* ══════════════════════════════════════════
+     TOAST
+  ══════════════════════════════════════════ */
+  let toastTimer = null;
+
+  function showToast(msg, duration = 2800) {
+    const el = document.getElementById('toast');
+    if (!el) return;
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), duration);
+  }
+
+  /* ══════════════════════════════════════════
+     GREETING
+  ══════════════════════════════════════════ */
+  function initGreeting() {
+    const el = document.getElementById('greetingLine');
+    if (!el) return;
+    const h = new Date().getHours();
+    if (h < 12)      el.textContent = 'Good Morning,';
+    else if (h < 17) el.textContent = 'Good Afternoon,';
+    else             el.textContent = 'Good Evening,';
+  }
+
+  /* ══════════════════════════════════════════
+     NOTIFICATION BELL
+  ══════════════════════════════════════════ */
+  function initNotifBell() {
+    const btn = document.getElementById('notifBtn');
+    const dot = document.getElementById('notifDot');
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+      if (dot) {
+        dot.style.transform = 'scale(1.7)';
+        setTimeout(() => { dot.style.transform = ''; }, 500);
+      }
+      showToast('No new notifications');
+    });
+  }
+
+  /* ══════════════════════════════════════════
+     GOAL — HELPERS
+  ══════════════════════════════════════════ */
+  function loadGoal() {
+    try {
+      const goal = JSON.parse(localStorage.getItem(GOAL_KEY));
+      console.log('GOAL:', goal ? `${goal.goalName} (${goal.type}) — ${goal.currentVal}→${goal.targetVal}` : 'null');
+      return goal;
+    } catch { return null; }
+  }
+
+  function saveGoal(goal) {
+    localStorage.setItem(GOAL_KEY, JSON.stringify(goal));
+  }
+
+  function clearGoal() {
+    localStorage.removeItem(GOAL_KEY);
+  }
+
+  function clearAllSurveyData() {
+    /* Core survey + goal data */
+    [GOAL_KEY, SURVEY_KEY, SURVEY_PROG, ROADMAP_KEY, RECOMMEND_KEY].forEach(k => localStorage.removeItem(k));
+    /* Brain 1 (Mental) */
+    ['mental_scores', 'mental_swot', 'mental_recommendations', 'mental_assessment'].forEach(k => localStorage.removeItem(k));
+    /* Brain 2 (Physical) */
+    ['physical_scores', 'physical_swot', 'physical_recommendations', 'physical_bottleneck', 'physical_assessment'].forEach(k => localStorage.removeItem(k));
+    /* Lifestyle & Brain 3 (Nutrition) */
+    ['lifestyle_data', 'nutrition_scores', 'nutrition_swot', 'nutrition_recommendations', 'nutrition_bottleneck', 'nutrition_assessment', 'nutrition_weekly_plan'].forEach(k => localStorage.removeItem(k));
+    /* User profile + SWOT */
+    ['athlete_profile', 'athlete_summary', 'overall_score', 'athlete_tier', 'development_priority', 'zitlas_swot'].forEach(k => localStorage.removeItem(k));
+  }
+
+  function calcDaysLeft(endDateStr) {
+    if (!endDateStr) return null;
+    const end  = new Date(endDateStr);
+    const now  = new Date();
+    end.setHours(0, 0, 0, 0);
+    now.setHours(0, 0, 0, 0);
+    return Math.max(0, Math.ceil((end - now) / 86400000));
+  }
+
+  function formatDate(dateStr) {
+    if (!dateStr) return '—';
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+
+  /* ══════════════════════════════════════════
+     GOAL RING ANIMATION
+  ══════════════════════════════════════════ */
+  const CIRCUMFERENCE = 188.496; // 2π × r=30
+
+  function animateRing(pct) {
+    const ring = document.getElementById('goalRing');
+    if (!ring) return;
+    const offset = CIRCUMFERENCE * (1 - Math.min(pct, 100) / 100);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        ring.style.strokeDashoffset = offset;
+      });
+    });
+  }
+
+  /* ══════════════════════════════════════════
+     RENDER GOAL CARD
+  ══════════════════════════════════════════ */
+  function renderGoalCard() {
+    const goal       = loadGoal();
+    const btn        = document.getElementById('goalActionBtn');
+    const surveyDone = !!localStorage.getItem(SURVEY_KEY);
+
+    if (!goal || !surveyDone) {
+      document.getElementById('goalTitle').textContent    = 'No goal set yet.';
+      document.getElementById('goalPct').textContent      = '0%';
+      document.getElementById('goalCurrent').textContent  = '—';
+      document.getElementById('goalTarget').textContent   = '—';
+      document.getElementById('goalDaysLeft').textContent = 'Set a goal to begin';
+      document.getElementById('goalStartDate').textContent = '—';
+      document.getElementById('goalEndDate').textContent   = '—';
+      document.getElementById('goalStatLabelA').textContent = 'Current';
+      document.getElementById('goalStatLabelB').textContent = 'Target';
+      animateRing(0);
+
+      if (btn) {
+        btn.textContent = '🎯 Set Goal';
+        btn.classList.remove('reset-mode');
+      }
+      return;
+    }
+
+    const pct     = Math.min(100, Math.round((goal.currentVal / goal.targetVal) * 100));
+    const days    = calcDaysLeft(goal.endDate);
+    const unit    = GOAL_UNITS[goal.type] || 'Value';
+    const name    = goal.goalName || GOAL_NAMES[goal.type] || goal.type;
+
+    document.getElementById('goalTitle').textContent      = name;
+    document.getElementById('goalPct').textContent        = pct + '%';
+    document.getElementById('goalStatLabelA').textContent = 'Current ' + unit;
+    document.getElementById('goalStatLabelB').textContent = 'Target ' + unit;
+    document.getElementById('goalCurrent').textContent    = goal.currentVal;
+    document.getElementById('goalTarget').textContent     = goal.targetVal;
+    document.getElementById('goalStartDate').textContent  = formatDate(goal.startDate);
+    document.getElementById('goalEndDate').textContent    = formatDate(goal.endDate);
+
+    const daysEl = document.getElementById('goalDaysLeft');
+    if (days === null)       daysEl.textContent = 'No end date';
+    else if (days === 0)     daysEl.textContent = 'Goal ends today!';
+    else if (days > 0)       daysEl.textContent = days + ' Days Left';
+
+    animateRing(pct);
+
+    if (btn) {
+      btn.textContent = '🔄 Reset Goal';
+      btn.classList.add('reset-mode');
+    }
+  }
+
+  /* ══════════════════════════════════════════
+     SET GOAL MODAL
+  ══════════════════════════════════════════ */
+  let selectedGoalType = 'Weight Loss';
+
+  function openSetGoalModal() {
+    const modal = document.getElementById('setGoalModal');
+    if (!modal) return;
+
+    /* Pre-fill with existing goal if any */
+    const goal = loadGoal();
+    if (goal) {
+      selectedGoalType = goal.type;
+      document.getElementById('goalCurrentInput').value    = goal.currentVal;
+      document.getElementById('goalTargetInput').value     = goal.targetVal;
+      document.getElementById('goalTargetDateInput').value = goal.endDate;
+    } else {
+      selectedGoalType = 'Weight Loss';
+      document.getElementById('goalCurrentInput').value    = '';
+      document.getElementById('goalTargetInput').value     = '';
+      document.getElementById('goalTargetDateInput').value = '';
+    }
+
+    /* Sync type pill active state */
+    document.querySelectorAll('.goal-type-pill').forEach((p) => {
+      p.classList.toggle('active', p.dataset.type === selectedGoalType);
+    });
+
+    modal.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeSetGoalModal() {
+    const modal = document.getElementById('setGoalModal');
+    if (!modal) return;
+    modal.classList.remove('open');
+    document.body.style.overflow = '';
+  }
+
+  function initSetGoalModal() {
+    const modal    = document.getElementById('setGoalModal');
+    const closeBtn = document.getElementById('closeSetGoalModal');
+    const saveBtn  = document.getElementById('saveGoalBtn');
+    if (!modal) return;
+
+    /* Type pill selection */
+    document.querySelectorAll('.goal-type-pill').forEach((pill) => {
+      pill.addEventListener('click', () => {
+        document.querySelectorAll('.goal-type-pill').forEach((p) => p.classList.remove('active'));
+        pill.classList.add('active');
+        selectedGoalType = pill.dataset.type;
+      });
+    });
+
+    if (closeBtn) closeBtn.addEventListener('click', closeSetGoalModal);
+    modal.addEventListener('click', (e) => { if (e.target === modal) closeSetGoalModal(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSetGoalModal(); });
+
+    if (saveBtn) {
+      saveBtn.addEventListener('click', () => {
+        const cur  = parseFloat(document.getElementById('goalCurrentInput').value);
+        const tgt  = parseFloat(document.getElementById('goalTargetInput').value);
+        const date = document.getElementById('goalTargetDateInput').value;
+
+        if (isNaN(cur) || cur <= 0) { showToast('⚠️ Enter a valid current value'); return; }
+        if (isNaN(tgt) || tgt <= 0) { showToast('⚠️ Enter a valid target value'); return; }
+        if (tgt === cur) { showToast('⚠️ Target must differ from current value'); return; }
+        if (!date) { showToast('⚠️ Select a goal end date'); return; }
+
+        const today = new Date().toISOString().split('T')[0];
+        if (date <= today) { showToast('⚠️ End date must be in the future'); return; }
+
+        saveGoal({
+          type:       selectedGoalType,
+          currentVal: cur,
+          targetVal:  tgt,
+          startDate:  today,
+          endDate:    date,
+        });
+
+        closeSetGoalModal();
+        renderGoalCard();
+        showToast('🎯 Goal saved! Keep pushing.');
+      });
+    }
+  }
+
+  /* ══════════════════════════════════════════
+     RESET GOAL MODAL
+  ══════════════════════════════════════════ */
+  function openResetGoalModal() {
+    const modal = document.getElementById('resetGoalModal');
+    if (!modal) return;
+    modal.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeResetGoalModal() {
+    const modal = document.getElementById('resetGoalModal');
+    if (!modal) return;
+    modal.classList.remove('open');
+    document.body.style.overflow = '';
+  }
+
+  function initResetGoalModal() {
+    const modal      = document.getElementById('resetGoalModal');
+    const cancelBtn  = document.getElementById('cancelResetBtn');
+    const confirmBtn = document.getElementById('confirmResetBtn');
+    if (!modal) return;
+
+    if (cancelBtn)  cancelBtn.addEventListener('click',  closeResetGoalModal);
+    modal.addEventListener('click', (e) => { if (e.target === modal) closeResetGoalModal(); });
+
+    if (confirmBtn) {
+      confirmBtn.addEventListener('click', () => {
+        clearAllSurveyData();
+        closeResetGoalModal();
+        window.location.href = './ai-coach/ai-coach.html';
+      });
+    }
+  }
+
+  /* ══════════════════════════════════════════
+     AUTH HELPER
+  ══════════════════════════════════════════ */
+  function isLoggedIn() {
+    const result = !!(
+      localStorage.getItem('zitlas_token') ||
+      localStorage.getItem('zitlas_user')  ||
+      localStorage.getItem('user')          ||
+      sessionStorage.getItem('zitlas_guest')||
+      sessionStorage.getItem('user')
+    );
+    return result;
+  }
+
+  /* ══════════════════════════════════════════
+     FIREBASE PROFILE PHOTO
+     Load Google photo into header avatar when
+     user signed in via Google
+  ══════════════════════════════════════════ */
+  function loadFirebaseUserProfile() {
+    const raw = localStorage.getItem('zitlas_firebase_user');
+    if (!raw) return;
+    try {
+      const user   = JSON.parse(raw);
+      const avatar = document.getElementById('headerAvatar');
+      if (avatar && user.photo) {
+        avatar.src = user.photo;
+        avatar.alt = user.name || 'Profile';
+      }
+    } catch (e) {
+      console.warn('[ZITLAS] loadFirebaseUserProfile error:', e);
+    }
+  }
+
+  /* Also listen for Firebase auth state so photo updates after token refresh */
+  if (typeof ZitlasAuth !== 'undefined') {
+    ZitlasAuth.onAuthStateChanged(function (user) {
+      if (user && user.photoURL) {
+        const avatar = document.getElementById('headerAvatar');
+        if (avatar) { avatar.src = user.photoURL; avatar.alt = user.displayName || 'Profile'; }
+      }
+    });
+  }
+
+  /* ══════════════════════════════════════════
+     GOAL ACTION BUTTON → auth → survey → modal
+  ══════════════════════════════════════════ */
+  function initGoalActionBtn() {
+    const btn = document.getElementById('goalActionBtn');
+    if (!btn) {
+      console.error('[ZITLAS] goalActionBtn not found in DOM');
+      return;
+    }
+    console.log('[ZITLAS] initGoalActionBtn — listener attached to', btn.id);
+
+    btn.addEventListener('click', () => {
+      console.log('[ZITLAS] Button clicked:', btn.textContent.trim());
+      console.log('[ZITLAS] Checking auth');
+
+      const loggedIn = isLoggedIn();
+      console.log('[ZITLAS] User logged in:', loggedIn);
+
+      if (!loggedIn) {
+        console.log('[ZITLAS] Not logged in — opening login modal');
+        openLoginModal('set-goal');
+        return;
+      }
+
+      const surveyDone = !!localStorage.getItem(SURVEY_KEY);
+      console.log('[ZITLAS] Survey done:', surveyDone);
+
+      if (!surveyDone) {
+        console.log('[ZITLAS] Survey not done — redirecting to coach assessment');
+        window.location.href = './ai-coach/ai-coach.html';
+        return;
+      }
+
+      const goal = loadGoal();
+      console.log('[ZITLAS] Existing goal:', goal ? goal.goalName : 'none');
+
+      if (goal) {
+        console.log('[ZITLAS] Opening reset goal modal');
+        openResetGoalModal();
+      } else {
+        console.log('[ZITLAS] Opening set goal modal');
+        openSetGoalModal();
+      }
+    });
+  }
+
+  /* ══════════════════════════════════════════
+     PENDING ACTION — resume goal flow after
+     login page redirect (fallback path)
+  ══════════════════════════════════════════ */
+  function checkPendingAction() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('action') !== 'set-goal') return;
+
+    history.replaceState({}, '', window.location.pathname);
+    if (!isLoggedIn()) return;
+
+    setTimeout(() => {
+      const surveyDone = !!localStorage.getItem(SURVEY_KEY);
+      if (surveyDone) {
+        openSetGoalModal();
+      } else {
+        window.location.href = './ai-coach/ai-coach.html';
+      }
+    }, 600);
+  }
+
+  /* ══════════════════════════════════════════
+     LOGIN MODAL
+  ══════════════════════════════════════════ */
+  function openLoginModal(pendingAction) {
+    console.log('[ZITLAS] openLoginModal called, pendingAction:', pendingAction);
+    const modal = document.getElementById('loginModal');
+    if (!modal) {
+      console.error('[ZITLAS] loginModal element NOT FOUND in DOM');
+      return;
+    }
+
+    if (pendingAction) {
+      sessionStorage.setItem('zitlas_pending_action', pendingAction);
+    }
+
+    /* Contextual subtitle */
+    const subtitle = document.getElementById('loginModalSubtitle');
+    if (subtitle) {
+      if (pendingAction === 'set-goal') {
+        subtitle.textContent = 'Sign in to set your goal and start your weight-loss journey.';
+      } else {
+        subtitle.textContent = 'Sign in to continue.';
+      }
+    }
+
+    /* Clear any previous form state */
+    const form = document.getElementById('loginModalForm');
+    if (form) form.reset();
+    ['lmEmailGroup', 'lmPasswordGroup'].forEach(id =>
+      document.getElementById(id)?.classList.remove('lm-error')
+    );
+
+    modal.classList.add('open');
+    document.body.style.overflow = 'hidden';
+    console.log('[ZITLAS] loginModal.classList:', modal.className);
+
+    /* Auto-focus email on open */
+    setTimeout(() => document.getElementById('lmEmailInput')?.focus(), 400);
+  }
+
+  function closeLoginModal() {
+    const modal = document.getElementById('loginModal');
+    if (!modal) return;
+    modal.classList.remove('open');
+    document.body.style.overflow = '';
+  }
+
+  /* Called after successful login inside the modal */
+  function onModalLoginSuccess() {
+    closeLoginModal();
+
+    const pending = sessionStorage.getItem('zitlas_pending_action');
+    sessionStorage.removeItem('zitlas_pending_action');
+
+    if (pending === 'set-goal') {
+      setTimeout(() => {
+        const surveyDone = !!localStorage.getItem(SURVEY_KEY);
+        if (surveyDone) {
+          openSetGoalModal();
+        } else {
+          window.location.href = './ai-coach/ai-coach.html';
+        }
+      }, 320);
+    }
+  }
+
+  function initLoginModal() {
+    const modal    = document.getElementById('loginModal');
+    const closeBtn = document.getElementById('closeLoginModal');
+    if (!modal) return;
+
+    if (closeBtn) closeBtn.addEventListener('click', closeLoginModal);
+    modal.addEventListener('click', (e) => { if (e.target === modal) closeLoginModal(); });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && modal.classList.contains('open')) closeLoginModal();
+    });
+
+    /* ── Form ── */
+    const form        = document.getElementById('loginModalForm');
+    const loginBtn    = document.getElementById('lmLoginBtn');
+    const btnText     = document.getElementById('lmBtnText');
+    const spinner     = document.getElementById('lmSpinner');
+    const emailInput  = document.getElementById('lmEmailInput');
+    const pwInput     = document.getElementById('lmPasswordInput');
+
+    function setModalLoading(on) {
+      if (!loginBtn) return;
+      loginBtn.disabled = on;
+      if (btnText)  btnText.style.opacity = on ? '0' : '1';
+      if (spinner)  spinner.style.display = on ? 'block' : 'none';
+    }
+
+    function setLmError(groupId) {
+      const el = document.getElementById(groupId);
+      if (!el) return;
+      el.classList.add('lm-error');
+      el.addEventListener('animationend', () => el.classList.remove('lm-error'), { once: true });
+    }
+
+    if (emailInput) emailInput.addEventListener('input', () =>
+      document.getElementById('lmEmailGroup')?.classList.remove('lm-error'));
+    if (pwInput) pwInput.addEventListener('input', () =>
+      document.getElementById('lmPasswordGroup')?.classList.remove('lm-error'));
+
+    if (form) {
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const email    = emailInput?.value.trim() || '';
+        const password = pwInput?.value || '';
+
+        if (!email)    { setLmError('lmEmailGroup');    return; }
+        if (!password) { setLmError('lmPasswordGroup'); return; }
+
+        setModalLoading(true);
+
+        try {
+          /* TODO: real API call
+             const res = await fetch('/api/auth/login', {
+               method: 'POST',
+               headers: { 'Content-Type': 'application/json' },
+               body: JSON.stringify({ email, password }),
+             });
+             const data = await res.json();
+             if (!res.ok) throw new Error(data.message);
+             localStorage.setItem('zitlas_token', data.token);
+          */
+          await new Promise(r => setTimeout(r, 1100));
+          localStorage.setItem('zitlas_token', 'demo_' + Date.now());
+
+          if (btnText) btnText.textContent = '✓ Signed In';
+          if (btnText) btnText.style.opacity = '1';
+          if (spinner) spinner.style.display = 'none';
+
+          showToast('Signed in successfully 👋');
+
+          setTimeout(() => {
+            if (btnText) btnText.textContent = 'Sign In';
+            setModalLoading(false);
+            onModalLoginSuccess();
+          }, 700);
+
+        } catch {
+          setModalLoading(false);
+          setLmError('lmEmailGroup');
+          setLmError('lmPasswordGroup');
+          showToast('⚠️ Sign in failed. Try again.');
+        }
+      });
+    }
+
+    /* ── Google ── */
+    const googleBtn = document.getElementById('lmGoogleBtn');
+    if (googleBtn) {
+      googleBtn.addEventListener('click', () => {
+        /* TODO: window.location.href = '/api/auth/google'; */
+        localStorage.setItem('zitlas_token', 'demo_google_' + Date.now());
+        showToast('Signed in with Google 👋');
+        onModalLoginSuccess();
+      });
+    }
+
+    /* ── Skip ── */
+    const skipBtn = document.getElementById('lmSkipBtn');
+    if (skipBtn) {
+      skipBtn.addEventListener('click', () => {
+        sessionStorage.setItem('zitlas_guest', '1');
+        sessionStorage.removeItem('zitlas_pending_action');
+        closeLoginModal();
+        showToast('Browsing as guest');
+      });
+    }
+
+    /* ── Password toggle ── */
+    const pwToggle = document.getElementById('lmPwToggle');
+    const eyeIcon  = document.getElementById('lmEyeIcon');
+    const EYE_OPEN   = `<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>`;
+    const EYE_CLOSED = `<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>`;
+
+    if (pwToggle && pwInput && eyeIcon) {
+      pwToggle.addEventListener('click', () => {
+        const hidden = pwInput.type === 'password';
+        pwInput.type = hidden ? 'text' : 'password';
+        eyeIcon.innerHTML = hidden ? EYE_CLOSED : EYE_OPEN;
+      });
+    }
+  }
+
+  /* training modal / task-completion removed — replaced by Recent Chats + Nearby Nutritionists */
+  var TRAINING_DB = {};
+  var fadeTimer;
+
+  /* ══════════════════════════════════════════
+     TASK CARD CLICK → open modal
+  ══════════════════════════════════════════ */
+  function initTaskCardClick() {
+    document.querySelectorAll('.task-card').forEach((card) => {
+      const taskId = card.dataset.taskId;
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('.task-check-btn')) return;
+        openTrainingModal(taskId);
+      });
+      card.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          openTrainingModal(taskId);
+        }
+      });
+    });
+  }
+
+  /* ══════════════════════════════════════════
+     IMAGE FALLBACKS
+  ══════════════════════════════════════════ */
+  function makeFallbackSVG(initials, color, size) {
+    return `data:image/svg+xml,${encodeURIComponent(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+        <rect width="${size}" height="${size}" rx="${size / 2}" fill="${color}"/>
+        <text x="50%" y="52%" dominant-baseline="central" text-anchor="middle"
+              font-size="${Math.round(size * 0.36)}" font-weight="800" fill="white"
+              font-family="-apple-system,sans-serif">${initials}</text>
+      </svg>`
+    )}`;
+  }
+
+  function initImageFallbacks() {
+    const avatar = document.getElementById('headerAvatar');
+    if (avatar) avatar.addEventListener('error', () => { avatar.src = makeFallbackSVG('AP', '#FF8A00', 38); });
+
+    const goalImg = document.getElementById('goalPlayerImg');
+    if (goalImg) {
+      goalImg.addEventListener('error', () => {
+        goalImg.src = makeFallbackSVG('AP', '#FF8A00', 200);
+        goalImg.style.objectFit = 'contain';
+        goalImg.style.padding = '20px';
+        goalImg.style.opacity = '0.5';
+      });
+    }
+
+  }
+
+  /* ══════════════════════════════════════════
+     VIEW BUTTONS
+  ══════════════════════════════════════════ */
+  function initViewButtons() {
+    const viewRoadmap  = document.getElementById('viewRoadmapBtn');
+    const viewTraining = document.getElementById('viewAllTraining');
+    if (viewRoadmap)  viewRoadmap.addEventListener('click',  () => {
+      window.location.href = './weekly-plan/weekly-plan.html';
+    });
+    if (viewTraining) viewTraining.addEventListener('click', () => {
+      window.location.href = './weekly-plan/weekly-plan.html';
+    });
+  }
+
+  /* ══════════════════════════════════════════
+     AI ROADMAP RENDERER
+     Reads zitlas_roadmap from localStorage and
+     populates the roadmap cards + training section.
+  ══════════════════════════════════════════ */
+  function loadRoadmap() {
+    try {
+      const raw  = localStorage.getItem('zitlas_roadmap');
+      const plan = raw ? JSON.parse(raw) : null;
+      console.log('ROADMAP:', plan ? `${plan.days?.length ?? 0} days | role: ${plan.role}` : 'null');
+      return plan;
+    } catch { return null; }
+  }
+
+  const DRILL_ICONS = {
+    Cardio: '🏃', Strength: '💪', Flexibility: '🧘', Walking: '🚶',
+    HIIT: '🔥', Recovery: '😴', Mental: '🧠', Habit: '⭐',
+  };
+
+  const DRILL_COLORS = [
+    'rgba(255,138,0,0.15)',
+    'rgba(34,197,94,0.15)',
+    'rgba(59,130,246,0.15)',
+  ];
+
+  /* ── Render training cards for the selected day ── */
+  function renderDayTraining(plan, dayIdx) {
+    const day = plan.days[dayIdx];
+    if (!day) return;
+
+    const trainingSection = document.querySelector('.training-section');
+    const trainingHeader  = document.querySelector('.training-section .section-title');
+
+    function applyContent() {
+      if (trainingHeader) {
+        trainingHeader.textContent = `Day ${day.dayNumber} Training`;
+      }
+
+      if (!day.drills || !day.drills.length) return;
+
+      day.drills.slice(0, 3).forEach((drill, idx) => {
+        const card = document.getElementById(`taskCard${idx + 1}`);
+        if (!card) return;
+
+        const nameEl    = card.querySelector('.task-name');
+        const objEl     = card.querySelector('.task-objective');
+        const iconEl    = card.querySelector('.task-icon');
+        const bgEl      = card.querySelector('.task-icon-wrap');
+        const metaChips = card.querySelectorAll('.task-meta-chip');
+        const drillIcon = DRILL_ICONS[drill.cat] || '💪';
+
+        if (nameEl)       nameEl.textContent      = drill.name;
+        if (objEl)        objEl.textContent        = drill.cue.length > 55 ? drill.cue.slice(0, 52) + '…' : drill.cue;
+        if (bgEl)         bgEl.style.background    = DRILL_COLORS[idx] || DRILL_COLORS[0];
+        if (iconEl)       iconEl.textContent       = drillIcon;
+        if (metaChips[0]) metaChips[0].textContent = `⏱ ${drill.duration}`;
+        if (metaChips[1]) metaChips[1].textContent = `🎯 ${drill.sets} Sets`;
+
+        TRAINING_DB[String(idx + 1)] = {
+          id:        String(idx + 1),
+          name:      drill.name,
+          icon:      drillIcon,
+          iconBg:    DRILL_COLORS[idx] || DRILL_COLORS[0],
+          objective: drill.target,
+          duration:  drill.duration,
+          drills:    drill.sets,
+          goal:      drill.instruction,
+          why:       `${day.whyItMatters || ''} Trainer cue: ${drill.cue}`,
+          outcome:   drill.target,
+          steps: [
+            { name: 'Sets × Reps',      duration: `${drill.sets} sets × ${drill.reps}` },
+            { name: 'Training Cue',     duration: drill.cue },
+            { name: 'Performance Goal', duration: drill.target },
+          ],
+        };
+      });
+    }
+
+    clearTimeout(fadeTimer);
+    if (trainingSection) {
+      trainingSection.classList.add('training-fading');
+      fadeTimer = setTimeout(() => {
+        applyContent();
+        trainingSection.classList.remove('training-fading');
+      }, 220);
+    } else {
+      applyContent();
+    }
+  }
+
+  /* ── Select a roadmap day card and load its training ── */
+  function selectRoadmapDay(plan, dayIdx) {
+    document.querySelectorAll('.roadmap-card').forEach((card, i) => {
+      const isSelected = i === dayIdx;
+      card.classList.toggle('active', isSelected);
+      const statusEl = card.querySelector('.rmap-status');
+      if (statusEl) {
+        statusEl.className = `rmap-status ${isSelected ? 'active-badge' : 'upcoming-badge'}`;
+      }
+    });
+    renderDayTraining(plan, dayIdx);
+  }
+
+  function renderProfileFallbackRoadmap() {
+    const scrollEl = document.getElementById('roadmapScroll');
+    if (!scrollEl) return;
+
+    /* Check what the user has actually completed based on localStorage keys */
+    const hasAssessment  = !!localStorage.getItem('zitlas_assessment');
+    const hasCalcs       = !!localStorage.getItem('zitlas_calculations');
+    const hasSwot        = !!localStorage.getItem('zitlas_swot');
+    const hasDiet        = !!localStorage.getItem('zitlas_diet_plan');
+    const hasWorkout     = !!localStorage.getItem('zitlas_workout_plan');
+
+    if (!hasAssessment && !hasSwot) {
+      scrollEl.innerHTML = `
+        <div class="roadmap-card active" onclick="window.location.href='./ai-coach/ai-coach.html'">
+          <span class="rmap-week">START</span>
+          <span class="rmap-icon">🎯</span>
+          <h4 class="rmap-title">Begin Your Assessment</h4>
+          <span class="rmap-status active-badge">Tap Here</span>
+        </div>`;
+      return;
+    }
+
+    const steps = [
+      {
+        week: 'STEP 1', icon: hasAssessment ? '✅' : '🎯',
+        title: 'Assessment',
+        done: hasAssessment,
+        href: './ai-coach/ai-coach.html',
+      },
+      {
+        week: 'STEP 2', icon: hasCalcs ? '✅' : '📊',
+        title: 'Fitness Snapshot',
+        done: hasCalcs,
+        href: './ai-coach/ai-coach.html',
+      },
+      {
+        week: 'STEP 3', icon: hasSwot ? '✅' : '🧠',
+        title: 'SWOT Analysis',
+        done: hasSwot,
+        href: './ai-coach/ai-coach.html',
+      },
+      {
+        week: 'STEP 4', icon: hasDiet ? '✅' : '🥗',
+        title: 'Diet Plan',
+        done: hasDiet,
+        href: '../diet/diet.html',
+      },
+      {
+        week: 'STEP 5', icon: hasWorkout ? '✅' : '💪',
+        title: 'Workout Plan',
+        done: hasWorkout,
+        href: './ai-coach/ai-coach.html?view=workout',
+      },
+      {
+        week: 'STEP 6', icon: '📈',
+        title: 'Progress Tracking',
+        done: false,
+        href: null,
+      },
+    ];
+
+    /* First incomplete step is "active" */
+    let activeIdx = steps.findIndex(s => !s.done);
+    if (activeIdx === -1) activeIdx = steps.length - 1;
+
+    scrollEl.innerHTML = steps.map((s, i) => {
+      const isActive = i === activeIdx;
+      const cls      = s.done ? 'done-badge' : isActive ? 'active-badge' : 'upcoming-badge';
+      const badge    = s.done ? '✓ Done' : isActive ? 'Next Up' : 'Upcoming';
+      return `<div class="roadmap-card${isActive ? ' active' : ''}${s.done ? ' rmap-done' : ''}" data-step="${i}">
+        <span class="rmap-week">${s.week}</span>
+        <span class="rmap-icon">${s.icon}</span>
+        <h4 class="rmap-title">${s.title}</h4>
+        <span class="rmap-status ${cls}">${badge}</span>
+      </div>`;
+    }).join('');
+
+    document.querySelectorAll('.roadmap-card[data-step]').forEach((card, i) => {
+      const step = steps[i];
+      card.addEventListener('click', () => {
+        if (step.href) {
+          window.location.href = step.href;
+        } else {
+          showToast('Progress Tracking coming soon!');
+        }
+      });
+    });
+  }
+
+  function renderRoadmap() {
+    const plan = loadRoadmap();
+    if (!plan || !plan.days) {
+      renderProfileFallbackRoadmap();
+      return;
+    }
+
+    /* ── Update plan label in header ── */
+    const roleLabelEl = document.querySelector('.roadmap-sub');
+    if (roleLabelEl) roleLabelEl.textContent = plan.goalLabel || plan.goal_label || 'Weight Loss Plan';
+
+    const scrollEl  = document.querySelector('.roadmap-scroll');
+    const todayStr  = new Date().toISOString().split('T')[0];
+    const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    const todayName = DAY_NAMES[new Date().getDay()];
+
+    /* ── Replace roadmap scroll cards with 7-day plan ── */
+    if (scrollEl) {
+      scrollEl.innerHTML = plan.days.map((day, i) => {
+        let isToday, isPast;
+        if (day.date) {
+          isToday = day.isToday || day.date === todayStr;
+          isPast  = day.date < todayStr && !isToday;
+        } else {
+          /* No date on plan — match by weekday name */
+          isToday = day.isToday || day.dayName === todayName;
+          isPast  = false;
+        }
+        const badge    = isToday ? '🟠 TODAY' : isPast ? '✓ Done' : day.dayName;
+        const badgeCls = isToday ? 'active-badge' : isPast ? 'done-badge' : 'upcoming-badge';
+        return `<div class="roadmap-card${isToday ? ' active' : ''}" data-day="${i}">
+          <span class="rmap-week">DAY ${day.dayNumber}</span>
+          <span class="rmap-icon">${day.icon}</span>
+          <h4 class="rmap-title">${day.theme}</h4>
+          <span class="rmap-status ${badgeCls}">${badge}</span>
+        </div>`;
+      }).join('');
+    }
+
+    /* ── Attach click handlers — select day inline ── */
+    document.querySelectorAll('.roadmap-card[data-day]').forEach((card) => {
+      card.addEventListener('click', () => {
+        selectRoadmapDay(plan, parseInt(card.dataset.day));
+      });
+    });
+
+    /* ── Find today's index — by date if available, by dayName otherwise ── */
+    let todayIdx = 0;
+    plan.days.forEach((day, i) => {
+      const isTd = day.date
+        ? (day.isToday || day.date === todayStr)
+        : (day.isToday || day.dayName === todayName);
+      if (isTd) todayIdx = i;
+    });
+
+    /* ── Auto-select today ── */
+    selectRoadmapDay(plan, todayIdx);
+
+    /* ── Scroll today's card into view in the horizontal rail ── */
+    if (scrollEl) {
+      const todayCard = scrollEl.querySelector(`.roadmap-card[data-day="${todayIdx}"]`);
+      if (todayCard) {
+        setTimeout(() => {
+          const left = todayCard.offsetLeft - scrollEl.offsetWidth / 2 + todayCard.offsetWidth / 2;
+          scrollEl.scrollTo({ left: Math.max(0, left), behavior: 'smooth' });
+        }, 250);
+      }
+    }
+  }
+
+  /* ══════════════════════════════════════════
+     ROADMAP CARD CLICK (fallback for static cards only)
+  ══════════════════════════════════════════ */
+  function initRoadmapCards() {
+    document.querySelectorAll('.roadmap-card').forEach((card) => {
+      if (card.dataset.day !== undefined) return; /* AI roadmap — already handled */
+      card.addEventListener('click', () => {
+        const title = card.querySelector('.rmap-title')?.textContent || 'Week';
+        showToast(`${title} — coming soon`);
+      });
+    });
+  }
+
+  /* ══════════════════════════════════════════
+     SWOT SUMMARY WIDGET
+  ══════════════════════════════════════════ */
+  function renderSwotWidget() {
+    const content = document.getElementById('swotWidgetContent');
+    if (!content) return;
+
+    let swot = null;
+    try { swot = JSON.parse(localStorage.getItem('zitlas_swot') || 'null'); } catch (_) {}
+
+    console.log('SWOT DATA:', swot);
+    console.log('VIEW FULL TARGET:', './ai-coach/ai-coach.html?view=swot');
+
+    if (!swot || !swot.swot) {
+      content.innerHTML = `<div class="widget-empty-state">
+        <p class="widget-empty-text">Complete your AI assessment to unlock your SWOT analysis.</p>
+        <a href="./ai-coach/ai-coach.html" class="widget-empty-cta">Start Assessment →</a>
+      </div>`;
+      return;
+    }
+
+    const archetype = swot.user_archetype || 'Athlete';
+    const scores    = swot.scores || {};
+    const overall   = scores.overall ? Math.round(scores.overall) : null;
+    const s = swot.swot;
+
+    function topItem(arr) {
+      const item = (arr || [])[0];
+      if (!item) return '—';
+      return typeof item === 'object' ? (item.title || '—') : String(item);
+    }
+
+    const scoreChips = [
+      { label: 'Physical', val: scores.physical, color: '#22C55E' },
+      { label: 'Mental',   val: scores.mental,   color: '#3B82F6' },
+      { label: 'Diet',     val: scores.diet,      color: '#FF8A00' },
+      { label: 'Lifestyle',val: scores.lifestyle, color: '#A855F7' },
+    ].filter(c => c.val != null);
+
+    const archetypePill = document.getElementById('swotArchetypePill');
+    if (archetypePill) archetypePill.textContent = archetype + (overall ? ` · ${overall}/10` : '');
+
+    content.innerHTML = `
+      <div class="swot-widget-scores">
+        ${scoreChips.map(c => `
+          <div class="swot-score-chip">
+            <span class="swot-score-dot" style="background:${c.color}"></span>
+            <span class="swot-score-label">${c.label}</span>
+            <span class="swot-score-val" style="color:${c.color}">${Math.round(c.val)}</span>
+          </div>`).join('')}
+      </div>
+      <div class="swot-widget-grid">
+        <div class="swot-widget-card swot-widget-S">
+          <span class="swot-widget-icon">💪</span>
+          <span class="swot-widget-label">Strength</span>
+          <p class="swot-widget-text">${topItem(s.strengths)}</p>
+        </div>
+        <div class="swot-widget-card swot-widget-W">
+          <span class="swot-widget-icon">⚠️</span>
+          <span class="swot-widget-label">Weakness</span>
+          <p class="swot-widget-text">${topItem(s.weaknesses)}</p>
+        </div>
+        <div class="swot-widget-card swot-widget-O">
+          <span class="swot-widget-icon">🚀</span>
+          <span class="swot-widget-label">Opportunity</span>
+          <p class="swot-widget-text">${topItem(s.opportunities)}</p>
+        </div>
+        <div class="swot-widget-card swot-widget-T">
+          <span class="swot-widget-icon">🔴</span>
+          <span class="swot-widget-label">Threat</span>
+          <p class="swot-widget-text">${topItem(s.threats)}</p>
+        </div>
+      </div>
+      ${swot.priority_action ? `<p class="swot-widget-action">→ ${swot.priority_action}</p>` : ''}
+    `;
+  }
+
+  /* ══════════════════════════════════════════
+     TODAY'S TRAINING CARD
+  ══════════════════════════════════════════ */
+  function renderTrainingWidget() {
+    const content  = document.getElementById('trainingWidgetContent');
+    const dayLabel = document.getElementById('trainingDayLabel');
+    if (!content) return;
+
+    let plan = null;
+    try { plan = JSON.parse(localStorage.getItem('zitlas_workout_plan') || 'null'); } catch (_) {}
+
+    console.log('WORKOUT PLAN:', plan);
+
+    if (!plan || !plan.weekly_plan || !plan.weekly_plan.length) {
+      if (dayLabel) dayLabel.textContent = 'Complete assessment to unlock';
+      content.innerHTML = `<div class="widget-empty-state">
+        <p class="widget-empty-text">Generate your AI workout plan to see today's training.</p>
+        <a href="./ai-coach/ai-coach.html" class="widget-empty-cta">Get Workout Plan →</a>
+      </div>`;
+      return;
+    }
+
+    const DAY_NAMES  = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    const todayName  = DAY_NAMES[new Date().getDay()];
+    const weeklyPlan = plan.weekly_plan;
+
+    let todayDay = weeklyPlan.find(d => d.day && d.day.toLowerCase() === todayName.toLowerCase());
+    if (!todayDay) todayDay = weeklyPlan[0];
+
+    const planName = plan.plan_name || 'Personalised Plan';
+    const freq     = plan.weekly_frequency || (weeklyPlan.length + ' days/week');
+
+    if (dayLabel) dayLabel.textContent = `${freq} · ${planName}`;
+
+    const isRest    = (todayDay.type || '').toLowerCase().includes('rest');
+    const exercises = todayDay.exercises || [];
+
+    function typeClass(t) {
+      const s = (t || '').toLowerCase();
+      if (s.includes('rest'))     return 'ttc-badge--rest';
+      if (s.includes('recovery')) return 'ttc-badge--recovery';
+      if (s.includes('walking'))  return 'ttc-badge--walking';
+      return 'ttc-badge--workout';
+    }
+
+    content.innerHTML = `
+      <div class="ttc-card">
+
+        <div class="ttc-header">
+          <div class="ttc-day-row">
+            <span class="ttc-day-name">${todayDay.day || todayName}</span>
+            <span class="ttc-type-badge ${typeClass(todayDay.type)}">${todayDay.type || 'Workout'}</span>
+          </div>
+          <h3 class="ttc-focus">${todayDay.focus || planName}</h3>
+        </div>
+
+        ${isRest ? `<div class="ttc-rest-banner">😴 Rest Day — recover and recharge</div>` : ''}
+
+        <div class="ttc-stats">
+          ${todayDay.duration_minutes ? `
+          <div class="ttc-stat-block">
+            <span class="ttc-stat-icon">⏱</span>
+            <span class="ttc-stat-val">${todayDay.duration_minutes} min</span>
+            <span class="ttc-stat-lbl">Duration</span>
+          </div>` : ''}
+          ${todayDay.calories_burned_est ? `
+          <div class="ttc-stat-block">
+            <span class="ttc-stat-icon">🔥</span>
+            <span class="ttc-stat-val">${todayDay.calories_burned_est} kcal</span>
+            <span class="ttc-stat-lbl">Est. Calories</span>
+          </div>` : ''}
+          ${!isRest && exercises.length ? `
+          <div class="ttc-stat-block">
+            <span class="ttc-stat-icon">💪</span>
+            <span class="ttc-stat-val">${exercises.length}</span>
+            <span class="ttc-stat-lbl">Exercises</span>
+          </div>` : ''}
+        </div>
+
+        ${todayDay.daily_tip ? `<p class="ttc-tip">💡 ${todayDay.daily_tip}</p>` : ''}
+
+      </div>
+    `;
+  }
+
+  /* ══════════════════════════════════════════
+     WEEKLY PLAN MODAL
+  ══════════════════════════════════════════ */
+  function openWeeklyPlanModal() {
+    let plan = null;
+    try { plan = JSON.parse(localStorage.getItem('zitlas_workout_plan') || 'null'); } catch (_) {}
+
+    console.log('WORKOUT PLAN (weekly modal):', plan);
+
+    const modal    = document.getElementById('weeklyPlanModal');
+    const subtitle = document.getElementById('weeklyPlanSubtitle');
+    const list     = document.getElementById('weeklyPlanList');
+    if (!modal) return;
+
+    if (plan && plan.plan_name && subtitle) {
+      subtitle.textContent = (plan.weekly_frequency || '7 days/week') + ' · ' + plan.plan_name;
+    }
+
+    if (list) {
+      if (!plan || !plan.weekly_plan || !plan.weekly_plan.length) {
+        list.innerHTML = `<div class="widget-empty-state">
+          <p class="widget-empty-text">No workout plan found. Complete your assessment first.</p>
+          <a href="./ai-coach/ai-coach.html" class="widget-empty-cta">Get Workout Plan →</a>
+        </div>`;
+      } else {
+        const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+        const todayName = DAY_NAMES[new Date().getDay()];
+
+        function dayTypeIcon(t) {
+          const s = (t || '').toLowerCase();
+          if (s.includes('rest'))     return '😴';
+          if (s.includes('recovery')) return '🧘';
+          if (s.includes('walking'))  return '🚶';
+          if (s.includes('cardio'))   return '🏃';
+          return '💪';
+        }
+
+        list.innerHTML = plan.weekly_plan.map((day, i) => {
+          const isToday = day.day && day.day.toLowerCase() === todayName.toLowerCase();
+          const isRest  = (day.type || '').toLowerCase().includes('rest');
+          const icon    = dayTypeIcon(day.type);
+          const exList  = (day.exercises || []).slice(0, 4);
+
+          const exercisesHtml = !isRest && exList.length ? `
+            <ul class="wpl-ex-list">
+              ${exList.map(ex => `<li>${ex.name || ''}${ex.reps_or_duration ? ' — ' + ex.reps_or_duration : ''}</li>`).join('')}
+              ${day.exercises.length > 4 ? `<li class="wpl-ex-more">+${day.exercises.length - 4} more</li>` : ''}
+            </ul>` : '';
+
+          return `
+            <div class="wpl-day-card${isToday ? ' wpl-today' : ''}" data-wpl-idx="${i}">
+              <button class="wpl-trigger" data-wpl-idx="${i}">
+                <div class="wpl-trigger-left">
+                  <span class="wpl-day-abbr">${(day.day || '').slice(0,3).toUpperCase()}</span>
+                  <span class="wpl-icon">${icon}</span>
+                  <div class="wpl-info">
+                    <span class="wpl-day-full">${day.day || ('Day ' + (i+1))}${isToday ? ' <span class="wpl-today-chip">Today</span>' : ''}</span>
+                    <span class="wpl-focus">${day.focus || day.type || 'Training'}</span>
+                  </div>
+                </div>
+                <div class="wpl-trigger-right">
+                  ${day.duration_minutes ? `<span class="wpl-meta-chip">⏱ ${day.duration_minutes}m</span>` : ''}
+                  ${day.calories_burned_est ? `<span class="wpl-meta-chip">🔥 ${day.calories_burned_est}</span>` : ''}
+                  <span class="wpl-arrow">▼</span>
+                </div>
+              </button>
+              ${exercisesHtml || isRest ? `
+              <div class="wpl-body">
+                ${isRest ? '<p class="wpl-rest-note">😴 Rest — no structured exercise today.</p>' : exercisesHtml}
+                ${day.daily_tip ? `<p class="wpl-tip">💡 ${day.daily_tip}</p>` : ''}
+              </div>` : ''}
+            </div>`;
+        }).join('');
+
+        /* Accordion toggle */
+        list.querySelectorAll('.wpl-trigger').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const card = btn.closest('.wpl-day-card');
+            const wasOpen = card.classList.contains('open');
+            list.querySelectorAll('.wpl-day-card.open').forEach(c => c.classList.remove('open'));
+            if (!wasOpen) card.classList.add('open');
+          });
+        });
+
+        /* Auto-open today */
+        const todayCard = list.querySelector('.wpl-today');
+        if (todayCard) todayCard.classList.add('open');
+      }
+    }
+
+    modal.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeWeeklyPlanModal() {
+    const modal = document.getElementById('weeklyPlanModal');
+    if (!modal) return;
+    modal.classList.remove('open');
+    document.body.style.overflow = '';
+  }
+
+  function initWeeklyPlanModal() {
+    const viewBtn  = document.getElementById('viewWeeklyPlanBtn');
+    const closeBtn = document.getElementById('closeWeeklyPlanModal');
+    const modal    = document.getElementById('weeklyPlanModal');
+
+    if (viewBtn) viewBtn.addEventListener('click', function () {
+      window.location.href = './weekly-plan/weekly-plan.html';
+    });
+    if (closeBtn) closeBtn.addEventListener('click', closeWeeklyPlanModal);
+    if (modal) {
+      modal.addEventListener('click', e => { if (e.target === modal) closeWeeklyPlanModal(); });
+    }
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && modal && modal.classList.contains('open')) closeWeeklyPlanModal();
+    });
+  }
+
+  /* ══════════════════════════════════════════
+     STAT COUNT-UP
+  ══════════════════════════════════════════ */
+  function countUp(el, target, suffix, duration = 800) {
+    const start = performance.now();
+    const dec   = suffix === '' && String(target).includes('.') ? 2 : 0;
+    function tick(now) {
+      const p = Math.min((now - start) / duration, 1);
+      const e = 1 - Math.pow(1 - p, 3);
+      el.textContent = dec ? (target * e).toFixed(dec) + suffix : Math.round(target * e) + suffix;
+      if (p < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+
+  function initStatCountUp() {
+    const stats = [
+      { sel: '.qs-card:nth-child(1) .qs-val', val: 7,    suf: '' },
+      { sel: '.qs-card:nth-child(2) .qs-val', val: 5,    suf: '' },
+      { sel: '.qs-card:nth-child(3) .qs-val', val: 3,    suf: '' },
+      { sel: '.qs-card:nth-child(4) .qs-val', val: 4.50, suf: '' },
+    ];
+    setTimeout(() => {
+      stats.forEach(({ sel, val, suf }, i) => {
+        const el = document.querySelector(sel);
+        if (el) {
+          el.textContent = '0' + suf;
+          setTimeout(() => countUp(el, val, suf, 700), i * 80);
+        }
+      });
+    }, 350);
+  }
+
+  /* ══════════════════════════════════════════
+     STREAK PULSE
+  ══════════════════════════════════════════ */
+  function initStreakPulse() {
+    const card = document.querySelector('.streak-card');
+    if (!card) return;
+    let count = 0;
+    setInterval(() => {
+      count++;
+      if (count % 4 === 0) {
+        card.style.boxShadow = '0 0 18px rgba(255,138,0,0.45)';
+        setTimeout(() => { card.style.boxShadow = ''; }, 500);
+      }
+    }, 2000);
+  }
+
+  /* ══════════════════════════════════════════
+     SCROLL ENTRANCE ANIMATIONS
+  ══════════════════════════════════════════ */
+  function initScrollAnimations() {
+    if (!('IntersectionObserver' in window)) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.style.opacity = '1';
+            entry.target.style.transform = 'translateY(0)';
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.08 }
+    );
+
+    ['.roadmap-card', '.task-card', '.qs-card'].forEach((sel) => {
+      document.querySelectorAll(sel).forEach((el, i) => {
+        el.style.opacity = '0';
+        el.style.transform = 'translateY(12px)';
+        el.style.transition = `opacity 0.36s ease ${0.06 * i}s, transform 0.4s cubic-bezier(0.34,1.2,0.64,1) ${0.06 * i}s`;
+        observer.observe(el);
+      });
+    });
+  }
+
+  /* ══════════════════════════════════════════
+     INIT
+  ══════════════════════════════════════════ */
+  function safeRun(name, fn) {
+    try { fn(); }
+    catch (err) { console.error('[ZITLAS] Error in', name, ':', err); }
+  }
+
+  function init() {
+    if (!isLoggedIn()) {
+      window.location.replace('../login/login.html');
+      return;
+    }
+
+    safeRun('loadFirebaseUserProfile', loadFirebaseUserProfile);
+    safeRun('loadTheme',        loadTheme);
+    safeRun('initGreeting',     initGreeting);
+    safeRun('initNotifBell',    initNotifBell);
+
+    /* Debug: print key data sources on load */
+    try {
+      const athleteProfile = JSON.parse(localStorage.getItem('athlete_profile') || 'null');
+      console.log('[ZITLAS] PROFILE:', athleteProfile
+        ? `role: ${athleteProfile.role} | goal: ${athleteProfile.goal} | time: ${athleteProfile.daily_training_time}`
+        : 'null');
+      console.log('[ZITLAS] SURVEY:', localStorage.getItem('zitlas_survey') || 'null');
+      console.log('[ZITLAS] AUTH:', isLoggedIn() ? 'logged-in' : 'logged-out');
+      console.log('[ZITLAS] KEYS:', Object.keys(localStorage).filter(k => k.startsWith('zitlas') || k === 'athlete_profile').join(', '));
+    } catch(_) {}
+
+    safeRun('checkPendingAction',   checkPendingAction);
+    safeRun('renderGoalCard',       renderGoalCard);
+    safeRun('initGoalActionBtn',    initGoalActionBtn);
+    safeRun('initSetGoalModal',     initSetGoalModal);
+    safeRun('initResetGoalModal',   initResetGoalModal);
+    safeRun('initLoginModal',       initLoginModal);
+    safeRun('initTaskCardClick',    initTaskCardClick);
+    safeRun('initImageFallbacks',   initImageFallbacks);
+    safeRun('initViewButtons',      initViewButtons);
+    safeRun('renderSwotWidget',     renderSwotWidget);
+    safeRun('renderTrainingWidget', renderTrainingWidget);
+    safeRun('initWeeklyPlanModal',  initWeeklyPlanModal);
+    safeRun('renderChats',          renderChats);
+    safeRun('initStatCountUp',      initStatCountUp);
+    safeRun('initStreakPulse',      initStreakPulse);
+    requestAnimationFrame(initScrollAnimations);
+
+    console.log('[ZITLAS] init() complete — all handlers attached');
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();

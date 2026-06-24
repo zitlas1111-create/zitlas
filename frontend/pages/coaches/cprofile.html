@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ZITLAS — Expert Profile</title>
+  <link rel="stylesheet" href="cprofile.css" />
+  <script src="../../assets/js/i18n.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <script src="../../assets/js/firebase-config.js"></script>
+</head>
+<body>
+
+<!-- ══ 1. STICKY HEADER ══════════════════════════════════════════════ -->
+<header class="cp-header" id="cpHeader">
+  <button class="cp-hdr-btn" id="backBtn" aria-label="Go back">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="15 18 9 12 15 6"/>
+    </svg>
+  </button>
+  <span class="cp-hdr-name" id="cpHdrName"></span>
+  <button class="cp-hdr-btn" id="menuBtn" aria-label="More options">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="5"  r="1.2" fill="currentColor" stroke="none"/>
+      <circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"/>
+      <circle cx="12" cy="19" r="1.2" fill="currentColor" stroke="none"/>
+    </svg>
+  </button>
+</header>
+
+<!-- ══ MORE MENU ══════════════════════════════════════════════════════ -->
+<div class="cp-more-menu" id="cpMoreMenu">
+  <button class="cp-more-item" id="shareProfileBtn">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+    Share Profile
+  </button>
+  <button class="cp-more-item" id="saveExpertBtn">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+    Save Expert
+  </button>
+  <button class="cp-more-item cp-more-item--danger">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+    Report
+  </button>
+</div>
+<div class="cp-more-overlay" id="cpMoreOverlay"></div>
+
+<!-- ══ 2. HERO ZONE ══════════════════════════════════════════════════ -->
+<section class="cp-hero" id="cpHero">
+  <div class="cp-hero-gradient" id="cpHeroGradient"></div>
+  <div class="cp-hero-content">
+
+    <!-- Availability pill -->
+    <div class="cp-avail-pill" id="cpAvailPill">
+      <span class="cp-avail-pulse"></span>
+      <span id="cpAvailText">Available Today</span>
+    </div>
+
+    <!-- Circular image -->
+    <div class="cp-profile-ring" id="cpProfileRing">
+      <img class="cp-hero-img" id="coachImg" src="" alt="" />
+      <span class="cp-hero-initials" id="cpHeroInitials"></span>
+    </div>
+
+    <!-- Name + role -->
+    <h1 class="cp-hero-name" id="coachName">—</h1>
+    <p class="cp-hero-role" id="coachRole">—</p>
+
+    <!-- Rating row -->
+    <div class="cp-hero-rating">
+      <span class="cp-hero-stars" id="coachStars">★★★★★</span>
+      <span class="cp-hero-score" id="coachRating">4.9</span>
+      <span class="cp-hero-rcount" id="coachReviews">(128 reviews)</span>
+    </div>
+
+    <!-- Verified badges -->
+    <div class="cp-hero-badges">
+      <span class="cp-badge cp-badge--verified">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        Verified Expert
+      </span>
+      <span class="cp-badge cp-badge--ai">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z"/><path d="M12 8v4l3 3"/></svg>
+        AI Matched
+      </span>
+    </div>
+
+  </div>
+</section>
+
+<!-- ══ 3. QUICK INFO STRIP ═══════════════════════════════════════════ -->
+<div class="cp-qi-strip">
+  <div class="cp-qi-item">
+    <span class="cp-qi-val" id="cpLang">EN, HI</span>
+    <span class="cp-qi-lbl">Languages</span>
+  </div>
+  <div class="cp-qi-sep"></div>
+  <div class="cp-qi-item">
+    <span class="cp-qi-val" id="coachExp">8+ yrs</span>
+    <span class="cp-qi-lbl">Experience</span>
+  </div>
+  <div class="cp-qi-sep"></div>
+  <div class="cp-qi-item">
+    <span class="cp-qi-val" id="cpChatRate">₹149</span>
+    <span class="cp-qi-lbl">Chat/min</span>
+  </div>
+  <div class="cp-qi-sep"></div>
+  <div class="cp-qi-item">
+    <span class="cp-qi-val" id="cpCallRate">₹179</span>
+    <span class="cp-qi-lbl">Call/min</span>
+  </div>
+</div>
+
+<!-- ══ 4. PRIMARY CTAs ════════════════════════════════════════════════ -->
+<div class="cp-primary-ctas" id="cpPrimaryCtas">
+  <button class="cp-cta cp-cta--chat" id="inlineChatBtn">
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    Chat Now
+  </button>
+  <button class="cp-cta cp-cta--call" id="inlineCallBtn">
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.62 3.38 2 2 0 0 1 3.59 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.56a16 16 0 0 0 6.29 6.29l.83-.82a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+    Call Now
+  </button>
+  <button class="cp-cta cp-cta--verify" id="verifyPlanBtn">
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+    Verify Plan
+  </button>
+</div>
+
+<!-- Verify Again + Previous Reviews (shown only when a review is completed) -->
+<div class="cp-verify-again-wrap" id="verifyAgainWrap" style="display:none">
+  <button class="cp-verify-again-btn" id="verifyAgainBtn">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+    Verify Again
+  </button>
+</div>
+
+<!-- Previous Reviews (collapsible list) -->
+<div class="cp-prev-reviews" id="prevReviewsSection" style="display:none"></div>
+
+<!-- ══ 5. ABOUT ══════════════════════════════════════════════════════ -->
+<section class="cp-section">
+  <h2 class="cp-section-title">About</h2>
+  <div class="cp-about-wrap">
+    <p class="cp-about-text" id="aboutText"></p>
+    <button class="cp-read-more" id="readMoreBtn">Read More ▾</button>
+  </div>
+</section>
+
+<!-- ══ 6. EXPERTISE TAGS ═════════════════════════════════════════════ -->
+<section class="cp-section">
+  <h2 class="cp-section-title">Expertise</h2>
+  <div class="cp-tags-wrap" id="expertiseGrid"></div>
+</section>
+
+<!-- ══ 7. SUCCESS METRICS ════════════════════════════════════════════ -->
+<section class="cp-section">
+  <h2 class="cp-section-title">Track Record</h2>
+  <div class="cp-metrics-grid" id="statsGrid"></div>
+</section>
+
+<!-- ══ 8. SERVICES ═══════════════════════════════════════════════════ -->
+<section class="cp-section">
+  <h2 class="cp-section-title">Services</h2>
+  <div class="cp-services-list" id="servicesList"></div>
+</section>
+
+<!-- ══ 9. TRANSFORMATION GALLERY ════════════════════════════════════ -->
+<section class="cp-section cp-gallery-section">
+  <div class="cp-section-header-row">
+    <h2 class="cp-section-title">Client Results</h2>
+    <span class="cp-real-tag">Real results · verified</span>
+  </div>
+  <div class="cp-gallery-outer">
+    <div class="cp-gallery-scroll" id="galleryScroll"></div>
+  </div>
+</section>
+
+<!-- ══ 10. REVIEWS ════════════════════════════════════════════════════ -->
+<section class="cp-section">
+  <div class="cp-section-header-row">
+    <h2 class="cp-section-title">Reviews</h2>
+    <div class="cp-rating-badge">
+      <span class="cp-rb-star">★</span>
+      <span class="cp-rb-val" id="cpRbVal">4.9</span>
+    </div>
+  </div>
+  <div class="cp-rating-bars" id="ratingBars"></div>
+  <div class="cp-reviews-list" id="reviewsList"></div>
+  <button class="cp-view-all-btn" id="viewAllReviews">
+    View All <span id="reviewTotalCount">128</span> Reviews
+  </button>
+</section>
+
+<!-- ══ 11. AVAILABILITY ══════════════════════════════════════════════ -->
+<section class="cp-section">
+  <h2 class="cp-section-title">Availability</h2>
+  <div class="cp-avail-section" id="cpAvailSection"></div>
+</section>
+
+<!-- ══ 12. TRUST BADGES ══════════════════════════════════════════════ -->
+<section class="cp-trust-section">
+  <div class="cp-trust-item">
+    <div class="cp-trust-icon cp-trust-icon--ai">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z"/><path d="M12 8v4l3 3"/></svg>
+    </div>
+    <div class="cp-trust-text">
+      <span class="cp-trust-title">ZITLAS AI Verified</span>
+      <span class="cp-trust-sub">Profile, credentials and reviews verified by ZITLAS AI</span>
+    </div>
+    <svg class="cp-trust-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22C55E" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+  </div>
+  <div class="cp-trust-item">
+    <div class="cp-trust-icon cp-trust-icon--cert">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/></svg>
+    </div>
+    <div class="cp-trust-text">
+      <span class="cp-trust-title">Degree Certified</span>
+      <span class="cp-trust-sub">Verified nutrition qualification with credentials on file</span>
+    </div>
+    <svg class="cp-trust-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22C55E" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+  </div>
+  <div class="cp-trust-item">
+    <div class="cp-trust-icon cp-trust-icon--secure">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+    </div>
+    <div class="cp-trust-text">
+      <span class="cp-trust-title">Private & Secure</span>
+      <span class="cp-trust-sub">All consultations are confidential. Your data is never shared.</span>
+    </div>
+    <svg class="cp-trust-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22C55E" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+  </div>
+</section>
+
+<!-- ══ BOTTOM SPACER (for sticky bar) ══════════════════════════════ -->
+<div style="height:88px"></div>
+
+<!-- ══ 13. STICKY BOTTOM CTA ════════════════════════════════════════ -->
+<div class="cp-sticky-bottom" id="cpStickyBottom">
+  <div class="cp-sticky-inner">
+    <div class="cp-sticky-price">
+      <span class="cp-sticky-from">Starting at</span>
+      <span class="cp-sticky-amt" id="cpStickyAmt">₹149/min</span>
+    </div>
+    <div class="cp-sticky-btns">
+      <button class="cp-sb-btn cp-sb-btn--chat" id="stickyChatBtn">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        Chat Now
+      </button>
+      <button class="cp-sb-btn cp-sb-btn--call" id="stickyCallBtn">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.62 3.38 2 2 0 0 1 3.59 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.56a16 16 0 0 0 6.29 6.29l.83-.82a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+        Call Now
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     MODALS + CHAT OVERLAY (existing functional code — unchanged)
+════════════════════════════════════════════════════════════════════ -->
+
+<!-- ── CONTEXT MODAL ──────────────────────────────────────────────── -->
+<div class="modal-overlay" id="contextModal" role="dialog" aria-modal="true" aria-labelledby="contextModalTitle">
+  <div class="modal-card">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div>
+        <h3 class="modal-title" id="contextModalTitle">Share Context with Expert</h3>
+        <p class="modal-coach-tag" id="modalCoachTag">with Expert</p>
+      </div>
+      <button class="modal-close-btn" id="closeModal" aria-label="Close">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-summary">
+      <img class="modal-coach-img" id="modalCoachImg" src="" alt="" />
+      <div class="modal-summary-info">
+        <span class="modal-summary-name" id="modalCoachName">—</span>
+        <span class="modal-summary-role" id="modalCoachRole">—</span>
+      </div>
+    </div>
+    <p class="ctx-attach-label">Automatically sharing with expert</p>
+    <div class="ctx-chips" id="ctxChips">
+      <span class="ctx-chip" data-key="assessment">📋 Assessment</span>
+      <span class="ctx-chip" data-key="fitness">📊 Fitness Snapshot</span>
+      <span class="ctx-chip" data-key="swot">🎯 SWOT Report</span>
+      <span class="ctx-chip" data-key="diet">🥗 Diet Plan</span>
+      <span class="ctx-chip" data-key="workout">💪 Workout Plan</span>
+    </div>
+    <div class="ctx-question-wrap">
+      <label class="ctx-question-label" for="userQuestion">What would you like help with?</label>
+      <textarea class="ctx-textarea" id="userQuestion" rows="3" placeholder="E.g. I cannot follow the hostel diet. Suggest cheaper alternatives."></textarea>
+    </div>
+    <div class="ctx-fee-row">
+      <span class="ctx-fee-label">Consultation Fee</span>
+      <span class="ctx-fee-val" id="ctxFeeVal">—</span>
+    </div>
+    <button class="send-expert-btn" id="sendExpertBtn">Send to Expert →</button>
+  </div>
+</div>
+
+<!-- ── VERIFY DIET PLAN MODAL ─────────────────────────────────────── -->
+<div class="modal-overlay" id="verifyModal" role="dialog" aria-modal="true" aria-labelledby="verifyModalTitle">
+  <div class="modal-card">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div>
+        <h3 class="modal-title" id="verifyModalTitle">Verify My Diet Plan</h3>
+        <p class="modal-coach-tag" id="verifyCoachTag">Expert Review</p>
+      </div>
+      <button class="modal-close-btn" id="closeVerifyModal" aria-label="Close">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="verify-expert-can">
+      <p class="verify-expert-can-title">The expert will review and can:</p>
+      <ul class="verify-can-list">
+        <li>Replace individual meals</li>
+        <li>Adjust calorie &amp; protein targets</li>
+        <li>Suggest budget or hostel-friendly options</li>
+        <li>Customize for allergies or restrictions</li>
+      </ul>
+    </div>
+    <p class="ctx-attach-label">Automatically attaching to this review</p>
+    <div class="ctx-chips" id="verifyCtxChips">
+      <span class="ctx-chip" data-key="assessment">📋 Assessment</span>
+      <span class="ctx-chip" data-key="fitness">📊 Fitness Snapshot</span>
+      <span class="ctx-chip" data-key="swot">🎯 SWOT Report</span>
+      <span class="ctx-chip" data-key="diet">🥗 Diet Plan</span>
+      <span class="ctx-chip" data-key="goal">🏁 Goal</span>
+    </div>
+    <div class="ctx-question-wrap">
+      <label class="ctx-question-label" for="verifyNote">Any specific requests? (optional)</label>
+      <textarea class="ctx-textarea" id="verifyNote" rows="2" placeholder="E.g. I live in a hostel. Suggest food available in a mess. I have a nut allergy."></textarea>
+    </div>
+    <label class="verify-upload-area" id="verifyUploadArea">
+      <input type="file" id="verifyFileInput" accept=".pdf,image/*" aria-label="Attach file" />
+      <span class="verify-upload-icon">📎</span>
+      <span class="verify-upload-text">Attach mess menu, photo, or report (optional)</span>
+      <span class="verify-upload-name" id="verifyFileName"></span>
+    </label>
+    <div class="ctx-fee-row">
+      <span class="ctx-fee-label">Review Fee</span>
+      <span class="ctx-fee-val" id="verifyFeeVal">—</span>
+    </div>
+    <button class="send-expert-btn" id="sendReviewBtn">Send for Review →</button>
+  </div>
+</div>
+
+<!-- ── EXPERT CHAT OVERLAY ────────────────────────────────────────── -->
+<div class="zc-overlay" id="chatOverlay" role="dialog" aria-modal="true">
+  <header class="zc-header">
+    <button class="zc-hdr-back" id="chatBackBtn" aria-label="Back">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
+      </svg>
+    </button>
+    <div class="zc-hdr-av" id="chatHdrAvatar">E</div>
+    <div class="zc-hdr-info">
+      <span class="zc-hdr-name" id="chatHdrName">Expert</span>
+      <span class="zc-hdr-status">
+        <span class="zc-hdr-online"></span>
+        <span id="chatHdrRole">Coach</span>
+      </span>
+    </div>
+    <span class="chat-review-status" id="chatReviewStatus" style="display:none">🟡 Under Review</span>
+    <button class="zc-call-btn" id="chatCallBtn" aria-label="Voice call">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.63 3.37 2 2 0 0 1 3.6 1h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 8.56a16 16 0 0 0 6 6l.94-.94a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+      </svg>
+    </button>
+    <div class="zc-menu-wrap" id="chatMenuWrap">
+      <button class="zc-menu-btn" id="chatMenuBtn" aria-label="More options">⋮</button>
+      <div class="zc-dropdown" id="chatDropdown">
+        <button class="zc-dropdown-item" id="chatClearBtn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+          Clear Chat
+        </button>
+        <button class="zc-dropdown-item" id="chatViewCoachBtn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          View Coach Profile
+        </button>
+      </div>
+    </div>
+  </header>
+  <div class="zc-confirm-backdrop" id="chatClearBackdrop">
+    <div class="zc-confirm-modal">
+      <p class="zc-confirm-title">Clear this chat?</p>
+      <p class="zc-confirm-sub">Messages will disappear from your view only. Your coach's history stays unchanged.</p>
+      <div class="zc-confirm-actions">
+        <button class="zc-confirm-cancel" id="chatClearCancel">Cancel</button>
+        <button class="zc-confirm-ok" id="chatClearConfirm">Clear</button>
+      </div>
+    </div>
+  </div>
+  <div class="zc-messages" id="chatMessages"></div>
+  <div class="zc-input-bar">
+    <textarea class="zc-input" id="chatInput" placeholder="Message your coach…" rows="1"></textarea>
+    <button class="zc-send-btn" id="chatSendBtn" aria-label="Send">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+      </svg>
+    </button>
+  </div>
+</div>
+
+<!-- ── VERIFY PLAN BOTTOM SHEET ───────────────────────────────────── -->
+<div class="vp-sheet-overlay" id="vpSheet" role="dialog" aria-modal="true" aria-labelledby="vpSheetTitle">
+  <div class="vp-sheet-card">
+    <div class="vp-sheet-handle"></div>
+    <h3 class="vp-sheet-title" id="vpSheetTitle">What would you like this expert to review?</h3>
+    <div class="vp-sheet-options">
+      <button class="vp-option" id="vpOptDiet" data-type="diet">
+        <span class="vp-opt-icon">🥗</span>
+        <div class="vp-opt-text">
+          <span class="vp-opt-title">Verify Diet Plan</span>
+          <span class="vp-opt-sub">Expert reviews your 7-day meal plan</span>
+        </div>
+        <span class="vp-opt-check" id="vpCheckDiet"></span>
+      </button>
+      <button class="vp-option" id="vpOptWorkout" data-type="workout">
+        <span class="vp-opt-icon">💪</span>
+        <div class="vp-opt-text">
+          <span class="vp-opt-title">Verify Workout Plan</span>
+          <span class="vp-opt-sub">Expert reviews your 7-day training schedule</span>
+        </div>
+        <span class="vp-opt-check" id="vpCheckWorkout"></span>
+      </button>
+    </div>
+    <button class="vp-submit-btn" id="vpSubmitBtn" disabled>Send for Review →</button>
+    <button class="vp-cancel-btn" id="vpCancelBtn">Cancel</button>
+  </div>
+</div>
+
+<!-- ── EXPERT REVIEW COMPARISON SHEET ───────────────────────────── -->
+<div class="rc-sheet-overlay" id="rcSheet" role="dialog" aria-modal="true">
+  <div class="rc-sheet-card">
+    <div class="rc-sheet-handle"></div>
+    <div class="rc-sheet-header">
+      <h3 class="rc-sheet-title" id="rcTitle">Expert Review</h3>
+      <button class="rc-close-btn" id="rcCloseBtn" aria-label="Close">✕</button>
+    </div>
+    <div class="rc-tabs">
+      <button class="rc-tab" id="rcTabOriginal">Original Plan</button>
+      <button class="rc-tab rc-tab--active" id="rcTabReviewed">Expert's Version</button>
+    </div>
+    <div class="rc-pane-wrap">
+      <div class="rc-pane" id="rcPaneOriginal" style="display:none"></div>
+      <div class="rc-pane" id="rcPaneReviewed"></div>
+    </div>
+    <button class="rc-accept-btn" id="rcAcceptBtn">✅ Accept Expert's Changes</button>
+  </div>
+</div>
+
+<!-- ══ TOAST ════════════════════════════════════════════════════════ -->
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="../../components/wallet.js"></script>
+  <script src="../../components/navbar.js"></script>
+<script src="cprofile.js"></script>
+</body>
+</html>

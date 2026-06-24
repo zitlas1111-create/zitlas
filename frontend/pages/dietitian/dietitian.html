@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ZITLAS — Experts</title>
+  <link rel="stylesheet" href="dietitian.css" />
+  <script src="../../assets/js/i18n.js"></script>
+</head>
+<body>
+
+  <!-- ════════════ HEADER ════════════ -->
+  <header class="dt-header">
+    <button class="icon-btn" id="backBtn" aria-label="Go back">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="19" y1="12" x2="5" y2="12"/>
+        <polyline points="12 19 5 12 12 5"/>
+      </svg>
+    </button>
+    <div class="dt-header-center">
+      <h1 class="dt-header-title" data-i18n="dt_title">Experts</h1>
+      <p class="dt-header-sub" data-i18n="dt_sub">Real human guidance for real results</p>
+    </div>
+    <div class="dt-header-right" aria-hidden="true"></div>
+  </header>
+
+  <!-- ════════════ ELITE BANNER ════════════ -->
+  <div class="elite-banner" id="eliteBanner">
+    <span class="elite-crown">👑</span>
+    <div class="elite-text">
+      <span class="elite-title" data-i18n="dt_elite_title">Elite Member</span>
+      <span class="elite-sub" data-i18n="dt_elite_sub">1 free consultation this month</span>
+    </div>
+    <span class="elite-badge">FREE</span>
+  </div>
+
+  <!-- ════════════ MAIN CONTENT ════════════ -->
+  <main class="dt-main">
+
+    <!-- ── PAGE HEADING ── -->
+    <div class="dt-page-heading">
+      <h2 class="dt-page-title" data-i18n="dt_available">Available Experts</h2>
+      <span class="dt-count" id="dtCount">6 available</span>
+    </div>
+
+    <!-- ── FILTERS ── -->
+    <div class="filters-outer">
+      <div class="filters-scroll" id="filtersScroll">
+
+        <!-- Language -->
+        <div class="filter-group" id="filterLang">
+          <button class="filter-pill active" data-filter="lang" data-value="all" data-i18n="dt_filter_all_lang">All Languages</button>
+          <button class="filter-pill" data-filter="lang" data-value="hindi" data-i18n="dt_filter_hindi">Hindi</button>
+          <button class="filter-pill" data-filter="lang" data-value="english" data-i18n="dt_filter_english">English</button>
+          <button class="filter-pill" data-filter="lang" data-value="marathi" data-i18n="dt_filter_marathi">Marathi</button>
+          <button class="filter-pill" data-filter="lang" data-value="tamil" data-i18n="dt_filter_tamil">Tamil</button>
+          <button class="filter-pill" data-filter="lang" data-value="telugu" data-i18n="dt_filter_telugu">Telugu</button>
+        </div>
+
+        <div class="filter-divider"></div>
+
+        <!-- Mode -->
+        <button class="filter-pill" data-filter="mode" data-value="online">
+          <span class="filter-dot filter-dot-green"></span><span data-i18n="dt_filter_online">Online</span>
+        </button>
+        <button class="filter-pill" data-filter="mode" data-value="offline">
+          <span class="filter-dot filter-dot-orange"></span><span data-i18n="dt_filter_offline">Offline</span>
+        </button>
+
+        <div class="filter-divider"></div>
+
+        <!-- Fee Range -->
+        <button class="filter-pill" data-filter="fee" data-value="budget">Under ₹400</button>
+        <button class="filter-pill" data-filter="fee" data-value="mid">₹400–₹600</button>
+        <button class="filter-pill" data-filter="fee" data-value="premium">₹600+</button>
+
+        <div class="filter-divider"></div>
+
+        <!-- Specialization -->
+        <button class="filter-pill" data-filter="sport" data-value="weight_loss">⚖️ Weight Loss</button>
+        <button class="filter-pill" data-filter="sport" data-value="nutrition">🥗 Nutrition</button>
+        <button class="filter-pill" data-filter="sport" data-value="fitness">💪 Fitness</button>
+        <button class="filter-pill" data-filter="sport" data-value="wellness">🌿 Wellness</button>
+        <button class="filter-pill" data-filter="sport" data-value="athletics">🏃 Athletics</button>
+
+      </div>
+    </div>
+
+    <!-- ── ACTIVE FILTER TAGS ── -->
+    <div class="active-filters" id="activeFilters" style="display:none">
+      <!-- Populated by JS -->
+    </div>
+
+    <!-- ── EXPERT CARDS ── -->
+    <div class="dt-list" id="dtList">
+      <!-- Populated by dietitian.js -->
+    </div>
+
+    <!-- ── EMPTY STATE ── -->
+    <div class="dt-empty" id="dtEmpty" style="display:none">
+      <span class="dt-empty-icon">🥗</span>
+      <h3 class="dt-empty-title" data-i18n="dt_empty_title">No experts found</h3>
+      <p class="dt-empty-desc" data-i18n="dt_empty_desc">No experts available for the selected filters.<br>Try adjusting your filters or check back later.</p>
+      <button class="dt-empty-reset-btn" id="resetFiltersBtn" data-i18n="dt_empty_reset">Clear All Filters</button>
+    </div>
+
+    <!-- ── NOTIFY BANNER (shown when zero total) ── -->
+    <div class="dt-notify-banner" id="dtNotifyBanner" style="display:none">
+      <span class="dt-notify-icon">🔔</span>
+      <div class="dt-notify-text">
+        <span class="dt-notify-title" data-i18n="dt_notify_title">No experts currently available.</span>
+        <span class="dt-notify-sub" data-i18n="dt_notify_sub">We'll notify you when one becomes available.</span>
+      </div>
+      <button class="dt-notify-btn" id="notifyMeBtn" data-i18n="dt_notify_btn">Notify Me</button>
+    </div>
+
+  </main><!-- /dt-main -->
+
+  <!-- TOAST -->
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="../../components/wallet.js"></script>
+  <script src="../../components/navbar.js"></script>
+  <script src="dietitian.js"></script>
+</body>
+</html>

@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ZITLAS — Zino AI Nutritionist</title>
+  <link rel="stylesheet" href="ai-coach.css" />
+</head>
+<body>
+
+<!-- ── S1: Welcome ── -->
+<div class="screen active" id="s-welcome">
+  <div class="welcome-wrap">
+    <div class="welcome-avatar-ring">
+      <img src="../../../assets/zino.png" alt="Zino" class="welcome-avatar-img" />
+    </div>
+    <h1 class="welcome-title">Meet <span class="accent">Zino</span></h1>
+    <p class="welcome-coach">Your Personal AI Nutrition Assistant</p>
+    <p class="welcome-desc">I'll ask a few questions, then build your personalised meal &amp; fitness plan — backed by real research.</p>
+    <p class="welcome-time">⏱ Takes about 3–4 minutes</p>
+    <button class="cta-btn" id="btnStart">Let's Start →</button>
+  </div>
+</div>
+
+<!-- ── S2: Goal Selection ── -->
+<div class="screen" id="s-goal">
+  <div class="page-wrap">
+    <div class="flow-header">
+      <button class="back-btn" data-back="s-welcome">←</button>
+      <div class="flow-progress">
+        <span class="flow-step-label">Step 1 of 3</span>
+        <div class="flow-bar"><div class="flow-fill" style="width:33%"></div></div>
+      </div>
+    </div>
+    <div class="page-hero">
+      <img src="../../../assets/zino.png" alt="Zino" class="hero-zino" />
+      <h2 class="page-title">What's your main goal?</h2>
+      <p class="page-sub">Choose one to get started</p>
+    </div>
+    <div class="goal-grid">
+      <button class="goal-card selected" id="goalLoseWeight" data-goal="lose_weight">
+        <span class="goal-icon">🔥</span>
+        <span class="goal-name">Lose Weight</span>
+        <span class="goal-tag">AI-powered</span>
+      </button>
+      <button class="goal-card" id="goalGainMuscle" data-goal="muscle_gain">
+        <span class="goal-icon">💪</span>
+        <span class="goal-name">Gain Muscle</span>
+        <span class="goal-tag">AI-powered</span>
+      </button>
+      <button class="goal-card" id="goalTransformation" data-goal="transformation">
+        <span class="goal-icon">⚡</span>
+        <span class="goal-name">Transformation</span>
+        <span class="goal-tag">AI-POWERED</span>
+      </button>
+      <button class="goal-card" id="goalGeneralFitness" data-goal="general_fitness">
+        <span class="goal-icon">❤️</span>
+        <span class="goal-name">General Fitness</span>
+        <span class="goal-tag">AI-POWERED</span>
+      </button>
+    </div>
+    <button class="cta-btn" id="btnGoalNext">Start My Plan →</button>
+  </div>
+</div>
+
+<!-- ── S3: Assessment ── -->
+<div class="screen" id="s-assess">
+  <div class="assess-header">
+    <button class="back-btn" id="assessBackBtn">←</button>
+    <div class="assess-meta">
+      <span class="assess-q-label" id="assessQLabel">Question 1 of 15</span>
+      <div class="assess-bar"><div class="assess-fill" id="assessFill" style="width:0%"></div></div>
+    </div>
+  </div>
+  <div class="assess-body" id="assessBody">
+    <!-- Injected by JS -->
+  </div>
+</div>
+
+<!-- ── S4: Processing ── -->
+<div class="screen" id="s-processing">
+  <div class="proc-wrap">
+    <div class="gen-orb-wrap">
+      <div class="gen-ring gen-ring-1"></div>
+      <div class="gen-ring gen-ring-2"></div>
+      <div class="gen-ring gen-ring-3"></div>
+      <img src="../../../assets/zino.png" alt="Zino" class="gen-orb-img" />
+    </div>
+    <h2 class="proc-title">Building Your<br><span class="accent">Personalised Plan</span></h2>
+    <p class="proc-sub">Searching research database &amp; generating recommendations…</p>
+    <div class="proc-steps" id="procSteps"></div>
+  </div>
+</div>
+
+<!-- ── S5: Fitness Snapshot ── -->
+<div class="screen" id="s-snapshot">
+  <div class="page-wrap">
+    <div class="result-header">
+      <h2 class="result-title">Your <span class="accent">Fitness Snapshot</span></h2>
+      <p class="result-sub">Personalised targets based on your body &amp; goals</p>
+    </div>
+    <!-- Daily Targets Summary -->
+    <div id="snapshotSummary"></div>
+    <!-- Metric cards (populated by JS) -->
+    <div class="snapshot-grid" id="snapshotGrid"></div>
+    <!-- AI Coach explanation -->
+    <div id="snapshotCoachNote"></div>
+    <button class="cta-btn" id="btnSnapshotNext">View SWOT Analysis →</button>
+  </div>
+</div>
+
+<!-- ── S6: SWOT ── -->
+<div class="screen" id="s-swot">
+  <div class="page-wrap">
+    <div class="result-header">
+      <h2 class="result-title">Your <span class="accent">SWOT Profile</span></h2>
+      <p class="result-sub" id="swotArchetypeLabel">Analysing your strengths…</p>
+    </div>
+    <div class="swot-grid" id="swotGrid"></div>
+    <div class="scores-section">
+      <h3 class="scores-heading">Wellness Scores</h3>
+      <div class="scores-grid" id="scoresGrid"></div>
+    </div>
+    <div class="swot-summary-card" id="swotSummaryCard"></div>
+    <button class="cta-btn" id="btnSwotNext">See Your Diet Plan →</button>
+  </div>
+</div>
+
+<!-- ── S7: Diet Plan ── -->
+<div class="screen" id="s-diet">
+  <div class="page-wrap">
+    <div class="result-header">
+      <h2 class="result-title">Your <span class="accent">Diet Plan</span></h2>
+      <p class="result-sub" id="dietPlanName"></p>
+    </div>
+    <div class="plan-targets-row" id="dietTargets"></div>
+    <div class="plan-summary-card" id="dietSummary"></div>
+    <div class="accordion-list" id="dietDays"></div>
+    <div class="plan-rules-card" id="dietRules"></div>
+    <button class="cta-btn" id="btnDietNext">See Workout Plan →</button>
+  </div>
+</div>
+
+<!-- ── S8: Workout Plan ── -->
+<div class="screen" id="s-workout">
+  <div class="page-wrap">
+    <div class="result-header">
+      <h2 class="result-title">Your <span class="accent">Workout Plan</span></h2>
+      <p class="result-sub" id="workoutPlanName"></p>
+    </div>
+    <div class="plan-targets-row" id="workoutTargets"></div>
+    <div class="plan-summary-card" id="workoutSummary"></div>
+    <div class="accordion-list" id="workoutDays"></div>
+    <button class="cta-btn" id="btnWorkoutNext">Talk to a Nutritionist →</button>
+  </div>
+</div>
+
+<!-- ── S9: Nutritionist CTA ── -->
+<div class="screen" id="s-cta">
+  <div class="page-wrap">
+    <div class="ntr-hero">
+      <div class="ntr-price-badge">₹149</div>
+      <h2 class="ntr-title">Get Expert<br><span class="accent">Nutritionist Review</span></h2>
+      <p class="ntr-desc">A certified nutritionist will review your AI plan, personalise it further, and answer your questions live.</p>
+    </div>
+    <div class="ntr-features">
+      <div class="ntr-feature"><span class="ntr-check">✅</span><span>30-min 1-on-1 video session</span></div>
+      <div class="ntr-feature"><span class="ntr-check">✅</span><span>Plan review &amp; custom adjustments</span></div>
+      <div class="ntr-feature"><span class="ntr-check">✅</span><span>Personalised meal swap suggestions</span></div>
+      <div class="ntr-feature"><span class="ntr-check">✅</span><span>Weekly progress check-in framework</span></div>
+    </div>
+    <button class="cta-btn" id="btnBookNow">Book Now — ₹149</button>
+    <button class="skip-btn" id="btnSkipCta">Save My Plan &amp; Finish</button>
+  </div>
+</div>
+
+<!-- ── S11: Done ── -->
+<div class="screen" id="s-done">
+  <div class="done-wrap">
+    <div class="done-avatar-ring">
+      <img src="../../../assets/zino.png" alt="Zino" class="done-avatar-img" />
+    </div>
+    <div class="done-check">✓</div>
+    <h2 class="done-title">Your plan is <span class="accent">saved!</span></h2>
+    <p class="done-sub">Zino has everything ready. Head to your dashboard to start today.</p>
+    <button class="cta-btn" id="btnDone">Go to Dashboard →</button>
+  </div>
+</div>
+
+<script src="ai-coach.js"></script>
+  <script src="../../../components/wallet.js"></script>
+</body>
+</html>

@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ZITLAS — Day Training Plan</title>
+  <link rel="stylesheet" href="day.css" />
+  <script src="../../../assets/js/i18n.js"></script>
+</head>
+<body>
+
+  <!-- ── Sticky Header ── -->
+  <header class="tp-header">
+    <button class="tp-back-btn" id="tpBackBtn" onclick="goBack()" aria-label="Back">
+      <span class="tp-back-icon">←</span>
+    </button>
+    <div class="tp-header-center">
+      <span class="tp-header-label" id="tpDayLabel">DAY 1</span>
+      <span class="tp-header-dot">·</span>
+      <span class="tp-header-date" id="tpHeaderDate">—</span>
+    </div>
+    <span class="tp-header-logo">ZITLAS</span>
+  </header>
+
+  <!-- ── Page ── -->
+  <div class="tp-page" id="tpPage">
+
+    <!-- Loading -->
+    <div class="tp-loading" id="tpLoading">
+      <span class="tp-loading-icon">🏏</span>
+      <p data-i18n="day_loading">Loading your training plan…</p>
+    </div>
+
+    <!-- Content -->
+    <div class="tp-content" id="tpContent">
+
+      <!-- Day Hero -->
+      <div class="tp-hero" id="tpHero">
+        <div class="tp-hero-top">
+          <span class="tp-hero-icon" id="tpHeroIcon">🏏</span>
+          <span class="tp-today-badge" id="tpTodayBadge">TODAY</span>
+        </div>
+        <h1 class="tp-hero-theme" id="tpHeroTheme">—</h1>
+        <p class="tp-hero-objective" id="tpHeroObjective">—</p>
+        <div class="tp-hero-meta">
+          <span class="tp-meta-chip" id="tpTotalTime">⏱ — min</span>
+          <span class="tp-meta-chip" id="tpDayName">—</span>
+        </div>
+      </div>
+
+      <!-- Why It Matters -->
+      <div class="tp-why" id="tpWhy">
+        <span class="tp-why-icon">💡</span>
+        <p class="tp-why-text" id="tpWhyText">—</p>
+      </div>
+
+      <!-- TIME BREAKDOWN -->
+      <section class="tp-section" id="tpTimeBreakdown">
+        <h3 class="tp-section-title" data-i18n="day_todays_plan">Today's Plan</h3>
+        <div class="tp-time-grid" id="tpTimeGrid">
+          <!-- Populated by JS -->
+        </div>
+      </section>
+
+      <!-- 1. WARMUP -->
+      <section class="tp-section tp-section--warmup" id="tpWarmupSection">
+        <div class="tp-section-hd tp-section-hd--warmup">
+          <div class="tp-section-hd-left">
+            <span class="tp-step-num">01</span>
+            <div>
+              <h3 class="tp-section-name" data-i18n="day_warmup">Warmup</h3>
+              <p class="tp-section-dur">10 min</p>
+            </div>
+          </div>
+          <span class="tp-section-icon">🔥</span>
+        </div>
+        <div class="tp-item-list" id="tpWarmupList">
+          <!-- Populated by JS -->
+        </div>
+      </section>
+
+      <!-- 2. ACTIVATION -->
+      <section class="tp-section tp-section--activation" id="tpActivationSection">
+        <div class="tp-section-hd tp-section-hd--activation">
+          <div class="tp-section-hd-left">
+            <span class="tp-step-num">02</span>
+            <div>
+              <h3 class="tp-section-name" data-i18n="day_activation">Activation Drills</h3>
+              <p class="tp-section-dur">5 min</p>
+            </div>
+          </div>
+          <span class="tp-section-icon">⚡</span>
+        </div>
+        <div class="tp-item-list" id="tpActivationList">
+          <!-- Populated by JS -->
+        </div>
+      </section>
+
+      <!-- 3. PRIMARY SKILL SESSION -->
+      <section class="tp-section tp-section--primary" id="tpPrimarySection">
+        <div class="tp-section-hd tp-section-hd--primary">
+          <div class="tp-section-hd-left">
+            <span class="tp-step-num">03</span>
+            <div>
+              <h3 class="tp-section-name" data-i18n="day_primary_skill">Primary Skill Session</h3>
+              <p class="tp-section-dur" id="tpPrimaryDur">—</p>
+            </div>
+          </div>
+          <span class="tp-section-icon">🏏</span>
+        </div>
+        <div class="tp-skill-card" id="tpPrimaryCard">
+          <!-- Populated by JS -->
+        </div>
+      </section>
+
+      <!-- 4. SECONDARY SKILL SESSION -->
+      <section class="tp-section tp-section--secondary" id="tpSecondarySection">
+        <div class="tp-section-hd tp-section-hd--secondary">
+          <div class="tp-section-hd-left">
+            <span class="tp-step-num">04</span>
+            <div>
+              <h3 class="tp-section-name" data-i18n="day_secondary_skill">Secondary Skill Session</h3>
+              <p class="tp-section-dur" id="tpSecondaryDur">—</p>
+            </div>
+          </div>
+          <span class="tp-section-icon">🎯</span>
+        </div>
+        <div class="tp-skill-card" id="tpSecondaryCard">
+          <!-- Populated by JS -->
+        </div>
+      </section>
+
+      <!-- 5. FITNESS SESSION -->
+      <section class="tp-section tp-section--fitness" id="tpFitnessSection">
+        <div class="tp-section-hd tp-section-hd--fitness">
+          <div class="tp-section-hd-left">
+            <span class="tp-step-num">05</span>
+            <div>
+              <h3 class="tp-section-name" data-i18n="day_fitness">Fitness Session</h3>
+              <p class="tp-section-dur" id="tpFitnessDur">—</p>
+            </div>
+          </div>
+          <span class="tp-section-icon">💪</span>
+        </div>
+        <div class="tp-skill-card tp-skill-card--fitness" id="tpFitnessCard">
+          <!-- Populated by JS -->
+        </div>
+      </section>
+
+      <!-- 6. MATCH SIMULATION -->
+      <section class="tp-section tp-section--match" id="tpMatchSection">
+        <div class="tp-section-hd tp-section-hd--match">
+          <div class="tp-section-hd-left">
+            <span class="tp-step-num">06</span>
+            <div>
+              <h3 class="tp-section-name" data-i18n="day_match_sim">Match Simulation</h3>
+              <p class="tp-section-dur" id="tpMatchDur">—</p>
+            </div>
+          </div>
+          <span class="tp-section-icon">🔥</span>
+        </div>
+        <div class="tp-match-card" id="tpMatchCard">
+          <!-- Populated by JS -->
+        </div>
+      </section>
+
+      <!-- 7. MENTAL CONDITIONING -->
+      <section class="tp-section tp-section--mental" id="tpMentalSection">
+        <div class="tp-section-hd tp-section-hd--mental">
+          <div class="tp-section-hd-left">
+            <span class="tp-step-num">07</span>
+            <div>
+              <h3 class="tp-section-name" data-i18n="day_mind_focus">Mind &amp; Focus</h3>
+              <p class="tp-section-dur" id="tpMentalDur">5 min</p>
+            </div>
+          </div>
+          <span class="tp-section-icon">🧠</span>
+        </div>
+        <div class="tp-mental-card" id="tpMentalCard">
+          <!-- Populated by JS -->
+        </div>
+      </section>
+
+      <!-- 8. RECOVERY PROTOCOL -->
+      <section class="tp-section tp-section--recovery" id="tpRecoverySection">
+        <div class="tp-section-hd tp-section-hd--recovery">
+          <div class="tp-section-hd-left">
+            <span class="tp-step-num">08</span>
+            <div>
+              <h3 class="tp-section-name" data-i18n="day_cool_down">Cool Down</h3>
+              <p class="tp-section-dur">8 min</p>
+            </div>
+          </div>
+          <span class="tp-section-icon">😴</span>
+        </div>
+        <div class="tp-item-list" id="tpRecoveryList">
+          <!-- Populated by JS -->
+        </div>
+      </section>
+
+      <!-- 9. STRETCHING -->
+      <section class="tp-section tp-section--stretch" id="tpStretchSection">
+        <div class="tp-section-hd tp-section-hd--stretch">
+          <div class="tp-section-hd-left">
+            <span class="tp-step-num">09</span>
+            <div>
+              <h3 class="tp-section-name" data-i18n="day_stretching">Stretching</h3>
+              <p class="tp-section-dur">5 min</p>
+            </div>
+          </div>
+          <span class="tp-section-icon">🤸</span>
+        </div>
+        <div class="tp-item-list" id="tpStretchList">
+          <!-- Populated by JS -->
+        </div>
+      </section>
+
+      <!-- 10. HYDRATION -->
+      <section class="tp-section tp-section--hydration" id="tpHydrationSection">
+        <div class="tp-section-hd tp-section-hd--hydration">
+          <div class="tp-section-hd-left">
+            <span class="tp-step-num">10</span>
+            <div>
+              <h3 class="tp-section-name" data-i18n="day_drink_water">Drink Water</h3>
+              <p class="tp-section-dur" id="tpHydrationTotal">—</p>
+            </div>
+          </div>
+          <span class="tp-section-icon">💧</span>
+        </div>
+        <div class="tp-hydration-card" id="tpHydrationCard">
+          <!-- Populated by JS -->
+        </div>
+      </section>
+
+      <!-- COACH'S TIP -->
+      <div class="tp-coaches-tip" id="tpCoachesTip">
+        <div class="tp-coaches-tip-hd">
+          <span class="tp-coaches-tip-icon">🧢</span>
+          <span class="tp-coaches-tip-label" data-i18n="day_coaches_tip">Coach's Tip</span>
+        </div>
+        <p class="tp-coaches-tip-text" id="tpCoachesTipText">—</p>
+      </div>
+
+      <!-- WEEKLY REVIEW (Day 7 only — populated by JS) -->
+      <section class="tp-section tp-section--weekly-review tp-hidden" id="tpWeeklyReviewSection">
+        <div class="tp-section-hd tp-section-hd--weekly-review">
+          <div class="tp-section-hd-left">
+            <span class="tp-step-num">WR</span>
+            <div>
+              <h3 class="tp-section-name" data-i18n="day_weekly_review">Weekly Review</h3>
+              <p class="tp-section-dur" data-i18n="day_end_of_week">End of week</p>
+            </div>
+          </div>
+          <span class="tp-section-icon">📋</span>
+        </div>
+        <div class="tp-weekly-review-card" id="tpWeeklyReviewCard">
+          <!-- Populated by JS -->
+        </div>
+      </section>
+
+      <!-- CTA -->
+      <div class="tp-cta">
+        <button class="tp-cta-btn" onclick="goBack()">← Back to Training</button>
+      </div>
+
+    </div><!-- /.tp-content -->
+  </div><!-- /.tp-page -->
+
+  <script src="day.js"></script>
+  <script src="../../../components/wallet.js"></script>
+</body>
+</html>

@@ -1,0 +1,3989 @@
+{
+  "_meta": {
+    "source": "nutri.txt — ZITLAS Nutrition Knowledge Base Vol 2",
+    "foods_count": 73,
+    "cpfi_formula": "Focus(15%)+Recovery(20%)+Strength(12%)+Power(10%)+Stamina(10%)+Endurance(15%)+Agility(10%)+Hydration(8%)"
+  },
+  "foods": [
+    {
+      "name": "Chicken Breast - Grilled",
+      "category": "Lean Protein",
+      "veg": false,
+      "budget": "low_med",
+      "hostel": true,
+      "nutrition_score": 8.8,
+      "cpfi": 72.1,
+      "macros": {
+        "cal": 165.0,
+        "protein": 31.0,
+        "carbs": 0.0,
+        "fat": 3.6,
+        "fibre": 0.0
+      },
+      "role_scores": {
+        "bat": 8,
+        "bowl": 10,
+        "wk": 8,
+        "ar": 9
+      },
+      "performance": {
+        "focus": 6,
+        "recovery": 10,
+        "strength": 10,
+        "power": 8,
+        "stamina": 5,
+        "endurance": 7,
+        "agility": 6,
+        "hydration": 2
+      },
+      "goals": {
+        "mg": 10,
+        "wl": 7,
+        "wg": 8,
+        "fp": 10,
+        "bp": 8,
+        "be": 6,
+        "bwe": 10,
+        "rt": 5,
+        "mf": 5,
+        "rv": 9
+      },
+      "timing": [
+        "Lunch",
+        "Post-Training",
+        "Dinner"
+      ],
+      "phases": [
+        "Strength Day",
+        "Recovery Day",
+        "Match Day",
+        "Tournament Week"
+      ],
+      "notes": "31g protein/100g with 2.7g leucine triggers mTOR; #1 food for athlete shoulder and back repair; daily post-training meal non-negotiable"
+    },
+    {
+      "name": "Whole Eggs - Boiled",
+      "category": "Complete Protein",
+      "veg": false,
+      "budget": "low",
+      "hostel": true,
+      "nutrition_score": 9.2,
+      "cpfi": 71.4,
+      "macros": {
+        "cal": 155.0,
+        "protein": 13.0,
+        "carbs": 1.1,
+        "fat": 11.0,
+        "fibre": 0.0
+      },
+      "role_scores": {
+        "bat": 9,
+        "bowl": 9,
+        "wk": 10,
+        "ar": 9
+      },
+      "performance": {
+        "focus": 9,
+        "recovery": 8,
+        "strength": 8,
+        "power": 7,
+        "stamina": 5,
+        "endurance": 7,
+        "agility": 9,
+        "hydration": 1
+      },
+      "goals": {
+        "mg": 8,
+        "wl": 5,
+        "wg": 7,
+        "fp": 8,
+        "bp": 7,
+        "be": 8,
+        "bwe": 8,
+        "rt": 9,
+        "mf": 9,
+        "rv": 8
+      },
+      "timing": [
+        "Breakfast",
+        "Mid-Morning",
+        "Post-Training",
+        "Dinner"
+      ],
+      "phases": [
+        "Match Day",
+        "Strength Day",
+        "Recovery Day",
+        "Fitness Day",
+        "Tournament Week",
+        "Skill Practice"
+      ],
+      "notes": "Yolk choline to acetylcholine; #1 focus food for WK reflex; 3 eggs daily = complete neural + joint + protein package; Rs 7 each = world's best value complete protein"
+    },
+    {
+      "name": "Egg Whites - Cooked",
+      "category": "Pure Protein",
+      "veg": false,
+      "budget": "low",
+      "hostel": true,
+      "nutrition_score": 7.2,
+      "cpfi": 58.7,
+      "macros": {
+        "cal": 52.0,
+        "protein": 11.0,
+        "carbs": 0.7,
+        "fat": 0.2,
+        "fibre": 0.0
+      },
+      "role_scores": {
+        "bat": 7,
+        "bowl": 8,
+        "wk": 7,
+        "ar": 7
+      },
+      "performance": {
+        "focus": 5,
+        "recovery": 8,
+        "strength": 8,
+        "power": 6,
+        "stamina": 4,
+        "endurance": 6,
+        "agility": 5,
+        "hydration": 2
+      },
+      "goals": {
+        "mg": 8,
+        "wl": 9,
+        "wg": 5,
+        "fp": 8,
+        "bp": 6,
+        "be": 5,
+        "bwe": 8,
+        "rt": 4,
+        "mf": 4,
+        "rv": 8
+      },
+      "timing": [
+        "Breakfast",
+        "Post-Training",
+        "Dinner"
+      ],
+      "phases": [
+        "Strength Day",
+        "Recovery Day",
+        "Fitness Day",
+        "Off Season"
+      ],
+      "notes": "Pure albumin 11g protein zero fat; best cutting-phase protein; ideal for athletes managing weight"
+    },
+    {
+      "name": "Canned Tuna - Water",
+      "category": "Lean Protein",
+      "veg": false,
+      "budget": "low_med",
+      "hostel": true,
+      "nutrition_score": 8.5,
+      "cpfi": 70.4,
+      "macros": {
+        "cal": 100.0,
+        "protein": 26.0,
+        "carbs": 0.0,
+        "fat": 0.5,
+        "fibre": 0.0
+      },
+      "role_scores": {
+        "bat": 8,
+        "bowl": 9,
+        "wk": 8,
+        "ar": 9
+      },
+      "performance": {
+        "focus": 7,
+        "recovery": 9,
+        "strength": 9,
+        "power": 7,
+        "stamina": 5,
+        "endurance": 7,
+        "agility": 7,
+        "hydration": 2
+      },
+      "goals": {
+        "mg": 9,
+        "wl": 8,
+        "wg": 6,
+        "fp": 9,
+        "bp": 7,
+        "be": 7,
+        "bwe": 9,
+        "rt": 6,
+        "mf": 6,
+        "rv": 9
+      },
+      "timing": [
+        "Mid-Morning",
+        "Lunch",
+        "Post-Training",
+        "Evening Snack"
+      ],
+      "phases": [
+        "Match Day",
+        "Recovery Day",
+        "Strength Day",
+        "Tournament Week"
+      ],
+      "notes": "26g protein zero-prep convenience; 68mcg selenium/100g activates GPx antioxidant enzymes; ideal hostel and travel food"
+    },
+    {
+      "name": "Rohu Fish - Baked",
+      "category": "Freshwater Protein",
+      "veg": false,
+      "budget": "low",
+      "hostel": true,
+      "nutrition_score": 7.5,
+      "cpfi": 61.8,
+      "macros": {
+        "cal": 111.0,
+        "protein": 20.0,
+        "carbs": 0.0,
+        "fat": 3.0,
+        "fibre": 0.0
+      },
+      "role_scores": {
+        "bat": 7,
+        "bowl": 8,
+        "wk": 7,
+        "ar": 8
+      },
+      "performance": {
+        "focus": 6,
+        "recovery": 8,
+        "strength": 7,
+        "power": 6,
+        "stamina": 5,
+        "endurance": 6,
+        "agility": 6,
+        "hydration": 3
+      },
+      "goals": {
+        "mg": 7,
+        "wl": 6,
+        "wg": 6,
+        "fp": 8,
+        "bp": 6,
+        "be": 6,
+        "bwe": 8,
+        "rt": 5,
+        "mf": 5,
+        "rv": 8
+      },
+      "timing": [
+        "Lunch",
+        "Dinner"
+      ],
+      "phases": [
+        "Recovery Day",
+        "Match Day",
+        "Fitness Day",
+        "Tournament Week"
+      ],
+      "notes": "India's most affordable freshwater protein; omega-3 + Vit D support testosterone and joint health"
+    },
+    {
+      "name": "Bangda - Indian Mackerel Grilled",
+      "category": "Fatty Fish",
+      "veg": false,
+      "budget": "low",
+      "hostel": true,
+      "nutrition_score": 8.5,
+      "cpfi": 72.8,
+      "macros": {
+        "cal": 191.0,
+        "protein": 21.0,
+        "carbs": 0.0,
+        "fat": 12.0,
+        "fibre": 0.0
+      },
+      "role_scores": {
+        "bat": 8,
+        "bowl": 9,
+        "wk": 8,
+        "ar": 9
+      },
+      "performance": {
+        "focus": 8,
+        "recovery": 9,
+        "strength": 7,
+        "power": 7,
+        "stamina": 6,
+        "endurance": 8,
+        "agility": 7,
+        "hydration": 3
+      },
+      "goals": {
+        "mg": 7,
+        "wl": 5,
+        "wg": 6,
+        "fp": 9,
+        "bp": 7,
+        "be": 8,
+        "bwe": 9,
+        "rt": 7,
+        "mf": 7,
+        "rv": 9
+      },
+      "timing": [
+        "Lunch",
+        "Dinner"
+      ],
+      "phases": [
+        "Recovery Day",
+        "Match Day",
+        "Tournament Week",
+        "Off Season"
+      ],
+      "notes": "1600mg EPA+DHA omega-3 per 100g = India's most affordable omega-3 source; DHA builds brain grey matter; omega-3 for shoulder inflammation reduction"
+    },
+    {
+      "name": "Sardines - Canned",
+      "category": "Fatty Fish",
+      "veg": false,
+      "budget": "low_med",
+      "hostel": true,
+      "nutrition_score": 8.2,
+      "cpfi": 72.0,
+      "macros": {
+        "cal": 208.0,
+        "protein": 21.0,
+        "carbs": 0.0,
+        "fat": 14.0,
+        "fibre": 0.0
+      },
+      "role_scores": {
+        "bat": 8,
+        "bowl": 9,
+        "wk": 8,
+        "ar": 8
+      },
+      "performance": {
+        "focus": 8,
+        "recovery": 9,
+        "strength": 7,
+        "power": 7,
+        "stamina": 6,
+        "endurance": 8,
+        "agility": 7,
+        "hydration": 2
+      },
+      "goals": {
+        "mg": 7,
+        "wl": 5,
+        "wg": 6,
+        "fp": 9,
+        "bp": 7,
+        "be": 8,
+        "bwe": 9,
+        "rt": 7,
+        "mf": 7,
+        "rv": 9
+      },
+      "timing": [
+        "Lunch",
+        "Evening Snack",
+        "Post-Training"
+      ],
+      "phases": [
+        "Recovery Day",
+        "Match Day",
+        "Tournament Week"
+      ],
+      "notes": "Omega-3 + Vit D3 + calcium from soft bones in one can; protects against stress fractures; joint health for athletes"
+    },
+    {
+      "name": "Salmon - Canned",
+      "category": "Fatty Fish",
+      "veg": false,
+      "budget": "high",
+      "hostel": true,
+      "nutrition_score": 9.2,
+      "cpfi": 79.8,
+      "macros": {
+        "cal": 130.0,
+        "protein": 23.0,
+        "carbs": 0.0,
+        "fat": 6.0,
+        "fibre": 0.0
+      },
+      "role_scores": {
+        "bat": 9,
+        "bowl": 10,
+        "wk": 9,
+        "ar": 9
+      },
+      "performance": {
+        "focus": 9,
+        "recovery": 10,
+        "strength": 7,
+        "power": 7,
+        "stamina": 7,
+        "endurance": 9,
+        "agility": 8,
+        "hydration": 3
+      },
+      "goals": {
+        "mg": 7,
+        "wl": 6,
+        "wg": 6,
+        "fp": 10,
+        "bp": 8,
+        "be": 9,
+        "bwe": 10,
+        "rt": 8,
+        "mf": 9,
+        "rv": 10
+      },
+      "timing": [
+        "Lunch",
+        "Post-Training",
+        "Dinner"
+      ],
+      "phases": [
+        "Recovery Day",
+        "Match Day",
+        "Tournament Week"
+      ],
+      "notes": "DHA 1200mg/100g + astaxanthin antioxidant 65x Vit E + selenium; top recovery food; elite fitness nutrition priority; #3 overall CPFI (79.8)"
+    },
+    {
+      "name": "Mutton - Lean Curry",
+      "category": "Red Meat Protein",
+      "veg": false,
+      "budget": "medium",
+      "hostel": true,
+      "nutrition_score": 7.5,
+      "cpfi": 63.4,
+      "macros": {
+        "cal": 250.0,
+        "protein": 22.0,
+        "carbs": 3.0,
+        "fat": 16.0,
+        "fibre": 0.0
+      },
+      "role_scores": {
+        "bat": 7,
+        "bowl": 8,
+        "wk": 7,
+        "ar": 8
+      },
+      "performance": {
+        "focus": 6,
+        "recovery": 7,
+        "strength": 9,
+        "power": 8,
+        "stamina": 5,
+        "endurance": 6,
+        "agility": 6,
+        "hydration": 2
+      },
+      "goals": {
+        "mg": 9,
+        "wl": 4,
+        "wg": 9,
+        "fp": 9,
+        "bp": 8,
+        "be": 6,
+        "bwe": 8,
+        "rt": 5,
+        "mf": 5,
+        "rv": 7
+      },
+      "timing": [
+        "Lunch",
+        "Dinner"
+      ],
+      "phases": [
+        "Strength Day",
+        "Recovery Day",
+        "Off Season"
+      ],
+      "notes": "Haem iron 2x better absorbed than plant iron + zinc + B12 + creatine; testosterone-supporting red meat; power batting nutrition package; weekly inclusion recommended"
+    },
+    {
+      "name": "Hung Curd - Chakka",
+      "category": "Dairy Protein",
+      "veg": true,
+      "budget": "low",
+      "hostel": true,
+      "nutrition_score": 8.0,
+      "cpfi": 65.3,
+      "macros": {
+        "cal": 130.0,
+        "protein": 17.0,
+        "carbs": 4.5,
+        "fat": 6.0,
+        "fibre": 0.0
+      },
+      "role_scores": {
+        "bat": 8,
+        "bowl": 8,
+        "wk": 8,
+        "ar": 8
+      },
+      "performance": {
+        "focus": 6,
+        "recovery": 8,
+        "strength": 8,
+        "power": 6,
+        "stamina": 5,
+        "endurance": 7,
+        "agility": 6,
+        "hydration": 4
+      },
+      "goals": {
+        "mg": 8,
+        "wl": 6,
+        "wg": 7,
+        "fp": 7,
+        "bp": 7,
+        "be": 7,
+        "bwe": 7,
+        "rt": 5,
+        "mf": 5,
+        "rv": 8
+      },
+      "timing": [
+        "Mid-Morning",
+        "Post-Training",
+        "Evening Snack",
+        "Pre-Sleep"
+      ],
+      "phases": [
+        "Recovery Day",
+        "Match Day",
+        "Strength Day",
+        "Tournament Week"
+      ],
+      "notes": "Water-strained curd = concentrated casein; 2nd highest dairy protein after paneer; excellent pre-sleep muscle repair food"
+    },
+    {
+      "name": "Full-Fat Paneer",
+      "category": "Dairy Protein",
+      "veg": true,
+      "budget": "low_med",
+      "hostel": true,
+      "nutrition_score": 7.8,
+      "cpfi": 60.7,
+      "macros": {
+        "cal": 300.0,
+        "protein": 18.0,
+        "carbs": 1.5,
+        "fat": 25.0,
+        "fibre": 0.0
+      },
+      "role_scores": {
+        "bat": 8,
+        "bowl": 7,
+        "wk": 8,
+        "ar": 8
+      },
+      "performance": {
+        "focus": 6,
+        "recovery": 7,
+        "strength": 8,
+        "power": 6,
+        "stamina": 5,
+        "endurance": 7,
+        "agility": 5,
+        "hydration": 2
+      },
+      "goals": {
+        "mg": 8,
+        "wl": 4,
+        "wg": 9,
+        "fp": 7,
+        "bp": 8,
+        "be": 7,
+        "bwe": 7,
+        "rt": 5,
+        "mf": 5,
+        "rv": 7
+      },
+      "timing": [
+        "Lunch",
+        "Dinner",
+        "Pre-Sleep"
+      ],
+      "phases": [
+        "Strength Day",
+        "Recovery Day",
+        "Match Day",
+        "Tournament Week",
+        "Off Season"
+      ],
+      "notes": "Casein slow-release protein sustains muscle amino acids 7h overnight; calcium activates muscle contraction; best vegetarian slow-protein choice"
+    },
+    {
+      "name": "Milk - Full Fat 250ml",
+      "category": "Dairy",
+      "veg": true,
+      "budget": "low",
+      "hostel": true,
+      "nutrition_score": 8.2,
+      "cpfi": 68.5,
+      "macros": {
+        "cal": 62.0,
+        "protein": 3.4,
+        "carbs": 4.8,
+        "fat": 3.3,
+        "fibre": 0.0
+      },
+      "role_scores": {
+        "bat": 8,
+        "bowl": 8,
+        "wk": 8,
+        "ar": 9
+      },
+      "performance": {
+        "focus": 6,
+        "recovery": 8,
+        "strength": 7,
+        "power": 7,
+        "stamina": 6,
+        "endurance": 7,
+        "agility": 6,
+        "hydration": 7
+      },
+      "goals": {
+        "mg": 7,
+        "wl": 5,
+        "wg": 8,
+        "fp": 7,
+        "bp": 7,
+        "be": 7,
+        "bwe": 7,
+        "rt": 5,
+        "mf": 5,
+        "rv": 8
+      },
+      "timing": [
+        "Breakfast",
+        "Pre-Sleep",
+        "Post-Training",
+        "Mid-Morning"
+      ],
+      "phases": [
+        "All Phases"
+      ],
+      "notes": "Post-exercise milk outperforms soy and sports drinks for muscle mass gain; foundation of Indian fitness nutrition; always available in hostel mess"
+    },
+    {
+      "name": "Curd - Full Fat Dahi",
+      "category": "Dairy Probiotic",
+      "veg": true,
+      "budget": "low",
+      "hostel": true,
+      "nutrition_score": 7.8,
+      "cpfi": 63.7,
+      "macros": {
+        "cal": 60.0,
+        "protein": 3.5,
+        "carbs": 4.7,
+        "fat": 3.3,
+        "fibre": 0.0
+      },
+      "role_scores": {
+        "bat": 8,
+        "bowl": 7,
+        "wk": 8,
+        "ar": 8
+      },
+      "performance": {
+        "focus": 6,
+        "recovery": 8,
+        "strength": 6,
+        "power": 5,
+        "stamina": 6,
+        "endurance": 7,
+        "agility": 6,
+        "hydration": 5
+      },
+      "goals": {
+        "mg": 5,
+        "wl": 6,
+        "wg": 6,
+        "fp": 6,
+        "bp": 6,
+        "be": 8,
+        "bwe": 7,
+        "rt": 6,
+        "mf": 5,
+        "rv": 8
+      },
+      "timing": [
+        "Lunch",
+        "Mid-Morning",
+        "Post-Training",
+        "Dinner",
+        "Pre-Sleep"
+      ],
+      "phases": [
+        "Match Day",
+        "Recovery Day",
+        "All Phases"
+      ],
+      "notes": "Probiotics reduce post-match gut stress via IgA secretion; casein + electrolytes; curd rice = India's safest match-day meal"
+    },
+    {
+      "name": "Whey Protein Concentrate",
+      "category": "Supplement",
+      "veg": false,
+      "budget": "high",
+      "hostel": true,
+      "nutrition_score": 8.8,
+      "cpfi": 72.4,
+      "macros": {
+        "cal": 400.0,
+        "protein": 75.0,
+        "carbs": 9.0,
+        "fat": 7.0,
+        "fibre": 0.0
+      },
+      "role_scores": {
+        "bat": 8,
+        "bowl": 10,
+        "wk": 8,
+        "ar": 9
+      },
+      "performance": {
+        "focus": 5,
+        "recovery": 10,
+        "strength": 10,
+        "power": 9,
+        "stamina": 5,
+        "endurance": 7,
+        "agility": 6,
+        "hydration": 3
+      },
+      "goals": {
+        "mg": 10,
+        "wl": 7,
+        "wg": 9,
+        "fp": 10,
+        "bp": 9,
+        "be": 6,
+        "bwe": 10,
+        "rt": 5,
+        "mf": 5,
+        "rv": 10
+      },
+      "timing": [
+        "Post-Training",
+        "Pre-Training",
+        "Breakfast"
+      ],
+      "phases": [
+        "Strength Day",
+        "Recovery Day",
+        "Match Day",
+        "Tournament Week"
+      ],
+      "notes": "Fastest natural protein absorption in bloodstream within 30 min; 11% leucine content; most important supplement for muscle preservation during fat loss; take within 30 min of gym session"
+    },
+    {
+      "name": "Casein Protein Powder",
+      "category": "Supplement",
+      "veg": false,
+      "budget": "very_high",
+      "hostel": true,
+      "nutrition_score": 8.0,
+      "cpfi": 60.9,
+      "macros": {
+        "cal": 385.0,
+        "protein": 77.0,
+        "carbs": 5.0,
+        "fat": 4.0,
+        "fibre": 0.0
+      },
+      "role_scores": {
+        "bat": 8,
+        "bowl": 9,
+        "wk": 7,
+        "ar": 8
+      },
+      "performance": {
+        "focus": 4,
+        "recovery": 9,
+        "strength": 9,
+        "power": 6,
+        "stamina": 4,
+        "endurance": 7,
+        "agility": 4,
+        "hydration": 2
+      },
+      "goals": {
+        "mg": 9,
+        "wl": 6,
+        "wg": 8,
+        "fp": 9,
+        "bp": 7,
+        "be": 6,
+        "bwe": 9,
+        "rt": 4,
+        "mf": 4,
+        "rv": 9
+      },
+      "timing": [
+        "Pre-Sleep"
+      ],
+      "phases": [
+        "Strength Day",
+        "Recovery Day",
+        "Tournament Week",
+        "Off Season"
+      ],
+      "notes": "Gel-forming protein digests over 7 hours; sustained amino acid supply during sleep; athlete pre-sleep 25g protocol essential for shoulder and back overnight repair"
+    },
+    {
+      "name": "Soy Chunks - Cooked",
+      "category": "Plant Protein",
+      "veg": true,
+      "budget": "low",
+      "hostel": true,
+      "nutrition_score": 8.2,
+      "cpfi": 67.7,
+      "macros": {
+        "cal": 130.0,
+        "protein": 15.0,
+        "carbs": 10.0,
+        "fat": 0.5,
+        "fibre": 3.0
+      },
+      "role_scores": {
+        "bat": 8,
+        "bowl": 9,
+        "wk": 8,
+        "ar": 8
+      },
+      "performance": {
+        "focus": 6,
+        "recovery": 8,
+        "strength": 9,
+        "power": 7,
+        "stamina": 6,
+        "endurance": 7,
+        "agility": 6,
+        "hydration": 3
+      },
+      "goals": {
+        "mg": 9,
+        "wl": 6,
+        "wg": 8,
+        "fp": 9,
+        "bp": 8,
+        "be": 7,
+        "bwe": 9,
+        "rt": 5,
+        "mf": 5,
+        "rv": 8
+      },
+      "timing": [
+        "Lunch",
+        "Post-Training",
+        "Dinner"
+      ],
+      "phases": [
+        "Strength Day",
+        "Recovery Day",
+        "All Phases"
+      ],
+      "notes": "52g protein/100g dry = highest plant food; complete EAA; genistein isoflavone supports muscle repair; best budget vegetarian protein source"
+    },
+    {
+      "name": "Rajma - Cooked",
+      "category": "Legume Protein",
+      "veg": true,
+      "budget": "low",
+      "hostel": true,
+      "nutrition_score": 7.5,
+      "cpfi": 64.4,
+      "macros": {
+        "cal": 127.0,
+        "protein": 9.0,
+        "carbs": 22.0,
+        "fat": 0.5,
+        "fibre": 6.0
+      },
+      "role_scores": {
+        "bat": 8,
+        "bowl": 7,
+        "wk": 7,
+        "ar": 8
+      },
+      "performance": {
+        "focus": 6,
+        "recovery": 7,
+        "strength": 6,
+        "power": 6,
+        "stamina": 8,
+        "endurance": 8,
+        "agility": 5,
+        "hydration": 4
+      },
+      "goals": {
+        "mg": 6,
+        "wl": 7,
+        "wg": 7,
+        "fp": 7,
+        "bp": 7,
+        "be": 9,
+        "bwe": 8,
+        "rt": 4,
+        "mf": 5,
+        "rv": 7
+      },
+      "timing": [
+        "Lunch",
+        "Dinner"
+      ],
+      "phases": [
+        "Match Day",
+        "Recovery Day",
+        "Fitness Day",
+        "Endurance Phase"
+      ],
+      "notes": "GI 28 (very low) = 4h sustained glucose release; ideal batting endurance food; iron 5mg + K 607mg; rajma-chawal = architecture of a 6-hour innings"
+    },
+    {
+      "name": "Masoor Dal - Cooked",
+      "category": "Lentil Protein",
+      "veg": true,
+      "budget": "low",
+      "hostel": true,
+      "nutrition_score": 7.0,
+      "cpfi": 60.9,
+      "macros": {
+        "cal": 116.0,
+        "protein": 9.0,
+        "carbs": 20.0,
+        "fat": 0.4,
+        "fibre": 4.0
+      },
+      "role_scores": {
+        "bat": 7,
+        "bowl": 7,
+        "wk": 7,
+        "ar": 7
+      },
+      "performance": {
+        "focus": 5,
+        "recovery": 7,
+        "strength": 6,
+        "power": 5,
+        "stamina": 7,
+        "endurance": 8,
+        "agility": 5,
+        "hydration": 4
+      },
+      "goals": {
+        "mg": 6,
+        "wl": 7,
+        "wg": 6,
+        "fp": 7,
+        "bp": 6,
+        "be": 8,
+        "bwe": 7,
+        "rt": 4,
+        "mf": 4,
+        "rv": 7
+      },
+      "timing": [
+        "Lunch",
+        "Dinner"
+      ],
+      "phases": [
+        "Match Day",
+        "Recovery Day",
+        "All Phases"
+      ],
+      "notes": "Highest iron among common dals 3.3mg/100g; iron to haemoglobin to more O2 to muscles; prevents the silent pace-drop from iron deficiency"
+    },
+    {
+      "name": "Horse Gram - Kulthi Cooked",
+      "category": "Legume Protein",
+      "veg": true,
+      "budget": "low",
+      "hostel": true,
+      "nutrition_score": 7.5,
+      "cpfi": 64.5,
+      "macros": {
+        "cal": 321.0,
+        "protein": 22.0,
+        "carbs": 57.0,
+        "fat": 0.5,
+        "fibre": 5.8
+      },
+      "role_scores": {
+        "bat": 7,
+        "bowl": 8,
+        "wk": 7,
+        "ar": 8
+      },
+      "performance": {
+        "focus": 5,
+        "recovery": 7,
+        "strength": 8,
+        "power": 6,
+        "stamina": 8,
+        "endurance": 8,
+        "agility": 5,
+        "hydration": 3
+      },
+      "goals": {
+        "mg": 8,
+        "wl": 7,
+        "wg": 7,
+        "fp": 8,
+        "bp": 7,
+        "be": 8,
+        "bwe": 8,
+        "rt": 4,
+        "mf": 4,
+        "rv": 7
+      },
+      "timing": [
+        "Lunch",
+        "Dinner"
+      ],
+      "phases": [
+        "Strength Day",
+        "Fitness Day",
+        "Recovery Day"
+      ],
+      "notes": "Highest protein among Indian pulses; iron 6.7mg + tryptophan; traditional medicine for reducing recovery time; South/Central India specialty"
+    },
+    {
+      "name": "Chana Dal - Cooked",
+      "category": "Lentil Protein",
+      "veg": true,
+      "budget": "low",
+      "hostel": true,
+      "nutrition_score": 7.5,
+      "cpfi": 64.4,
+      "macros": {
+        "cal": 180.0,
+        "protein": 9.0,
+        "carbs": 30.0,
+        "fat": 0.7,
+        "fibre": 5.3
+      },
+      "role_scores": {
+        "bat": 8,
+        "bowl": 7,
+        "wk": 7,
+        "ar": 8
+      },
+      "performance": {
+        "focus": 5,
+        "recovery": 7,
+        "strength": 6,
+        "power": 6,
+        "stamina": 8,
+        "endurance": 9,
+        "agility": 5,
+        "hydration": 4
+      },
+      "goals": {
+        "mg": 6,
+        "wl": 7,
+        "wg": 7,
+        "fp": 7,
+        "bp": 7,
+        "be": 9,
+        "bwe": 8,
+        "rt": 4,
+        "mf": 4,
+        "rv": 7
+      },
+      "timing": [
+        "Lunch",
+        "Pre-Training",
+        "Dinner"
+      ],
+      "phases": [
+        "Match Day",
+        "Fitness Day",
+        "Endurance Phase"
+      ],
+      "notes": "GI 8 ultra-low = single slowest-releasing carb in Indian diet; zinc 1.7mg supports immunity; best dal for batting endurance"
+    },
+    {
+      "name": "Kala Chana - Black Chickpea Cooked",
+      "category": "Iron Legume",
+      "veg": true,
+      "budget": "low",
+      "hostel": true,
+      "nutrition_score": 7.8,
+      "cpfi": 65.6,
+      "macros": {
+        "cal": 164.0,
+        "protein": 8.9,
+        "carbs": 27.0,
+        "fat": 2.6,
+        "fibre": 7.6
+      },
+      "role_scores": {
+        "bat": 8,
+        "bowl": 8,
+        "wk": 7,
+        "ar": 8
+      },
+      "performance": {
+        "focus": 5,
+        "recovery": 7,
+        "strength": 7,
+        "power": 6,
+        "stamina": 8,
+        "endurance": 9,
+        "agility": 5,
+        "hydration": 4
+      },
+      "goals": {
+        "mg": 7,
+        "wl": 7,
+        "wg": 7,
+        "fp": 8,
+        "bp": 7,
+        "be": 9,
+        "bwe": 8,
+        "rt": 4,
+        "mf": 5,
+        "rv": 7
+      },
+      "timing": [
+        "Breakfast",
+        "Lunch",
+        "Mid-Morning"
+      ],
+      "phases": [
+        "Fitness Day",
+        "Match Day",
+        "Strength Day"
+      ],
+      "notes": "Traditional India fitness morning food; boiled kala chana with lemon; Fe 4mg + protein 9g; add lemon for 3x iron absorption; Rs 5/100g = world's best performance-per-rupee food"
+    },
+    {
+      "name": "Sprouts Mix - Mixed Legume",
+      "category": "Live Nutrition",
+      "veg": true,
+      "budget": "low",
+      "hostel": true,
+      "nutrition_score": 7.0,
+      "cpfi": 59.5,
+      "macros": {
+        "cal": 105.0,
+        "protein": 8.0,
+        "carbs": 18.0,
+        "fat": 0.6,
+        "fibre": 3.5
+      },
+      "role_scores": {
+        "bat": 7,
+        "bowl": 7,
+        "wk": 7,
+        "ar": 7
+      },
+      "performance": {
+        "focus": 6,
+        "recovery": 7,
+        "strength": 5,
+        "power": 5,
+        "stamina": 6,
+        "endurance": 7,
+        "agility": 5,
+        "hydration": 5
+      },
+      "goals": {
+        "mg": 5,
+        "wl": 7,
+        "wg": 5,
+        "fp": 6,
+        "bp": 5,
+        "be": 7,
+        "bwe": 6,
+        "rt": 5,
+        "mf": 5,
+        "rv": 7
+      },
+      "timing": [
+        "Breakfast",
+        "Mid-Morning"
+      ],
+      "phases": [
+        "All Phases"
+      ],
+      "notes": "Sprouting increases Vit C by 60%, iron bioavailability by 40%, protein digestibility; live nutrition with enzymes; no-cook hostel food"
+    },
+    {
+      "name": "Sattu - Roasted Chana Flour",
+      "category": "Indian Protein Flour",
+      "veg": true,
+      "budget": "low",
+      "hostel": true,
+      "nutrition_score": 8.2,
+      "cpfi": 71.9,
+      "macros": {
+        "cal": 406.0,
+        "protein": 25.0,
+        "carbs": 65.0,
+        "fat": 5.0,
+        "fibre": 18.0
+      },
+      "role_scores": {
+        "bat": 8,
+        "bowl": 8,
+        "wk": 8,
+        "ar": 9
+      },
+      "performance": {
+        "focus": 6,
+        "recovery": 7,
+        "strength": 8,
+        "power": 7,
+        "stamina": 8,
+        "endurance": 9,
+        "agility": 6,
+        "hydration": 6
+      },
+      "goals": {
+        "mg": 7,
+        "wl": 6,
+        "wg": 8,
+        "fp": 8,
+        "bp": 7,
+        "be": 9,
+        "bwe": 8,
+        "rt": 5,
+        "mf": 5,
+        "rv": 7
+      },
+      "timing": [
+        "Breakfast",
+        "Pre-Training",
+        "Mid-Morning",
+        "Post-Training"
+      ],
+      "phases": [
+        "All Phases"
+      ],
+      "notes": "Bihar performance gold; instant protein+carb+iron drink just add water; 50g sattu + jaggery = complete pre-bowling nutrition; Rs 4/drink = cheapest complete performance food; hostel athlete essential; no cooking required"
+    },
+    {
+      "name": "Brown Rice - Cooked",
+      "category": "Complex Carb",
+      "veg": true,
+      "budget": "low_med",
+      "hostel": true,
+      "nutrition_score": 8.5,
+      "cpfi": 66.7,
+      "macros": {
+        "cal": 112.0,
+        "protein": 2.6,
+        "carbs": 24.0,
+        "fat": 0.8,
+        "fibre": 1.8
+      },
+      "role_scores": {
+        "bat": 9,
+        "bowl": 8,
+        "wk": 8,
+        "ar": 9
+      },
+      "performance": {
+        "focus": 6,
+        "recovery": 7,
+        "strength": 5,
+        "power": 6,
+        "stamina": 9,
+        "endurance": 9,
+        "agility": 6,
+        "hydration": 4
+      },
+      "goals": {
+        "mg": 5,
+        "wl": 6,
+        "wg": 7,
+        "fp": 7,
+        "bp": 7,
+        "be": 9,
+        "bwe": 8,
+        "rt": 5,
+        "mf": 5,
+        "rv": 7
+      },
+      "timing": [
+        "Lunch",
+        "Post-Training",
+        "Dinner"
+      ],
+      "phases": [
+        "All Phases"
+      ],
+      "notes": "GI 50 vs white rice GI 72 = 2h sustained glucose delivery; B1+B3 from bran layer activate neural ATP production; superior to white rice for all fitness roles"
+    },
+    {
+      "name": "Oats - Rolled Dry",
+      "category": "Whole Grain Carb",
+      "veg": true,
+      "budget": "low_med",
+      "hostel": true,
+      "nutrition_score": 8.8,
+      "cpfi": 69.4,
+      "macros": {
+        "cal": 389.0,
+        "protein": 17.0,
+        "carbs": 66.0,
+        "fat": 7.0,
+        "fibre": 10.5
+      },
+      "role_scores": {
+        "bat": 9,
+        "bowl": 8,
+        "wk": 9,
+        "ar": 9
+      },
+      "performance": {
+        "focus": 7,
+        "recovery": 7,
+        "strength": 6,
+        "power": 6,
+        "stamina": 9,
+        "endurance": 9,
+        "agility": 6,
+        "hydration": 4
+      },
+      "goals": {
+        "mg": 5,
+        "wl": 8,
+        "wg": 6,
+        "fp": 7,
+        "bp": 7,
+        "be": 10,
+        "bwe": 8,
+        "rt": 5,
+        "mf": 6,
+        "rv": 7
+      },
+      "timing": [
+        "Breakfast",
+        "Pre-Training"
+      ],
+      "phases": [
+        "All Phases"
+      ],
+      "notes": "Beta-glucan creates 4h stable glucose; prevents mid-innings concentration crash; thiamine to acetylcholine synthesis; best match-day breakfast for all fitness roles; Rs 80-120/kg = 1 month supply"
+    },
+    {
+      "name": "Sweet Potato - Boiled",
+      "category": "Complex Carb",
+      "veg": true,
+      "budget": "low",
+      "hostel": true,
+      "nutrition_score": 8.8,
+      "cpfi": 74.8,
+      "macros": {
+        "cal": 86.0,
+        "protein": 1.6,
+        "carbs": 20.0,
+        "fat": 0.1,
+        "fibre": 3.0
+      },
+      "role_scores": {
+        "bat": 9,
+        "bowl": 8,
+        "wk": 9,
+        "ar": 9
+      },
+      "performance": {
+        "focus": 7,
+        "recovery": 9,
+        "strength": 5,
+        "power": 7,
+        "stamina": 8,
+        "endurance": 9,
+        "agility": 7,
+        "hydration": 6
+      },
+      "goals": {
+        "mg": 5,
+        "wl": 6,
+        "wg": 7,
+        "fp": 7,
+        "bp": 8,
+        "be": 9,
+        "bwe": 8,
+        "rt": 7,
+        "mf": 6,
+        "rv": 9
+      },
+      "timing": [
+        "Lunch",
+        "Post-Training",
+        "Pre-Training",
+        "Dinner"
+      ],
+      "phases": [
+        "Recovery Day",
+        "Match Day",
+        "Fitness Day",
+        "Tournament Week"
+      ],
+      "notes": "Beta-carotene 14mg/100g to Vit A to immune support; GI 70 when hot for post-training glycogen loading; dual-purpose pre-training energy and post-training recovery; top 6 CPFI food overall (74.8)"
+    },
+    {
+      "name": "Whole Wheat Roti",
+      "category": "Complex Carb",
+      "veg": true,
+      "budget": "low",
+      "hostel": true,
+      "nutrition_score": 8.0,
+      "cpfi": 60.4,
+      "macros": {
+        "cal": 240.0,
+        "protein": 8.7,
+        "carbs": 43.0,
+        "fat": 5.3,
+        "fibre": 5.7
+      },
+      "role_scores": {
+        "bat": 8,
+        "bowl": 8,
+        "wk": 8,
+        "ar": 8
+      },
+      "performance": {
+        "focus": 5,
+        "recovery": 6,
+        "strength": 5,
+        "power": 6,
+        "stamina": 8,
+        "endurance": 9,
+        "agility": 5,
+        "hydration": 3
+      },
+      "goals": {
+        "mg": 4,
+        "wl": 6,
+        "wg": 6,
+        "fp": 6,
+        "bp": 6,
+        "be": 9,
+        "bwe": 8,
+        "rt": 4,
+        "mf": 4,
+        "rv": 6
+      },
+      "timing": [
+        "Breakfast",
+        "Lunch",
+        "Pre-Training",
+        "Dinner"
+      ],
+      "phases": [
+        "All Phases"
+      ],
+      "notes": "Foundation of the Indian athlete's diet; slow GI with fibre; iron 2mg/roti; never skip dinner rotis on match weeks for glycogen loading"
+    },
+    {
+      "name": "Bajra - Pearl Millet Roti",
+      "category": "Millet Carb",
+      "veg": true,
+      "budget": "low",
+      "hostel": true,
+      "nutrition_score": 8.0,
+      "cpfi": 65.4,
+      "macros": {
+        "cal": 360.0,
+        "protein": 11.0,
+        "carbs": 63.0,
+        "fat": 5.0,
+        "fibre": 8.5
+      },
+      "role_scores": {
+        "bat": 8,
+        "bowl": 9,
+        "wk": 7,
+        "ar": 8
+      },
+      "performance": {
+        "focus": 5,
+        "recovery": 7,
+        "strength": 6,
+        "power": 6,
+        "stamina": 9,
+        "endurance": 9,
+        "agility": 5,
+        "hydration": 4
+      },
+      "goals": {
+        "mg": 5,
+        "wl": 7,
+        "wg": 7,
+        "fp": 8,
+        "bp": 7,
+        "be": 8,
+        "bwe": 9,
+        "rt": 4,
+        "mf": 4,
+        "rv": 7
+      },
+      "timing": [
+        "Lunch",
+        "Dinner"
+      ],
+      "phases": [
+        "Strength Day",
+        "Fitness Day",
+        "Off Season"
+      ],
+      "notes": "Highest iron grain 8mg/100g; magnesium 114mg to ATP synthase activation in fast-twitch fibres; best millet for athletes; underutilised in modern fitness nutrition"
+    },
+    {
+      "name": "Ragi - Nachni Roti",
+      "category": "Millet Carb",
+      "veg": true,
+      "budget": "low",
+      "hostel": true,
+      "nutrition_score": 8.0,
+      "cpfi": 62.6,
+      "macros": {
+        "cal": 336.0,
+        "protein": 7.7,
+        "carbs": 72.0,
+        "fat": 1.9,
+        "fibre": 3.6
+      },
+      "role_scores": {
+        "bat": 8,
+        "bowl": 8,
+        "wk": 8,
+        "ar": 8
+      },
+      "performance": {
+        "focus": 5,
+        "recovery": 7,
+        "strength": 6,
+        "power": 5,
+        "stamina": 8,
+        "endurance": 9,
+        "agility": 5,
+        "hydration": 3
+      },
+      "goals": {
+        "mg": 5,
+        "wl": 6,
+        "wg": 6,
+        "fp": 7,
+        "bp": 6,
+        "be": 8,
+        "bwe": 8,
+        "rt": 4,
+        "mf": 4,
+        "rv": 7
+      },
+      "timing": [
+        "Breakfast",
+        "Lunch",
+        "Dinner"
+      ],
+      "phases": [
+        "All Phases"
+      ],
+      "notes": "Highest plant calcium 344mg/100g after moringa; calcium required for every muscle contraction cycle; traditional South Indian endurance food; underrated fitness superfood"
+    },
+    {
+      "name": "Quinoa - Cooked",
+      "category": "Complete Grain",
+      "veg": true,
+      "budget": "medium",
+      "hostel": false,
+      "nutrition_score": 8.5,
+      "cpfi": 70.4,
+      "macros": {
+        "cal": 120.0,
+        "protein": 4.4,
+        "carbs": 22.0,
+        "fat": 1.9,
+        "fibre": 2.8
+      },
+      "role_scores": {
+        "bat": 8,
+        "bowl": 9,
+        "wk": 8,
+        "ar": 9
+      },
+      "performance": {
+        "focus": 7,
+        "recovery": 8,
+        "strength": 6,
+        "power": 6,
+        "stamina": 8,
+        "endurance": 9,
+        "agility": 6,
+        "hydration": 4
+      },
+      "goals": {
+        "mg": 6,
+        "wl": 7,
+        "wg": 7,
+        "fp": 8,
+        "bp": 7,
+        "be": 9,
+        "bwe": 8,
+        "rt": 6,
+        "mf": 6,
+        "rv": 8
+      },
+      "timing": [
+        "Breakfast",
+        "Lunch",
+        "Post-Training",
+        "Dinner"
+      ],
+      "phases": [
+        "All Phases"
+      ],
+      "notes": "Only grain with all 9 EAA; replaces rice+dal together; ecdysteroids activate the same muscle-building pathway as anabolic steroids naturally; premium carb for metro athletes"
+    },
+    {
+      "name": "Poha - Beaten Rice Cooked",
+      "category": "Quick Carb",
+      "veg": true,
+      "budget": "low",
+      "hostel": true,
+      "nutrition_score": 6.8,
+      "cpfi": 48.8,
+      "macros": {
+        "cal": 110.0,
+        "protein": 2.4,
+        "carbs": 23.0,
+        "fat": 0.4,
+        "fibre": 0.4
+      },
+      "role_scores": {
+        "bat": 7,
+        "bowl": 6,
+        "wk": 7,
+        "ar": 7
+      },
+      "performance": {
+        "focus": 4,
+        "recovery": 5,
+        "strength": 3,
+        "power": 5,
+        "stamina": 7,
+        "endurance": 6,
+        "agility": 5,
+        "hydration": 4
+      },
+      "goals": {
+        "mg": 3,
+        "wl": 5,
+        "wg": 5,
+        "fp": 5,
+        "bp": 5,
+        "be": 7,
+        "bwe": 6,
+        "rt": 4,
+        "mf": 4,
+        "rv": 5
+      },
+      "timing": [
+        "Breakfast",
+        "Pre-Training",
+        "Mid-Morning"
+      ],
+      "phases": [
+        "Match Day",
+        "Fitness Day",
+        "Skill Practice"
+      ],
+      "notes": "Fortified iron 3-5mg/100g when enriched; GI approximately 70 = rapid 1h energy delivery ideal 2h pre-training; Poha + peanuts = Rs 10 complete pre-match breakfast"
+    },
+    {
+      "name": "Sabudana - Tapioca Cooked",
+      "category": "Ultra-Fast Carb",
+      "veg": true,
+      "budget": "low",
+      "hostel": true,
+      "nutrition_score": 6.0,
+      "cpfi": 45.6,
+      "macros": {
+        "cal": 149.0,
+        "protein": 0.2,
+        "carbs": 36.0,
+        "fat": 0.0,
+        "fibre": 0.6
+      },
+      "role_scores": {
+        "bat": 7,
+        "bowl": 5,
+        "wk": 6,
+        "ar": 6
+      },
+      "performance": {
+        "focus": 3,
+        "recovery": 6,
+        "strength": 2,
+        "power": 6,
+        "stamina": 5,
+        "endurance": 5,
+        "agility": 5,
+        "hydration": 4
+      },
+      "goals": {
+        "mg": 1,
+        "wl": 2,
+        "wg": 5,
+        "fp": 4,
+        "bp": 5,
+        "be": 7,
+        "bwe": 4,
+        "rt": 4,
+        "mf": 3,
+        "rv": 5
+      },
+      "timing": [
+        "Breakfast",
+        "Pre-Training"
+      ],
+      "phases": [
+        "Match Day",
+        "Fitness Day"
+      ],
+      "notes": "GI 85 = fastest complex carb in India; zero protein or fat; best used only as 1h pre-match energy; not a daily staple for performance athletes"
+    },
+    {
+      "name": "Idli - Steamed 2 pieces",
+      "category": "Fermented Carb",
+      "veg": true,
+      "budget": "low",
+      "hostel": true,
+      "nutrition_score": 7.8,
+      "cpfi": 57.8,
+      "macros": {
+        "cal": 80.0,
+        "protein": 2.5,
+        "carbs": 15.0,
+        "fat": 0.4,
+        "fibre": 0.5
+      },
+      "role_scores": {
+        "bat": 8,
+        "bowl": 7,
+        "wk": 8,
+        "ar": 8
+      },
+      "performance": {
+        "focus": 5,
+        "recovery": 7,
+        "strength": 4,
+        "power": 5,
+        "stamina": 7,
+        "endurance": 7,
+        "agility": 5,
+        "hydration": 5
+      },
+      "goals": {
+        "mg": 3,
+        "wl": 6,
+        "wg": 5,
+        "fp": 5,
+        "bp": 6,
+        "be": 8,
+        "bwe": 7,
+        "rt": 5,
+        "mf": 4,
+        "rv": 7
+      },
+      "timing": [
+        "Breakfast",
+        "Pre-Training",
+        "Lunch"
+      ],
+      "phases": [
+        "Match Day",
+        "Fitness Day",
+        "Recovery Day"
+      ],
+      "notes": "Fermented batter to probiotic lactobacillus = gut health + immunity; steamed = zero fat; GI approximately 46 (fermentation lowers glycaemic response); South India's safest pre-match breakfast"
+    },
+    {
+      "name": "White Rice - Cooked",
+      "category": "Fast-Medium Carb",
+      "veg": true,
+      "budget": "low",
+      "hostel": true,
+      "nutrition_score": 7.5,
+      "cpfi": 60.5,
+      "macros": {
+        "cal": 130.0,
+        "protein": 2.4,
+        "carbs": 28.0,
+        "fat": 0.3,
+        "fibre": 0.4
+      },
+      "role_scores": {
+        "bat": 8,
+        "bowl": 7,
+        "wk": 7,
+        "ar": 8
+      },
+      "performance": {
+        "focus": 5,
+        "recovery": 7,
+        "strength": 4,
+        "power": 6,
+        "stamina": 8,
+        "endurance": 8,
+        "agility": 5,
+        "hydration": 4
+      },
+      "goals": {
+        "mg": 3,
+        "wl": 4,
+        "wg": 6,
+        "fp": 6,
+        "bp": 6,
+        "be": 8,
+        "bwe": 7,
+        "rt": 4,
+        "mf": 4,
+        "rv": 7
+      },
+      "timing": [
+        "Lunch",
+        "Post-Training",
+        "Dinner"
+      ],
+      "phases": [
+        "Match Day",
+        "Recovery Day",
+        "All Phases"
+      ],
+      "notes": "GI 72 = medium-fast glycogen reload; easy digestion; standard of Indian fitness nutrition; curd rice = India's safest match-day meal combination"
+    },
+    {
+      "name": "Khichdi - Dal + Rice",
+      "category": "Complete Recovery Meal",
+      "veg": true,
+      "budget": "low",
+      "hostel": true,
+      "nutrition_score": 8.0,
+      "cpfi": 66.3,
+      "macros": {
+        "cal": 130.0,
+        "protein": 5.0,
+        "carbs": 24.0,
+        "fat": 2.0,
+        "fibre": 2.5
+      },
+      "role_scores": {
+        "bat": 8,
+        "bowl": 8,
+        "wk": 8,
+        "ar": 8
+      },
+      "performance": {
+        "focus": 5,
+        "recovery": 9,
+        "strength": 5,
+        "power": 5,
+        "stamina": 8,
+        "endurance": 8,
+        "agility": 5,
+        "hydration": 6
+      },
+      "goals": {
+        "mg": 4,
+        "wl": 6,
+        "wg": 5,
+        "fp": 6,
+        "bp": 6,
+        "be": 8,
+        "bwe": 7,
+        "rt": 4,
+        "mf": 4,
+        "rv": 9
+      },
+      "timing": [
+        "Lunch",
+        "Dinner",
+        "Post-Training"
+      ],
+      "phases": [
+        "Recovery Day",
+        "Match Day",
+        "Sick Day"
+      ],
+      "notes": "India's original recovery food; complementary amino from rice+dal; digestive spices cumin and ginger reduce gut inflammation; safest meal during illness or heavy training weeks"
+    },
+    {
+      "name": "Chole - Punjabi Chickpea",
+      "category": "Legume Carb Protein",
+      "veg": true,
+      "budget": "low",
+      "hostel": true,
+      "nutrition_score": 7.8,
+      "cpfi": 65.4,
+      "macros": {
+        "cal": 164.0,
+        "protein": 8.9,
+        "carbs": 27.0,
+        "fat": 2.6,
+        "fibre": 7.6
+      },
+      "role_scores": {
+        "bat": 8,
+        "bowl": 8,
+        "wk": 7,
+        "ar": 8
+      },
+      "performance": {
+        "focus": 5,
+        "recovery": 7,
+        "strength": 6,
+        "power": 6,
+        "stamina": 9,
+        "endurance": 9,
+        "agility": 5,
+        "hydration": 4
+      },
+      "goals": {
+        "mg": 6,
+        "wl": 7,
+        "wg": 7,
+        "fp": 7,
+        "bp": 7,
+        "be": 9,
+        "bwe": 8,
+        "rt": 4,
+        "mf": 4,
+        "rv": 7
+      },
+      "timing": [
+        "Lunch",
+        "Dinner",
+        "Pre-Training"
+      ],
+      "phases": [
+        "Match Day",
+        "Fitness Day",
+        "Endurance Phase"
+      ],
+      "notes": "GI 28; zinc 2.5mg supports testosterone + immunity; chole-chawal = India's pre-match endurance meal; high fibre supports gut health for match-day composure"
+    },
+    {
+      "name": "Ghee - Desi Cow",
+      "category": "Saturated Fat Vitamins",
+      "veg": true,
+      "budget": "medium",
+      "hostel": true,
+      "nutrition_score": 7.0,
+      "cpfi": 59.2,
+      "macros": {
+        "cal": 900.0,
+        "protein": 0.3,
+        "carbs": 0.0,
+        "fat": 99.5,
+        "fibre": 0.0
+      },
+      "role_scores": {
+        "bat": 7,
+        "bowl": 7,
+        "wk": 7,
+        "ar": 7
+      },
+      "performance": {
+        "focus": 6,
+        "recovery": 8,
+        "strength": 7,
+        "power": 6,
+        "stamina": 5,
+        "endurance": 6,
+        "agility": 5,
+        "hydration": 1
+      },
+      "goals": {
+        "mg": 6,
+        "wl": 3,
+        "wg": 8,
+        "fp": 6,
+        "bp": 6,
+        "be": 7,
+        "bwe": 6,
+        "rt": 5,
+        "mf": 6,
+        "rv": 7
+      },
+      "timing": [
+        "Breakfast",
+        "Lunch",
+        "Dinner"
+      ],
+      "phases": [
+        "All Phases"
+      ],
+      "notes": "Butyrate to gut lining integrity to microbiome-gut-brain axis optimization; Vit K2 directs calcium to bones; 1 tsp on dal-roti = complete absorption catalyst"
+    },
+    {
+      "name": "Walnuts - Raw",
+      "category": "Omega-3 Nut",
+      "veg": true,
+      "budget": "medium",
+      "hostel": true,
+      "nutrition_score": 8.8,
+      "cpfi": 68.8,
+      "macros": {
+        "cal": 654.0,
+        "protein": 15.0,
+        "carbs": 14.0,
+        "fat": 65.0,
+        "fibre": 7.0
+      },
+      "role_scores": {
+        "bat": 9,
+        "bowl": 8,
+        "wk": 9,
+        "ar": 9
+      },
+      "performance": {
+        "focus": 9,
+        "recovery": 8,
+        "strength": 6,
+        "power": 6,
+        "stamina": 6,
+        "endurance": 7,
+        "agility": 8,
+        "hydration": 2
+      },
+      "goals": {
+        "mg": 5,
+        "wl": 5,
+        "wg": 6,
+        "fp": 7,
+        "bp": 7,
+        "be": 8,
+        "bwe": 8,
+        "rt": 9,
+        "mf": 9,
+        "rv": 8
+      },
+      "timing": [
+        "Breakfast",
+        "Mid-Morning",
+        "Evening Snack"
+      ],
+      "phases": [
+        "All Phases"
+      ],
+      "notes": "ALA 2.5g/30g (highest omega-3 nut); melatonin supports deep sleep recovery; polyphenols protect prefrontal cortex neurons; 5 walnuts daily = brain health protocol; DHA precursor for neural signal quality"
+    },
+    {
+      "name": "Flaxseeds - Ground",
+      "category": "Omega-3 Seed",
+      "veg": true,
+      "budget": "low",
+      "hostel": true,
+      "nutrition_score": 7.5,
+      "cpfi": 64.6,
+      "macros": {
+        "cal": 534.0,
+        "protein": 18.0,
+        "carbs": 29.0,
+        "fat": 42.0,
+        "fibre": 27.0
+      },
+      "role_scores": {
+        "bat": 7,
+        "bowl": 8,
+        "wk": 7,
+        "ar": 8
+      },
+      "performance": {
+        "focus": 7,
+        "recovery": 8,
+        "strength": 6,
+        "power": 5,
+        "stamina": 7,
+        "endurance": 7,
+        "agility": 6,
+        "hydration": 3
+      },
+      "goals": {
+        "mg": 4,
+        "wl": 6,
+        "wg": 5,
+        "fp": 8,
+        "bp": 6,
+        "be": 7,
+        "bwe": 8,
+        "rt": 6,
+        "mf": 7,
+        "rv": 8
+      },
+      "timing": [
+        "Breakfast",
+        "Mid-Morning",
+        "Pre-Sleep"
+      ],
+      "phases": [
+        "All Phases"
+      ],
+      "notes": "Highest ALA 57% fat; lignans balance testosterone and oestrogen; grind for 3x better ALA absorption; Rs 3/day = cheapest omega-3 source in India; add to curd or oats in hostel"
+    },
+    {
+      "name": "Chia Seeds - Soaked",
+      "category": "Omega-3 Hydrogel Seed",
+      "veg": true,
+      "budget": "medium",
+      "hostel": true,
+      "nutrition_score": 8.0,
+      "cpfi": 72.0,
+      "macros": {
+        "cal": 138.0,
+        "protein": 4.8,
+        "carbs": 12.0,
+        "fat": 8.7,
+        "fibre": 10.6
+      },
+      "role_scores": {
+        "bat": 8,
+        "bowl": 8,
+        "wk": 8,
+        "ar": 8
+      },
+      "performance": {
+        "focus": 7,
+        "recovery": 8,
+        "strength": 4,
+        "power": 5,
+        "stamina": 8,
+        "endurance": 9,
+        "agility": 7,
+        "hydration": 9
+      },
+      "goals": {
+        "mg": 4,
+        "wl": 7,
+        "wg": 5,
+        "fp": 7,
+        "bp": 6,
+        "be": 9,
+        "bwe": 8,
+        "rt": 7,
+        "mf": 6,
+        "rv": 8
+      },
+      "timing": [
+        "Breakfast",
+        "Mid-Morning",
+        "Pre-Training"
+      ],
+      "phases": [
+        "Match Day",
+        "Fitness Day",
+        "Tournament Week"
+      ],
+      "notes": "Absorbs 9x weight in water to slow-release hydration during match; ALA omega-3 improves neural function; excellent match-day hydration strategy; add to water bottle for extended play"
+    },
+    {
+      "name": "Peanut Butter - Natural",
+      "category": "Nut Protein Fat",
+      "veg": true,
+      "budget": "low_med",
+      "hostel": true,
+      "nutrition_score": 7.8,
+      "cpfi": 65.2,
+      "macros": {
+        "cal": 588.0,
+        "protein": 25.0,
+        "carbs": 20.0,
+        "fat": 50.0,
+        "fibre": 6.0
+      },
+      "role_scores": {
+        "bat": 8,
+        "bowl": 8,
+        "wk": 7,
+        "ar": 8
+      },
+      "performance": {
+        "focus": 7,
+        "recovery": 7,
+        "strength": 8,
+        "power": 7,
+        "stamina": 6,
+        "endurance": 7,
+        "agility": 6,
+        "hydration": 2
+      },
+      "goals": {
+        "mg": 7,
+        "wl": 5,
+        "wg": 8,
+        "fp": 7,
+        "bp": 8,
+        "be": 7,
+        "bwe": 7,
+        "rt": 5,
+        "mf": 6,
+        "rv": 7
+      },
+      "timing": [
+        "Breakfast",
+        "Mid-Morning",
+        "Pre-Sleep",
+        "Pre-Training"
+      ],
+      "phases": [
+        "All Phases"
+      ],
+      "notes": "Arginine to NO to greater training blood flow + GH release; niacin B3 to NAD to ATP in fast-twitch muscles; Rs 150-200/kg = 3-4 weeks supply; bread + PB = complete hostel protein+carb meal in 3 min"
+    },
+    {
+      "name": "Dark Chocolate 85%+",
+      "category": "Polyphenol Fat",
+      "veg": true,
+      "budget": "medium",
+      "hostel": true,
+      "nutrition_score": 8.8,
+      "cpfi": 71.9,
+      "macros": {
+        "cal": 598.0,
+        "protein": 8.0,
+        "carbs": 46.0,
+        "fat": 43.0,
+        "fibre": 11.0
+      },
+      "role_scores": {
+        "bat": 9,
+        "bowl": 7,
+        "wk": 10,
+        "ar": 9
+      },
+      "performance": {
+        "focus": 10,
+        "recovery": 8,
+        "strength": 5,
+        "power": 7,
+        "stamina": 6,
+        "endurance": 7,
+        "agility": 9,
+        "hydration": 3
+      },
+      "goals": {
+        "mg": 3,
+        "wl": 4,
+        "wg": 5,
+        "fp": 6,
+        "bp": 7,
+        "be": 9,
+        "bwe": 7,
+        "rt": 10,
+        "mf": 10,
+        "rv": 8
+      },
+      "timing": [
+        "Mid-Morning",
+        "Pre-Training",
+        "Breakfast"
+      ],
+      "phases": [
+        "Match Day",
+        "Tournament Week",
+        "Fitness Day"
+      ],
+      "notes": "Flavanols increase cerebral blood flow 8% in 45 min; theobromine vasodilates; 20g 45 min pre-workout = measurable focus and performance enhancement; ideal pre-workout mood booster; FOCUS score 10/10"
+    },
+    {
+      "name": "Pumpkin Seeds - Roasted",
+      "category": "Mineral Seed",
+      "veg": true,
+      "budget": "medium",
+      "hostel": true,
+      "nutrition_score": 8.8,
+      "cpfi": 71.5,
+      "macros": {
+        "cal": 559.0,
+        "protein": 30.0,
+        "carbs": 11.0,
+        "fat": 49.0,
+        "fibre": 6.0
+      },
+      "role_scores": {
+        "bat": 8,
+        "bowl": 9,
+        "wk": 9,
+        "ar": 9
+      },
+      "performance": {
+        "focus": 8,
+        "recovery": 8,
+        "strength": 8,
+        "power": 7,
+        "stamina": 6,
+        "endurance": 7,
+        "agility": 8,
+        "hydration": 3
+      },
+      "goals": {
+        "mg": 7,
+        "wl": 5,
+        "wg": 7,
+        "fp": 8,
+        "bp": 7,
+        "be": 7,
+        "bwe": 9,
+        "rt": 8,
+        "mf": 8,
+        "rv": 8
+      },
+      "timing": [
+        "Mid-Morning",
+        "Evening Snack",
+        "Breakfast"
+      ],
+      "phases": [
+        "All Phases"
+      ],
+      "notes": "Zinc 7.5mg/100g = highest zinc food; zinc cofactor for 300+ enzymes including testosterone synthesis; Mg prevents muscle cramps in back extensors; 30g daily = complete mineral base for athletes"
+    },
+    {
+      "name": "Avocado",
+      "category": "Monounsaturated Fat",
+      "veg": true,
+      "budget": "high",
+      "hostel": false,
+      "nutrition_score": 8.8,
+      "cpfi": 73.8,
+      "macros": {
+        "cal": 160.0,
+        "protein": 2.0,
+        "carbs": 9.0,
+        "fat": 15.0,
+        "fibre": 7.0
+      },
+      "role_scores": {
+        "bat": 9,
+        "bowl": 8,
+        "wk": 9,
+        "ar": 9
+      },
+      "performance": {
+        "focus": 8,
+        "recovery": 9,
+        "strength": 5,
+        "power": 6,
+        "stamina": 7,
+        "endurance": 8,
+        "agility": 8,
+        "hydration": 6
+      },
+      "goals": {
+        "mg": 4,
+        "wl": 6,
+        "wg": 6,
+        "fp": 7,
+        "bp": 7,
+        "be": 9,
+        "bwe": 8,
+        "rt": 8,
+        "mf": 8,
+        "rv": 9
+      },
+      "timing": [
+        "Breakfast",
+        "Mid-Morning",
+        "Lunch"
+      ],
+      "phases": [
+        "Match Day",
+        "Recovery Day",
+        "Tournament Week"
+      ],
+      "notes": "Beta-sitosterol 57mg = 5-alpha-reductase inhibition to testosterone optimization; glutathione master antioxidant + oleocanthal; increasingly available in Indian metros; premium performance fat; #8 CPFI (73.8)"
+    },
+    {
+      "name": "Almonds - Raw",
+      "category": "Nut Protein Fat",
+      "veg": true,
+      "budget": "medium",
+      "hostel": true,
+      "nutrition_score": 8.0,
+      "cpfi": 68.5,
+      "macros": {
+        "cal": 579.0,
+        "protein": 21.0,
+        "carbs": 22.0,
+        "fat": 50.0,
+        "fibre": 12.5
+      },
+      "role_scores": {
+        "bat": 8,
+        "bowl": 8,
+        "wk": 8,
+        "ar": 8
+      },
+      "performance": {
+        "focus": 8,
+        "recovery": 8,
+        "strength": 7,
+        "power": 7,
+        "stamina": 6,
+        "endurance": 7,
+        "agility": 7,
+        "hydration": 2
+      },
+      "goals": {
+        "mg": 6,
+        "wl": 5,
+        "wg": 7,
+        "fp": 7,
+        "bp": 7,
+        "be": 8,
+        "bwe": 7,
+        "rt": 8,
+        "mf": 8,
+        "rv": 7
+      },
+      "timing": [
+        "Breakfast",
+        "Mid-Morning",
+        "Evening Snack"
+      ],
+      "phases": [
+        "All Phases"
+      ],
+      "notes": "Vit E 25mg/100g protects neurons and retinal cells from oxidative stress = sharper ball-tracking; phenylalanine to dopamine to attack mindset; 10 soaked almonds = hostel athlete morning essential; soak overnight in water glass no fridge needed"
+    },
+    {
+      "name": "Peanuts - Roasted",
+      "category": "Nut Protein",
+      "veg": true,
+      "budget": "low",
+      "hostel": true,
+      "nutrition_score": 7.8,
+      "cpfi": 65.2,
+      "macros": {
+        "cal": 567.0,
+        "protein": 26.0,
+        "carbs": 16.0,
+        "fat": 49.0,
+        "fibre": 8.5
+      },
+      "role_scores": {
+        "bat": 8,
+        "bowl": 8,
+        "wk": 7,
+        "ar": 8
+      },
+      "performance": {
+        "focus": 7,
+        "recovery": 7,
+        "strength": 8,
+        "power": 7,
+        "stamina": 6,
+        "endurance": 7,
+        "agility": 6,
+        "hydration": 2
+      },
+      "goals": {
+        "mg": 7,
+        "wl": 5,
+        "wg": 8,
+        "fp": 8,
+        "bp": 7,
+        "be": 7,
+        "bwe": 7,
+        "rt": 5,
+        "mf": 6,
+        "rv": 7
+      },
+      "timing": [
+        "Mid-Morning",
+        "Evening Snack",
+        "Pre-Training"
+      ],
+      "phases": [
+        "All Phases"
+      ],
+      "notes": "Cheapest complete protein in India 26g/100g; arginine to NO blood flow; resveratrol reduces inflammation; Rs 5/30g = most affordable performance snack"
+    },
+    {
+      "name": "Hemp Seeds",
+      "category": "Seed Protein",
+      "veg": true,
+      "budget": "high",
+      "hostel": false,
+      "nutrition_score": 8.5,
+      "cpfi": 74.2,
+      "macros": {
+        "cal": 553.0,
+        "protein": 31.6,
+        "carbs": 8.7,
+        "fat": 48.8,
+        "fibre": 4.0
+      },
+      "role_scores": {
+        "bat": 8,
+        "bowl": 9,
+        "wk": 8,
+        "ar": 9
+      },
+      "performance": {
+        "focus": 8,
+        "recovery": 9,
+        "strength": 8,
+        "power": 7,
+        "stamina": 7,
+        "endurance": 8,
+        "agility": 7,
+        "hydration": 2
+      },
+      "goals": {
+        "mg": 8,
+        "wl": 5,
+        "wg": 7,
+        "fp": 9,
+        "bp": 8,
+        "be": 8,
+        "bwe": 9,
+        "rt": 7,
+        "mf": 8,
+        "rv": 9
+      },
+      "timing": [
+        "Breakfast",
+        "Mid-Morning",
+        "Post-Training",
+        "Evening Snack"
+      ],
+      "phases": [
+        "Recovery Day",
+        "Tournament Week",
+        "Match Day"
+      ],
+      "notes": "Perfect 3:1 omega-6:3 ratio (only plant food); GLA gamma-linolenic acid reduces COX-2 inflammatory enzyme; 31.6g protein/100g; premium performance seed; available online in India"
+    },
+    {
+      "name": "Banana - Ripe",
+      "category": "Quick-Medium Carb",
+      "veg": true,
+      "budget": "low",
+      "hostel": true,
+      "nutrition_score": 8.8,
+      "cpfi": 71.4,
+      "macros": {
+        "cal": 89.0,
+        "protein": 1.1,
+        "carbs": 23.0,
+        "fat": 0.3,
+        "fibre": 2.6
+      },
+      "role_scores": {
+        "bat": 9,
+        "bowl": 8,
+        "wk": 9,
+        "ar": 9
+      },
+      "performance": {
+        "focus": 8,
+        "recovery": 7,
+        "strength": 4,
+        "power": 8,
+        "stamina": 7,
+        "endurance": 8,
+        "agility": 8,
+        "hydration": 7
+      },
+      "goals": {
+        "mg": 3,
+        "wl": 5,
+        "wg": 6,
+        "fp": 6,
+        "bp": 8,
+        "be": 9,
+        "bwe": 7,
+        "rt": 8,
+        "mf": 8,
+        "rv": 7
+      },
+      "timing": [
+        "Breakfast",
+        "Mid-Morning",
+        "Pre-Training",
+        "During Training",
+        "Post-Training"
+      ],
+      "phases": [
+        "All Phases"
+      ],
+      "notes": "K 422mg + B6 to dopamine synthesis; dual fructose+glucose = 20% faster glycogen delivery; India's #1 innings-break food; Rs 6 each = best pre-training snack value globally; 1 banana every 45 min during long innings = concentration maintenance protocol"
+    },
+    {
+      "name": "Dates - Medjool",
+      "category": "Quick Carb",
+      "veg": true,
+      "budget": "low_med",
+      "hostel": true,
+      "nutrition_score": 8.5,
+      "cpfi": 68.3,
+      "macros": {
+        "cal": 277.0,
+        "protein": 1.8,
+        "carbs": 75.0,
+        "fat": 0.2,
+        "fibre": 7.0
+      },
+      "role_scores": {
+        "bat": 9,
+        "bowl": 8,
+        "wk": 8,
+        "ar": 9
+      },
+      "performance": {
+        "focus": 7,
+        "recovery": 7,
+        "strength": 4,
+        "power": 9,
+        "stamina": 7,
+        "endurance": 8,
+        "agility": 7,
+        "hydration": 5
+      },
+      "goals": {
+        "mg": 3,
+        "wl": 2,
+        "wg": 5,
+        "fp": 6,
+        "bp": 9,
+        "be": 8,
+        "bwe": 7,
+        "rt": 7,
+        "mf": 6,
+        "rv": 7
+      },
+      "timing": [
+        "Pre-Training",
+        "During Training",
+        "Mid-Morning",
+        "Evening Snack"
+      ],
+      "phases": [
+        "Match Day",
+        "Tournament Week",
+        "Fitness Day"
+      ],
+      "notes": "Iron 0.9mg + K 696mg + Mg 54mg + fastest natural sugar; 2 dates = 36g carb + mineral package; pocket food between overs for PCr resynthesis; POWER score 9/10"
+    },
+    {
+      "name": "Honey - Raw",
+      "category": "Natural Quick Sugar",
+      "veg": true,
+      "budget": "low_med",
+      "hostel": true,
+      "nutrition_score": 6.8,
+      "cpfi": 54.3,
+      "macros": {
+        "cal": 304.0,
+        "protein": 0.3,
+        "carbs": 82.0,
+        "fat": 0.0,
+        "fibre": 0.2
+      },
+      "role_scores": {
+        "bat": 7,
+        "bowl": 6,
+        "wk": 7,
+        "ar": 7
+      },
+      "performance": {
+        "focus": 5,
+        "recovery": 6,
+        "strength": 3,
+        "power": 7,
+        "stamina": 6,
+        "endurance": 6,
+        "agility": 6,
+        "hydration": 4
+      },
+      "goals": {
+        "mg": 2,
+        "wl": 2,
+        "wg": 4,
+        "fp": 5,
+        "bp": 7,
+        "be": 7,
+        "bwe": 5,
+        "rt": 6,
+        "mf": 5,
+        "rv": 6
+      },
+      "timing": [
+        "Pre-Training",
+        "During Training",
+        "Mid-Morning",
+        "Breakfast"
+      ],
+      "phases": [
+        "Match Day",
+        "Fitness Day",
+        "Tournament Week"
+      ],
+      "notes": "50:50 glucose:fructose = dual-transporter fuel; anti-microbial for throat health; natural quick carb for pre-training; better than refined sugar for fitness; add to sattu drink or warm water"
+    },
+    {
+      "name": "Jaggery - Gur",
+      "category": "Natural Sugar Iron",
+      "veg": true,
+      "budget": "low",
+      "hostel": true,
+      "nutrition_score": 7.5,
+      "cpfi": 56.8,
+      "macros": {
+        "cal": 383.0,
+        "protein": 0.4,
+        "carbs": 98.0,
+        "fat": 0.1,
+        "fibre": 0.0
+      },
+      "role_scores": {
+        "bat": 8,
+        "bowl": 7,
+        "wk": 7,
+        "ar": 8
+      },
+      "performance": {
+        "focus": 5,
+        "recovery": 6,
+        "strength": 4,
+        "power": 7,
+        "stamina": 6,
+        "endurance": 7,
+        "agility": 5,
+        "hydration": 5
+      },
+      "goals": {
+        "mg": 2,
+        "wl": 2,
+        "wg": 5,
+        "fp": 6,
+        "bp": 7,
+        "be": 7,
+        "bwe": 6,
+        "rt": 5,
+        "mf": 4,
+        "rv": 6
+      },
+      "timing": [
+        "During Training",
+        "Mid-Morning",
+        "Evening Snack",
+        "Post-Training"
+      ],
+      "phases": [
+        "Match Day",
+        "All Phases"
+      ],
+      "notes": "Fe 11mg/100g (highest among natural sugars); molasses provides B vitamins + electrolytes; replaces refined sugar in all preparations; add to sattu drink, chai, or milk; Rs 40/500g = affordable iron source"
+    },
+    {
+      "name": "Watermelon",
+      "category": "Hydration Fruit",
+      "veg": true,
+      "budget": "low",
+      "hostel": true,
+      "nutrition_score": 8.5,
+      "cpfi": 69.3,
+      "macros": {
+        "cal": 30.0,
+        "protein": 0.6,
+        "carbs": 7.6,
+        "fat": 0.2,
+        "fibre": 0.4
+      },
+      "role_scores": {
+        "bat": 8,
+        "bowl": 9,
+        "wk": 8,
+        "ar": 9
+      },
+      "performance": {
+        "focus": 5,
+        "recovery": 9,
+        "strength": 3,
+        "power": 6,
+        "stamina": 7,
+        "endurance": 8,
+        "agility": 8,
+        "hydration": 9
+      },
+      "goals": {
+        "mg": 2,
+        "wl": 6,
+        "wg": 3,
+        "fp": 8,
+        "bp": 6,
+        "be": 7,
+        "bwe": 9,
+        "rt": 7,
+        "mf": 4,
+        "rv": 9
+      },
+      "timing": [
+        "Mid-Morning",
+        "During Training",
+        "Post-Training",
+        "Evening Snack"
+      ],
+      "phases": [
+        "Match Day",
+        "Recovery Day",
+        "Fitness Day",
+        "Tournament Week"
+      ],
+      "notes": "Citrulline 250mg to arginine to NO reduces DOMS by 40% in study; 92% water = best hydration food; lycopene anti-inflammatory; India's cheapest clinical recovery food in summer"
+    },
+    {
+      "name": "Pomegranate Juice",
+      "category": "Antioxidant Recovery",
+      "veg": true,
+      "budget": "medium",
+      "hostel": true,
+      "nutrition_score": 9.0,
+      "cpfi": 76.9,
+      "macros": {
+        "cal": 83.0,
+        "protein": 1.7,
+        "carbs": 19.0,
+        "fat": 1.2,
+        "fibre": 4.0
+      },
+      "role_scores": {
+        "bat": 9,
+        "bowl": 9,
+        "wk": 9,
+        "ar": 9
+      },
+      "performance": {
+        "focus": 8,
+        "recovery": 10,
+        "strength": 4,
+        "power": 6,
+        "stamina": 7,
+        "endurance": 9,
+        "agility": 8,
+        "hydration": 7
+      },
+      "goals": {
+        "mg": 3,
+        "wl": 5,
+        "wg": 4,
+        "fp": 9,
+        "bp": 7,
+        "be": 9,
+        "bwe": 9,
+        "rt": 8,
+        "mf": 8,
+        "rv": 10
+      },
+      "timing": [
+        "Post-Training",
+        "Mid-Morning",
+        "Lunch"
+      ],
+      "phases": [
+        "Recovery Day",
+        "Match Day",
+        "Tournament Week"
+      ],
+      "notes": "Punicalagins ellagitannins reduce DOMS by 13-16% in published studies; nitrates raise cerebral O2; #4 overall CPFI (76.9); best daily recovery + focus juice; 28-day protocol improves memory"
+    },
+    {
+      "name": "Amla - Indian Gooseberry",
+      "category": "Vit C Superfood",
+      "veg": true,
+      "budget": "low",
+      "hostel": true,
+      "nutrition_score": 8.5,
+      "cpfi": 69.8,
+      "macros": {
+        "cal": 58.0,
+        "protein": 0.9,
+        "carbs": 14.0,
+        "fat": 0.1,
+        "fibre": 4.3
+      },
+      "role_scores": {
+        "bat": 8,
+        "bowl": 9,
+        "wk": 8,
+        "ar": 9
+      },
+      "performance": {
+        "focus": 8,
+        "recovery": 9,
+        "strength": 4,
+        "power": 5,
+        "stamina": 7,
+        "endurance": 8,
+        "agility": 7,
+        "hydration": 5
+      },
+      "goals": {
+        "mg": 3,
+        "wl": 5,
+        "wg": 3,
+        "fp": 8,
+        "bp": 6,
+        "be": 8,
+        "bwe": 9,
+        "rt": 7,
+        "mf": 8,
+        "rv": 9
+      },
+      "timing": [
+        "Breakfast",
+        "Mid-Morning"
+      ],
+      "phases": [
+        "All Phases"
+      ],
+      "notes": "600-900mg Vit C/100g = richest natural source; Vit C required for dopamine synthesis (focus); reduces cortisol; 3x iron absorption from next meal; India's most affordable Vit C food; daily morning essential"
+    },
+    {
+      "name": "Pineapple",
+      "category": "Bromelain Anti-Inflammatory",
+      "veg": true,
+      "budget": "low",
+      "hostel": true,
+      "nutrition_score": 8.2,
+      "cpfi": 62.2,
+      "macros": {
+        "cal": 50.0,
+        "protein": 0.5,
+        "carbs": 13.0,
+        "fat": 0.1,
+        "fibre": 1.4
+      },
+      "role_scores": {
+        "bat": 8,
+        "bowl": 9,
+        "wk": 8,
+        "ar": 8
+      },
+      "performance": {
+        "focus": 5,
+        "recovery": 9,
+        "strength": 3,
+        "power": 5,
+        "stamina": 6,
+        "endurance": 7,
+        "agility": 6,
+        "hydration": 7
+      },
+      "goals": {
+        "mg": 2,
+        "wl": 5,
+        "wg": 3,
+        "fp": 8,
+        "bp": 5,
+        "be": 7,
+        "bwe": 9,
+        "rt": 5,
+        "mf": 4,
+        "rv": 9
+      },
+      "timing": [
+        "Post-Training",
+        "Mid-Morning",
+        "Lunch"
+      ],
+      "phases": [
+        "Recovery Day",
+        "Tournament Week"
+      ],
+      "notes": "Bromelain enzyme reduces muscle soreness + joint swelling clinically; Mn 1.5mg activates superoxide dismutase; reduces spinning finger joint swelling for endurance athletes; daily post-training serving"
+    },
+    {
+      "name": "Beetroot - Raw Juice",
+      "category": "Nitrate Performance",
+      "veg": true,
+      "budget": "low",
+      "hostel": true,
+      "nutrition_score": 9.5,
+      "cpfi": 80.8,
+      "macros": {
+        "cal": 43.0,
+        "protein": 1.6,
+        "carbs": 10.0,
+        "fat": 0.2,
+        "fibre": 2.8
+      },
+      "role_scores": {
+        "bat": 9,
+        "bowl": 10,
+        "wk": 9,
+        "ar": 10
+      },
+      "performance": {
+        "focus": 8,
+        "recovery": 8,
+        "strength": 5,
+        "power": 9,
+        "stamina": 9,
+        "endurance": 10,
+        "agility": 9,
+        "hydration": 6
+      },
+      "goals": {
+        "mg": 3,
+        "wl": 5,
+        "wg": 4,
+        "fp": 10,
+        "bp": 8,
+        "be": 9,
+        "bwe": 10,
+        "rt": 8,
+        "mf": 7,
+        "rv": 8
+      },
+      "timing": [
+        "Breakfast",
+        "Pre-Training"
+      ],
+      "phases": [
+        "Match Day",
+        "Fitness Day",
+        "Tournament Week"
+      ],
+      "notes": "Nitrates to NO to reduces O2 cost per sprint by 3-5%; specifically dilates TYPE-II fast-twitch muscle vessels; 200ml 90min pre-match = measurable bat speed + bowling pace improvement; #2 overall CPFI (80.8); highest fitness score (9.5/10)"
+    },
+    {
+      "name": "Spinach - Palak Cooked",
+      "category": "Iron Nitrate Vegetable",
+      "veg": true,
+      "budget": "low",
+      "hostel": true,
+      "nutrition_score": 8.2,
+      "cpfi": 70.8,
+      "macros": {
+        "cal": 23.0,
+        "protein": 2.9,
+        "carbs": 3.6,
+        "fat": 0.4,
+        "fibre": 2.2
+      },
+      "role_scores": {
+        "bat": 8,
+        "bowl": 9,
+        "wk": 8,
+        "ar": 8
+      },
+      "performance": {
+        "focus": 8,
+        "recovery": 7,
+        "strength": 5,
+        "power": 7,
+        "stamina": 8,
+        "endurance": 8,
+        "agility": 7,
+        "hydration": 6
+      },
+      "goals": {
+        "mg": 3,
+        "wl": 7,
+        "wg": 4,
+        "fp": 8,
+        "bp": 6,
+        "be": 8,
+        "bwe": 9,
+        "rt": 7,
+        "mf": 7,
+        "rv": 7
+      },
+      "timing": [
+        "Lunch",
+        "Dinner"
+      ],
+      "phases": [
+        "All Phases"
+      ],
+      "notes": "Nitrates 250mg/100g to NO to vasodilation to faster sprint top speed; lutein accumulates in visual processing areas = sharper ball-tracking; non-negotiable for aerobic endurance athletes; iron for haemoglobin maintenance"
+    },
+    {
+      "name": "Turmeric + Black Pepper",
+      "category": "Anti-Inflammatory Spice",
+      "veg": true,
+      "budget": "low",
+      "hostel": true,
+      "nutrition_score": 8.2,
+      "cpfi": 62.9,
+      "macros": {
+        "cal": 312.0,
+        "protein": 10.0,
+        "carbs": 65.0,
+        "fat": 3.0,
+        "fibre": 21.0
+      },
+      "role_scores": {
+        "bat": 8,
+        "bowl": 9,
+        "wk": 8,
+        "ar": 8
+      },
+      "performance": {
+        "focus": 8,
+        "recovery": 10,
+        "strength": 4,
+        "power": 4,
+        "stamina": 5,
+        "endurance": 7,
+        "agility": 5,
+        "hydration": 2
+      },
+      "goals": {
+        "mg": 3,
+        "wl": 4,
+        "wg": 3,
+        "fp": 8,
+        "bp": 6,
+        "be": 7,
+        "bwe": 9,
+        "rt": 6,
+        "mf": 8,
+        "rv": 10
+      },
+      "timing": [
+        "Dinner",
+        "Pre-Sleep",
+        "Breakfast"
+      ],
+      "phases": [
+        "Recovery Day",
+        "All Phases"
+      ],
+      "notes": "Curcumin + piperine 95x bioavailability; blocks NF-kB in inflamed shoulder/back; replaces NSAIDs safely; 1g haldi in warm milk + pepper every night = post-match inflammation protocol; Rs 8/dose; RECOVERY score 10/10"
+    },
+    {
+      "name": "Ginger - Fresh",
+      "category": "Anti-Inflammatory Spice",
+      "veg": true,
+      "budget": "low",
+      "hostel": true,
+      "nutrition_score": 7.8,
+      "cpfi": 58.3,
+      "macros": {
+        "cal": 80.0,
+        "protein": 1.8,
+        "carbs": 18.0,
+        "fat": 0.8,
+        "fibre": 2.0
+      },
+      "role_scores": {
+        "bat": 7,
+        "bowl": 9,
+        "wk": 7,
+        "ar": 8
+      },
+      "performance": {
+        "focus": 6,
+        "recovery": 9,
+        "strength": 3,
+        "power": 4,
+        "stamina": 5,
+        "endurance": 7,
+        "agility": 5,
+        "hydration": 4
+      },
+      "goals": {
+        "mg": 2,
+        "wl": 4,
+        "wg": 2,
+        "fp": 8,
+        "bp": 5,
+        "be": 7,
+        "bwe": 9,
+        "rt": 5,
+        "mf": 5,
+        "rv": 9
+      },
+      "timing": [
+        "Breakfast",
+        "Dinner",
+        "Pre-Sleep"
+      ],
+      "phases": [
+        "Recovery Day",
+        "All Phases"
+      ],
+      "notes": "Gingerols reduce DOMS by 25% in published studies; reduces nausea for nervous pre-match athletes; anti-inflammatory without kidney risk; 1g daily in food = meaningful protective effect"
+    },
+    {
+      "name": "Garlic - Fresh",
+      "category": "Testosterone Immune Herb",
+      "veg": true,
+      "budget": "low",
+      "hostel": true,
+      "nutrition_score": 7.5,
+      "cpfi": 62.3,
+      "macros": {
+        "cal": 149.0,
+        "protein": 6.4,
+        "carbs": 33.0,
+        "fat": 0.5,
+        "fibre": 2.1
+      },
+      "role_scores": {
+        "bat": 7,
+        "bowl": 8,
+        "wk": 7,
+        "ar": 8
+      },
+      "performance": {
+        "focus": 6,
+        "recovery": 8,
+        "strength": 7,
+        "power": 6,
+        "stamina": 5,
+        "endurance": 7,
+        "agility": 5,
+        "hydration": 3
+      },
+      "goals": {
+        "mg": 5,
+        "wl": 5,
+        "wg": 5,
+        "fp": 8,
+        "bp": 6,
+        "be": 7,
+        "bwe": 8,
+        "rt": 5,
+        "mf": 6,
+        "rv": 8
+      },
+      "timing": [
+        "Lunch",
+        "Dinner"
+      ],
+      "phases": [
+        "All Phases"
+      ],
+      "notes": "Allicin reduces testosterone breakdown; diallyl disulfide improves muscle fibre formation; immune support during tournament season; daily inclusion in cooking protects against illness"
+    },
+    {
+      "name": "Moringa Dried Leaves",
+      "category": "Superfood Plant",
+      "veg": true,
+      "budget": "medium",
+      "hostel": false,
+      "nutrition_score": 8.5,
+      "cpfi": 74.9,
+      "macros": {
+        "cal": 205.0,
+        "protein": 27.0,
+        "carbs": 38.0,
+        "fat": 2.3,
+        "fibre": 19.4
+      },
+      "role_scores": {
+        "bat": 8,
+        "bowl": 9,
+        "wk": 8,
+        "ar": 9
+      },
+      "performance": {
+        "focus": 8,
+        "recovery": 8,
+        "strength": 7,
+        "power": 6,
+        "stamina": 8,
+        "endurance": 9,
+        "agility": 7,
+        "hydration": 5
+      },
+      "goals": {
+        "mg": 7,
+        "wl": 7,
+        "wg": 7,
+        "fp": 8,
+        "bp": 7,
+        "be": 9,
+        "bwe": 9,
+        "rt": 7,
+        "mf": 8,
+        "rv": 8
+      },
+      "timing": [
+        "Breakfast",
+        "Pre-Training",
+        "Lunch"
+      ],
+      "phases": [
+        "All Phases"
+      ],
+      "notes": "Iron 28mg/100g dried (highest plant iron); all 9 EAA; quercetin reduces neuroinflammation; South India's fastest fitness enthusiast superfood; available in South India and online; #5 overall CPFI (74.9)"
+    },
+    {
+      "name": "Coconut Water - Fresh",
+      "category": "Natural Electrolyte Drink",
+      "veg": true,
+      "budget": "low",
+      "hostel": true,
+      "nutrition_score": 8.8,
+      "cpfi": 60.4,
+      "macros": {
+        "cal": 19.0,
+        "protein": 0.7,
+        "carbs": 3.7,
+        "fat": 0.2,
+        "fibre": 1.1
+      },
+      "role_scores": {
+        "bat": 9,
+        "bowl": 8,
+        "wk": 9,
+        "ar": 9
+      },
+      "performance": {
+        "focus": 5,
+        "recovery": 7,
+        "strength": 2,
+        "power": 4,
+        "stamina": 7,
+        "endurance": 7,
+        "agility": 7,
+        "hydration": 10
+      },
+      "goals": {
+        "mg": 1,
+        "wl": 3,
+        "wg": 2,
+        "fp": 5,
+        "bp": 5,
+        "be": 8,
+        "bwe": 7,
+        "rt": 7,
+        "mf": 5,
+        "rv": 7
+      },
+      "timing": [
+        "During Training",
+        "Post-Training",
+        "Mid-Morning",
+        "Lunch"
+      ],
+      "phases": [
+        "Match Day",
+        "Recovery Day",
+        "Fitness Day",
+        "Tournament Week"
+      ],
+      "notes": "K 600mg + Na 252mg + Mg 60mg = best natural isotonic drink; better hydration than plain water in studies; HYDRATION score 10/10; every drinks break = coconut water for electrolyte maintenance"
+    },
+    {
+      "name": "Nimbu Pani - Salted Lemon Water",
+      "category": "Electrolyte Drink",
+      "veg": true,
+      "budget": "low",
+      "hostel": true,
+      "nutrition_score": 8.2,
+      "cpfi": 54.9,
+      "macros": {
+        "cal": 15.0,
+        "protein": 0.1,
+        "carbs": 3.5,
+        "fat": 0.0,
+        "fibre": 0.1
+      },
+      "role_scores": {
+        "bat": 8,
+        "bowl": 8,
+        "wk": 9,
+        "ar": 8
+      },
+      "performance": {
+        "focus": 5,
+        "recovery": 6,
+        "strength": 2,
+        "power": 4,
+        "stamina": 5,
+        "endurance": 6,
+        "agility": 7,
+        "hydration": 10
+      },
+      "goals": {
+        "mg": 1,
+        "wl": 3,
+        "wg": 1,
+        "fp": 5,
+        "bp": 4,
+        "be": 6,
+        "bwe": 5,
+        "rt": 7,
+        "mf": 4,
+        "rv": 6
+      },
+      "timing": [
+        "During Training",
+        "Mid-Morning",
+        "Post-Training",
+        "Lunch"
+      ],
+      "phases": [
+        "Match Day",
+        "Fitness Day",
+        "All Phases"
+      ],
+      "notes": "India's original sports drink; 1/4 tsp salt + 2 tsp sugar + lemon + 300ml water = Na 600mg + Vit C + carbs; Rs 3 = replaces Rs 60 sports drinks; HYDRATION score 10/10"
+    },
+    {
+      "name": "Lassi - Plain Full Fat",
+      "category": "Probiotic Electrolyte Drink",
+      "veg": true,
+      "budget": "low",
+      "hostel": true,
+      "nutrition_score": 8.0,
+      "cpfi": 64.2,
+      "macros": {
+        "cal": 70.0,
+        "protein": 3.5,
+        "carbs": 7.0,
+        "fat": 3.0,
+        "fibre": 0.0
+      },
+      "role_scores": {
+        "bat": 8,
+        "bowl": 8,
+        "wk": 8,
+        "ar": 8
+      },
+      "performance": {
+        "focus": 5,
+        "recovery": 8,
+        "strength": 5,
+        "power": 5,
+        "stamina": 6,
+        "endurance": 7,
+        "agility": 6,
+        "hydration": 9
+      },
+      "goals": {
+        "mg": 4,
+        "wl": 4,
+        "wg": 5,
+        "fp": 5,
+        "bp": 6,
+        "be": 7,
+        "bwe": 7,
+        "rt": 5,
+        "mf": 4,
+        "rv": 8
+      },
+      "timing": [
+        "Mid-Morning",
+        "Lunch",
+        "Post-Training"
+      ],
+      "phases": [
+        "Match Day",
+        "Recovery Day",
+        "Tournament Week"
+      ],
+      "notes": "K 320mg + Na 160mg + probiotic electrolyte in one glass; probiotics reduce post-match gut stress; protein + hydration + probiotic in one traditional drink"
+    },
+    {
+      "name": "Orange Juice - Fresh",
+      "category": "Vitamin C Fast Carb",
+      "veg": true,
+      "budget": "low",
+      "hostel": true,
+      "nutrition_score": 7.2,
+      "cpfi": 62.2,
+      "macros": {
+        "cal": 45.0,
+        "protein": 0.7,
+        "carbs": 10.4,
+        "fat": 0.2,
+        "fibre": 0.2
+      },
+      "role_scores": {
+        "bat": 8,
+        "bowl": 7,
+        "wk": 7,
+        "ar": 7
+      },
+      "performance": {
+        "focus": 6,
+        "recovery": 8,
+        "strength": 4,
+        "power": 5,
+        "stamina": 6,
+        "endurance": 6,
+        "agility": 6,
+        "hydration": 8
+      },
+      "goals": {
+        "mg": 3,
+        "wl": 5,
+        "wg": 4,
+        "fp": 6,
+        "bp": 5,
+        "be": 6,
+        "bwe": 6,
+        "rt": 6,
+        "mf": 5,
+        "rv": 8
+      },
+      "timing": [
+        "Breakfast",
+        "Post-Training",
+        "Mid-Morning"
+      ],
+      "phases": [
+        "Match Day",
+        "Recovery Day",
+        "Fitness Day"
+      ],
+      "notes": "Vit C 50mg/100ml = 3x iron absorption enhancement from next meal; folate for RBC production; best morning post-training recovery drink with iron-rich meal"
+    },
+    {
+      "name": "Sugarcane Juice - Fresh",
+      "category": "Instant Glycogen",
+      "veg": true,
+      "budget": "low",
+      "hostel": true,
+      "nutrition_score": 6.5,
+      "cpfi": 48.1,
+      "macros": {
+        "cal": 80.0,
+        "protein": 0.2,
+        "carbs": 20.0,
+        "fat": 0.5,
+        "fibre": 0.0
+      },
+      "role_scores": {
+        "bat": 7,
+        "bowl": 6,
+        "wk": 6,
+        "ar": 7
+      },
+      "performance": {
+        "focus": 3,
+        "recovery": 6,
+        "strength": 2,
+        "power": 7,
+        "stamina": 4,
+        "endurance": 4,
+        "agility": 5,
+        "hydration": 9
+      },
+      "goals": {
+        "mg": 1,
+        "wl": 1,
+        "wg": 4,
+        "fp": 4,
+        "bp": 6,
+        "be": 5,
+        "bwe": 4,
+        "rt": 4,
+        "mf": 3,
+        "rv": 6
+      },
+      "timing": [
+        "Post-Training",
+        "During Training"
+      ],
+      "phases": [
+        "Match Day",
+        "Recovery Day"
+      ],
+      "notes": "India's fastest glycogen drink; K 176mg + Fe 1.1mg + instant glucose; immediate post-match recovery; not a training staple; occasional recovery drink"
+    },
+    {
+      "name": "Ashwagandha Root Extract",
+      "category": "Adaptogen Supplement",
+      "veg": true,
+      "budget": "medium",
+      "hostel": true,
+      "nutrition_score": 8.8,
+      "cpfi": 82.2,
+      "macros": {
+        "cal": 20.0,
+        "protein": 2.0,
+        "carbs": 3.0,
+        "fat": 0.5,
+        "fibre": 0.0
+      },
+      "role_scores": {
+        "bat": 9,
+        "bowl": 9,
+        "wk": 8,
+        "ar": 9
+      },
+      "performance": {
+        "focus": 9,
+        "recovery": 9,
+        "strength": 9,
+        "power": 8,
+        "stamina": 8,
+        "endurance": 9,
+        "agility": 8,
+        "hydration": 3
+      },
+      "goals": {
+        "mg": 9,
+        "wl": 6,
+        "wg": 8,
+        "fp": 9,
+        "bp": 9,
+        "be": 8,
+        "bwe": 9,
+        "rt": 8,
+        "mf": 9,
+        "rv": 9
+      },
+      "timing": [
+        "Pre-Sleep",
+        "Breakfast"
+      ],
+      "phases": [
+        "All Phases"
+      ],
+      "notes": "KSM-66 clinical data: cortisol down 30%, testosterone up 15-17%, muscle mass gain 2x vs placebo; #1 CPFI score (82.2); 8-week protocol for full benefit; best legal botanical investment; critical for pressure match situations"
+    },
+    {
+      "name": "Green Tea - Brewed",
+      "category": "Polyphenol Focus Drink",
+      "veg": true,
+      "budget": "low",
+      "hostel": true,
+      "nutrition_score": 8.0,
+      "cpfi": 67.0,
+      "macros": {
+        "cal": 1.0,
+        "protein": 0.2,
+        "carbs": 0.2,
+        "fat": 0.0,
+        "fibre": 0.0
+      },
+      "role_scores": {
+        "bat": 8,
+        "bowl": 7,
+        "wk": 9,
+        "ar": 8
+      },
+      "performance": {
+        "focus": 9,
+        "recovery": 7,
+        "strength": 3,
+        "power": 5,
+        "stamina": 6,
+        "endurance": 7,
+        "agility": 8,
+        "hydration": 8
+      },
+      "goals": {
+        "mg": 2,
+        "wl": 7,
+        "wg": 2,
+        "fp": 6,
+        "bp": 6,
+        "be": 8,
+        "bwe": 7,
+        "rt": 9,
+        "mf": 9,
+        "rv": 7
+      },
+      "timing": [
+        "Breakfast",
+        "Mid-Morning",
+        "Pre-Training"
+      ],
+      "phases": [
+        "Match Day",
+        "All Phases"
+      ],
+      "notes": "L-theanine + caffeine synergy: calm alertness without anxiety spikes; alpha brain-wave increase = relaxed concentration; 2h pre-match WK and endurance athlete drink; EGCG antioxidant reduces standing-fatigue oxidative stress; 2 cups daily builds benefit"
+    },
+    {
+      "name": "Brahmi - Bacopa Supplement",
+      "category": "Cognitive Herb",
+      "veg": true,
+      "budget": "low_med",
+      "hostel": true,
+      "nutrition_score": 8.2,
+      "cpfi": 51.5,
+      "macros": {
+        "cal": 0.0,
+        "protein": 0.0,
+        "carbs": 0.0,
+        "fat": 0.0,
+        "fibre": 0.0
+      },
+      "role_scores": {
+        "bat": 9,
+        "bowl": 7,
+        "wk": 9,
+        "ar": 8
+      },
+      "performance": {
+        "focus": 10,
+        "recovery": 5,
+        "strength": 2,
+        "power": 3,
+        "stamina": 5,
+        "endurance": 5,
+        "agility": 7,
+        "hydration": 2
+      },
+      "goals": {
+        "mg": 1,
+        "wl": 2,
+        "wg": 1,
+        "fp": 3,
+        "bp": 5,
+        "be": 10,
+        "bwe": 5,
+        "rt": 9,
+        "mf": 10,
+        "rv": 5
+      },
+      "timing": [
+        "Breakfast",
+        "Mid-Morning"
+      ],
+      "phases": [
+        "Match Day",
+        "Skill Practice",
+        "Tournament Week"
+      ],
+      "notes": "Bacosides inhibit acetylcholinesterase = 40% more acetylcholine available; 12-week clinical evidence for improved information processing and memory consolidation; FOCUS score 10/10; India's cognitive-performance herb for batsmen and endurance athletes"
+    },
+    {
+      "name": "Creatine Monohydrate",
+      "category": "Supplement",
+      "veg": true,
+      "budget": "medium",
+      "hostel": true,
+      "nutrition_score": 8.8,
+      "cpfi": 65.0,
+      "macros": {
+        "cal": 0.0,
+        "protein": 0.0,
+        "carbs": 0.0,
+        "fat": 0.0,
+        "fibre": 0.0
+      },
+      "role_scores": {
+        "bat": 8,
+        "bowl": 10,
+        "wk": 8,
+        "ar": 9
+      },
+      "performance": {
+        "focus": 4,
+        "recovery": 7,
+        "strength": 9,
+        "power": 10,
+        "stamina": 5,
+        "endurance": 6,
+        "agility": 7,
+        "hydration": 4
+      },
+      "goals": {
+        "mg": 8,
+        "wl": 4,
+        "wg": 7,
+        "fp": 10,
+        "bp": 9,
+        "be": 6,
+        "bwe": 9,
+        "rt": 6,
+        "mf": 4,
+        "rv": 7
+      },
+      "timing": [
+        "Post-Training",
+        "Pre-Training"
+      ],
+      "phases": [
+        "Strength Day",
+        "Match Day",
+        "Fitness Day",
+        "Tournament Week"
+      ],
+      "notes": "Most researched legal supplement; phosphocreatine PCr stores up 20% = faster ATP during high-intensity training; POWER score 10/10; 5g daily long-term; reduces fatigue in late training sets; preserves muscle during calorie deficit; most impactful legal supplement for body recomposition"
+    },
+    {
+      "name": "Makhana - Lotus Seeds Roasted",
+      "category": "Indian Superfood Snack",
+      "veg": true,
+      "budget": "low_med",
+      "hostel": true,
+      "nutrition_score": 8.0,
+      "cpfi": 63.9,
+      "macros": {
+        "cal": 347.0,
+        "protein": 9.7,
+        "carbs": 77.0,
+        "fat": 0.1,
+        "fibre": 14.5
+      },
+      "role_scores": {
+        "bat": 8,
+        "bowl": 7,
+        "wk": 9,
+        "ar": 8
+      },
+      "performance": {
+        "focus": 8,
+        "recovery": 7,
+        "strength": 5,
+        "power": 5,
+        "stamina": 7,
+        "endurance": 7,
+        "agility": 7,
+        "hydration": 3
+      },
+      "goals": {
+        "mg": 4,
+        "wl": 7,
+        "wg": 5,
+        "fp": 5,
+        "bp": 6,
+        "be": 8,
+        "bwe": 6,
+        "rt": 7,
+        "mf": 8,
+        "rv": 7
+      },
+      "timing": [
+        "Mid-Morning",
+        "Evening Snack",
+        "Pre-Training"
+      ],
+      "phases": [
+        "Match Day",
+        "All Phases"
+      ],
+      "notes": "Kaempferol flavonoid inhibits COX-2 anti-inflammatory; activates anti-aging pathways; calcium 60mg + magnesium; India's original performance snack; available in every Indian market; excellent WK focus snack (focus 8/10)"
+    },
+    {
+      "name": "Chocolate Milk - Full Fat",
+      "category": "Recovery Drink",
+      "veg": true,
+      "budget": "low_med",
+      "hostel": true,
+      "nutrition_score": 8.8,
+      "cpfi": 72.7,
+      "macros": {
+        "cal": 83.0,
+        "protein": 3.4,
+        "carbs": 11.0,
+        "fat": 3.5,
+        "fibre": 0.0
+      },
+      "role_scores": {
+        "bat": 9,
+        "bowl": 9,
+        "wk": 8,
+        "ar": 9
+      },
+      "performance": {
+        "focus": 6,
+        "recovery": 10,
+        "strength": 8,
+        "power": 7,
+        "stamina": 5,
+        "endurance": 7,
+        "agility": 6,
+        "hydration": 7
+      },
+      "goals": {
+        "mg": 7,
+        "wl": 4,
+        "wg": 7,
+        "fp": 8,
+        "bp": 7,
+        "be": 7,
+        "bwe": 8,
+        "rt": 5,
+        "mf": 5,
+        "rv": 10
+      },
+      "timing": [
+        "Post-Training"
+      ],
+      "phases": [
+        "Recovery Day",
+        "Strength Day",
+        "Match Day",
+        "Tournament Week"
+      ],
+      "notes": "4:1 carb:protein ratio proven in multiple studies to outperform commercial recovery drinks; RECOVERY score 10/10; India's most practical post-training window food; milk + cocoa powder = Rs 12/glass"
+    },
+    {
+      "name": "Sports Gel - Glucose",
+      "category": "Engineered Sports Fuel",
+      "veg": true,
+      "budget": "high",
+      "hostel": false,
+      "nutrition_score": 6.5,
+      "cpfi": 47.3,
+      "macros": {
+        "cal": 280.0,
+        "protein": 0.0,
+        "carbs": 70.0,
+        "fat": 0.0,
+        "fibre": 0.0
+      },
+      "role_scores": {
+        "bat": 7,
+        "bowl": 6,
+        "wk": 6,
+        "ar": 7
+      },
+      "performance": {
+        "focus": 4,
+        "recovery": 5,
+        "strength": 2,
+        "power": 8,
+        "stamina": 5,
+        "endurance": 5,
+        "agility": 6,
+        "hydration": 3
+      },
+      "goals": {
+        "mg": 1,
+        "wl": 1,
+        "wg": 2,
+        "fp": 5,
+        "bp": 6,
+        "be": 7,
+        "bwe": 5,
+        "rt": 5,
+        "mf": 3,
+        "rv": 5
+      },
+      "timing": [
+        "During Training",
+        "Pre-Training"
+      ],
+      "phases": [
+        "Match Day",
+        "Tournament Week"
+      ],
+      "notes": "22g pure glucose+maltodextrin absorbed in 5-10 min; best mid-innings carb when pocket food needed; emergency energy tool only; Indian alternatives like dates, banana, jaggery are superior for most situations"
+    }
+  ]
+}

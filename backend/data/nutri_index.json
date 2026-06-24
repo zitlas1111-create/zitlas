@@ -1,0 +1,182 @@
+{
+  "_comment": "Pre-processed lookup from ZITLAS Nutrition Knowledge Book (nutri.txt). Used by groq_service.py and offline_fallback.py to inject weight-loss-specific, India-appropriate food context into AI prompts and offline templates.",
+
+  "hostel_yes": [
+    "Poha", "Upma", "Idli", "Dosa", "Sambar", "Roti", "Chapati", "Rice", "Dal",
+    "Toor Dal", "Moong Dal", "Masoor Dal", "Chana Dal", "Urad Dal", "Rajma",
+    "Kabuli Chana", "Kala Chana", "Dal Tadka", "Dal Fry", "Dal Makhani",
+    "Dal Khichdi", "Khichdi", "Sabzi", "Aloo Sabzi", "Paneer Bhurji",
+    "Paneer Sabzi", "Palak Paneer", "Mutter Paneer", "Chole",
+    "Soya Chunks Curry", "Egg Curry", "Boiled Egg", "Masala Omelette",
+    "Egg Bhurji", "Bread Omelette", "Egg Fried Rice", "Egg Paratha",
+    "Milk", "Toned Milk", "Curd", "Dahi", "Lassi", "Chaas", "Buttermilk",
+    "Raita", "Paneer", "Chai", "Banana", "Peanuts", "Roasted Chana",
+    "Peanut Butter", "Bread", "Biscuits", "Jaggery", "Pickle",
+    "Moong Dal Cheela", "Besan Cheela", "Dhokla", "Sattu Drink",
+    "Sprout Salad", "Til Ladoo", "Peanut Chikki"
+  ],
+
+  "hostel_room_stock": [
+    "Peanut Butter", "Rolled Oats", "Roasted Chana", "Peanuts", "Milk Powder",
+    "Sattu Powder", "Dates", "Jaggery", "Banana", "Almonds", "Walnuts",
+    "Mixed Nuts", "Peanut Chikki", "Til Chikki", "Groundnut Ladoo",
+    "Biscuits (Marie/Digestive)", "Instant Oats"
+  ],
+
+  "budget_low": [
+    "Toor Dal", "Moong Dal", "Masoor Dal", "Chana Dal", "Urad Dal",
+    "Rajma", "Kabuli Chana", "Kala Chana", "Lobia", "Poha", "Rice",
+    "Roti", "Chapati", "Idli", "Upma", "Sambar", "Khichdi", "Dal Khichdi",
+    "Milk", "Curd", "Dahi", "Lassi", "Chaas", "Buttermilk",
+    "Boiled Egg", "Egg Bhurji", "Masala Omelette", "Egg Curry",
+    "Banana", "Papaya", "Guava", "Watermelon", "Orange", "Chikoo",
+    "Peanuts", "Roasted Chana", "Peanut Chikki", "Groundnut Ladoo",
+    "Jaggery", "Til Ladoo", "Sattu Drink", "Sattu Paratha",
+    "Moong Dal Cheela", "Besan Cheela", "Dhokla", "Sprout Salad",
+    "Aloo Sabzi", "Palak Sabzi", "Mixed Veg Sabzi", "Chai",
+    "Nimbu Pani", "Coconut Water (seasonal)", "Dal Fry", "Dal Tadka",
+    "Rajma Chawal", "Chole Roti", "Moong Sprouts", "Mixed Sprout Chaat"
+  ],
+
+  "budget_low_med": [
+    "Paneer", "Soy Chunks", "Tofu", "Soy Milk", "Greek Yogurt",
+    "Rolled Oats", "Oat Porridge with Milk", "Peanut Butter",
+    "Almonds", "Cashews", "Walnuts", "Pistachios", "Mixed Nuts",
+    "Chia Seeds", "Flaxseeds", "Pumpkin Seeds", "Sunflower Seeds",
+    "Makhana", "Ragi Dosa", "Ragi Porridge", "Dalia",
+    "Dal Makhani", "Paneer Bhurji", "Palak Paneer", "Mutter Paneer",
+    "Paneer Tikka", "Chicken Curry", "Fish Curry", "Egg Paratha",
+    "Multigrain Bread", "Brown Bread", "Whole Wheat Bread"
+  ],
+
+  "budget_medium": [
+    "Greek Yogurt", "Hung Curd", "Mozzarella Cheese", "Cheddar Cheese",
+    "Chicken Breast", "Mutton Curry", "Salmon", "Tuna",
+    "Quinoa", "Edamame", "Tempeh",
+    "Protein Bar", "Sports Drink", "Electrolyte Drink",
+    "Almond Butter", "Hemp Seeds", "Brazil Nuts"
+  ],
+
+  "budget_high": [
+    "Tempeh", "A2 Milk", "Whey Protein Isolate", "Casein Protein",
+    "Hemp Seeds", "Ricotta Cheese", "Macadamia Nuts", "Pine Nuts",
+    "Salmon Fillet", "Avocado", "Blueberries", "Cow Colostrum",
+    "Miso Paste", "Protein Bars (branded)", "BCAA Supplements"
+  ],
+
+  "role_foods": {
+    "high_protein": [
+      "Paneer", "Soy Chunks", "Eggs (3 whole)", "Chicken Breast",
+      "Rajma", "Dal Makhani", "Sattu Paratha", "Sattu Drink",
+      "Peanut Butter Toast", "Greek Yoghurt",
+      "Roasted Chana", "Horse Gram", "Mixed Dal Khichdi", "Paneer Bhurji + Roti"
+    ],
+    "high_carb_energy": [
+      "Oatmeal", "Banana", "Dates", "Coconut Water", "Jaggery",
+      "Whole Grain Roti + Dal", "Chia Seeds in Water",
+      "Almonds (soaked)", "Ragi Porridge", "Honey in Warm Water",
+      "Watermelon", "Papaya", "Sweet Potato + Dal", "Dal Khichdi"
+    ],
+    "fat_burning": [
+      "Green Tea (pre-workout)",
+      "Banana (30 min before workout)",
+      "Chicken Breast (150g post-training)",
+      "Paneer (100g daily, slow-release protein)",
+      "Rajma", "Eggs (morning)", "Coconut Water (post-workout)",
+      "Dates (quick energy)", "ORS (electrolyte replenishment)",
+      "Soy Chunks Curry", "Moong Dal Cheela", "Sattu Drink"
+    ],
+    "low_calorie_focus": [
+      "Banana (B6 for mood/focus)", "Green Tea (2-3h pre-workout)",
+      "Almonds (soaked)", "Dates", "Dal + Roti (lighter lunch)",
+      "Curd + Fruit", "Walnuts", "Eggs", "Paneer",
+      "Coconut Water", "Moong Dal", "Upma", "Ragi Dosa"
+    ],
+    "recovery_and_sleep": [
+      "Omega-3 Fish (3x/week)", "Eggs (whole, daily)",
+      "Pumpkin Seeds (zinc for recovery)", "Walnuts (brain health)",
+      "Beetroot Juice (90 min pre-workout)",
+      "Watermelon (citrulline for recovery)",
+      "Coconut Water", "Dates", "Banana", "Almonds",
+      "Turmeric Milk (pre-sleep)", "Rice + Dal", "Paneer",
+      "Blueberries (anthocyanins for inflammation)"
+    ],
+    "all_rounder": [
+      "Chicken Breast", "Eggs", "Paneer", "Soy Chunks",
+      "Rice + Dal combo", "Banana", "Dates", "Oatmeal",
+      "Rajma Chawal", "Peanut Butter", "Almonds", "Walnuts",
+      "Coconut Water", "Sattu Drink", "Dal Khichdi"
+    ]
+  },
+
+  "recovery_foods": {
+    "post_match": [
+      "Banana + Milk (potassium + casein)",
+      "Rice + Dal (glycogen + protein)",
+      "Watermelon (citrulline, 92% water)",
+      "Papaya (bromelain reduces inflammation)",
+      "Lassi (protein + electrolytes)",
+      "Dates + Milk", "Rajma + Rice", "Dal Khichdi",
+      "Chicken + Rice (if non-veg)",
+      "Curd + Banana", "Coconut Water", "ORS"
+    ],
+    "post_training": [
+      "Paneer Bhurji + Roti (protein + carb within 30 min)",
+      "Egg Bhurji + Roti (fast protein)",
+      "Curd + Banana + Bread",
+      "Rajma + Rice", "Dal + Rice",
+      "Soya Chunks Curry + Roti",
+      "Moong Dal Cheela + Curd",
+      "Sattu Drink + Banana",
+      "Milk + Banana combo",
+      "Boiled Egg + Bread + Banana"
+    ],
+    "post_strength": [
+      "Whey Protein + Banana (if available)",
+      "Chicken + Rice (leucine triggers muscle synthesis)",
+      "Paneer + Roti + Sabzi",
+      "Dal Makhani + Rice (extra protein)",
+      "Egg Whites (3-4) + Toast",
+      "Soy Chunks + Roti",
+      "Milk + Oats", "Rajma + Rice"
+    ]
+  },
+
+  "focus_foods": [
+    "Walnuts", "Eggs", "Turmeric Milk", "Green Tea",
+    "Banana", "Almonds (soaked)", "Amla", "Pumpkin Seeds",
+    "Palak / Spinach", "Oatmeal", "Dark Chocolate 70%+ (20g)",
+    "Coconut Water", "Chia Seeds"
+  ],
+
+  "match_day_foods": [
+    "Oatmeal (match morning, slow GI for 4h energy)",
+    "Roti + Dal (3h before, protein-modulated glycaemic release)",
+    "Banana (30-60 min before, potassium + B6)",
+    "Dates (3-4 during breaks, portable glycogen)",
+    "Coconut Water (200ml per break, electrolytes)",
+    "Honey in Warm Water (mid-innings, instant glucose)",
+    "Jaggery (between sessions, iron + natural sugar)",
+    "Watermelon (post-match hydration + recovery)",
+    "Rice + Dal (post-match full recovery meal)"
+  ],
+
+  "hydration_options": [
+    "Water", "Coconut Water", "Nimbu Pani with Salt",
+    "Chaas / Buttermilk", "ORS", "Sattu Drink (cold)",
+    "Sugarcane Juice (seasonal)", "Aam Panna (summer)",
+    "Lassi (plain/salted)", "Watermelon Juice",
+    "Electrolyte Water"
+  ],
+
+  "foods_to_avoid_pre_training": [
+    "Fried foods (samosa, pakoda, puri)",
+    "Heavy cream-based curries",
+    "Excessive ghee / butter",
+    "Raw high-fibre vegetables",
+    "Carbonated soft drinks",
+    "Maida-heavy items (excess)",
+    "Alcohol", "Excessive spicy food",
+    "Large portions of red meat immediately before training"
+  ]
+}

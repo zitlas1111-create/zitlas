@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ZITLAS — Personal Information</title>
+  <link rel="stylesheet" href="personal-info.css" />
+  <script src="../../../assets/js/i18n.js"></script>
+</head>
+<body>
+
+  <!-- APP BAR -->
+  <header class="app-bar">
+    <a href="../profile.html" class="back-btn" aria-label="Back to Profile">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="15 18 9 12 15 6"/>
+      </svg>
+    </a>
+    <span class="page-title" data-i18n="pi_page_title">Personal Information</span>
+    <button class="save-btn" id="saveBtn" data-i18n="btn_save">Save</button>
+  </header>
+
+  <main class="main-content">
+
+    <!-- PHOTO -->
+    <section class="photo-section">
+      <div class="photo-wrapper">
+        <img src="" alt="Profile Photo" class="photo-img" id="photoImg" />
+        <label class="photo-edit-btn" for="photoInput" aria-label="Change profile photo">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+            <circle cx="12" cy="13" r="4"/>
+          </svg>
+        </label>
+        <input type="file" id="photoInput" accept="image/*" class="visually-hidden" />
+      </div>
+      <p class="photo-hint" data-i18n="pi_photo_hint">Tap to change photo</p>
+    </section>
+
+    <!-- BASIC INFORMATION -->
+    <section class="form-section">
+      <div class="section-head">
+        <span class="section-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+          </svg>
+        </span>
+        <h2 class="section-title" data-i18n="pi_basic_info">Basic Information</h2>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="fullName"><span data-i18n="pi_full_name">Full Name</span> <span class="required">*</span></label>
+        <input type="text" id="fullName" class="form-input" data-i18n-ph="pi_name_ph" placeholder="Enter your full name" autocomplete="name" />
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="email" data-i18n="pi_email">Email</label>
+        <input type="email" id="email" class="form-input" data-i18n-ph="pi_email_ph" placeholder="your@email.com" autocomplete="email" />
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="mobile" data-i18n="pi_mobile">Mobile Number</label>
+        <input type="tel" id="mobile" class="form-input" data-i18n-ph="pi_mobile_ph" placeholder="+91 00000 00000" autocomplete="tel" />
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" for="dob" data-i18n="pi_dob">Date of Birth</label>
+          <input type="date" id="dob" class="form-input" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="age" data-i18n="pi_age">Age</label>
+          <input type="number" id="age" class="form-input" data-i18n-ph="pi_age_ph" placeholder="Years" min="10" max="100" readonly />
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="gender" data-i18n="pi_gender">Gender</label>
+        <div class="select-wrapper">
+          <select id="gender" class="form-select">
+            <option value="" data-i18n="pi_gender_select">Select gender</option>
+            <option value="male" data-i18n="pi_gender_male">Male</option>
+            <option value="female" data-i18n="pi_gender_female">Female</option>
+            <option value="other" data-i18n="pi_gender_other">Other</option>
+            <option value="prefer-not" data-i18n="pi_gender_prefer">Prefer not to say</option>
+          </select>
+          <svg class="select-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" for="city" data-i18n="pi_city">City</label>
+          <input type="text" id="city" class="form-input" data-i18n-ph="pi_city_ph" placeholder="City" autocomplete="address-level2" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="state" data-i18n="pi_state">State</label>
+          <input type="text" id="state" class="form-input" data-i18n-ph="pi_state_ph" placeholder="State" autocomplete="address-level1" />
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <div class="toast" id="toast"></div>
+  <script src="personal-info.js"></script>
+  <script src="../../../components/wallet.js"></script>
+</body>
+</html>

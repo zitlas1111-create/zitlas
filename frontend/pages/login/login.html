@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ZITLAS — Your Weight-Loss Journey</title>
+  <link rel="stylesheet" href="login.css" />
+  <script src="../../assets/js/i18n.js"></script>
+  <!-- Firebase SDK (compat — same API as v8) -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <script src="../../assets/js/firebase-config.js"></script>
+</head>
+<body>
+
+  <!-- ════════════ BACKGROUND GLOW ════════════ -->
+  <div class="bg-glow" aria-hidden="true"></div>
+
+  <!-- ════════════ HERO ════════════ -->
+  <section class="hero">
+
+    <!-- Logo -->
+    <div class="login-logo-block">
+      <span class="login-logo-text">ZITLAS</span>
+    </div>
+
+    <!-- Tagline -->
+    <p class="login-tagline" data-i18n="login_tagline">Your Weight-Loss Journey Starts Here</p>
+
+    <!-- Headline -->
+    <h1 class="login-headline">
+      <span data-i18n="login_headline">Build Your</span><br>
+      <span class="login-headline-accent" data-i18n="login_headline_accent">Healthier Future.</span>
+    </h1>
+
+    <!-- Subtitle -->
+    <p class="login-subtitle">
+      <span data-i18n="login_subtitle">Fitness · Nutrition · Results</span><br>
+      <span data-i18n="login_subtitle2">One Platform · Unlimited Opportunities.</span>
+    </p>
+
+    <!-- Ecosystem Illustration -->
+    <div class="ecosystem-wrap" aria-hidden="true">
+      <svg class="ecosystem-svg" viewBox="0 0 280 200" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <radialGradient id="centerGlow" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#FF8A00" stop-opacity="0.22"/>
+            <stop offset="100%" stop-color="#FF8A00" stop-opacity="0"/>
+          </radialGradient>
+          <radialGradient id="outerGlow" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#FF8A00" stop-opacity="0.10"/>
+            <stop offset="100%" stop-color="#FF8A00" stop-opacity="0"/>
+          </radialGradient>
+          <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur"/>
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+
+        <!-- Connection lines — drawn in via animation -->
+        <!-- Center (140,100) → Fitness (70,45) -->
+        <path class="eco-line eco-l1" d="M140,100 L70,45"   fill="none" stroke="#FF8A00" stroke-width="1.2" opacity="0.4"/>
+        <!-- Center → Training (210,45) -->
+        <path class="eco-line eco-l2" d="M140,100 L210,45"  fill="none" stroke="#FF8A00" stroke-width="1.2" opacity="0.4"/>
+        <!-- Center → Results (210,155) -->
+        <path class="eco-line eco-l3" d="M140,100 L210,155" fill="none" stroke="#FF8A00" stroke-width="1.2" opacity="0.4"/>
+        <!-- Center → Nutrition (70,155) -->
+        <path class="eco-line eco-l4" d="M140,100 L70,155"  fill="none" stroke="#FF8A00" stroke-width="1.2" opacity="0.4"/>
+
+        <!-- Pulse dots traveling each line -->
+        <circle class="pdot pdot-1" r="3" fill="#FF8A00" filter="url(#glow)"/>
+        <circle class="pdot pdot-2" r="3" fill="#FF8A00" filter="url(#glow)"/>
+        <circle class="pdot pdot-3" r="3" fill="#FF8A00" filter="url(#glow)"/>
+        <circle class="pdot pdot-4" r="3" fill="#FF8A00" filter="url(#glow)"/>
+
+        <!-- Center glow halo -->
+        <circle cx="140" cy="100" r="44" fill="url(#centerGlow)"/>
+
+        <!-- Center node — ZITLAS -->
+        <circle cx="140" cy="100" r="28" fill="#141414" stroke="#FF8A00" stroke-width="1.5" filter="url(#glow)" class="eco-center-ring"/>
+        <text x="140" y="95"  text-anchor="middle" fill="#FF8A00" font-size="9" font-weight="900" font-family="-apple-system,sans-serif" letter-spacing="2">ZITLAS</text>
+        <text x="140" y="110" text-anchor="middle" font-size="15" font-family="sans-serif">💪</text>
+
+        <!-- Outer: Fitness (top-left) -->
+        <circle cx="70" cy="45" r="28" fill="url(#outerGlow)"/>
+        <circle cx="70" cy="45" r="19" fill="#141414" stroke="#FF8A00" stroke-width="0.8" stroke-opacity="0.45"/>
+        <text x="70" y="40" text-anchor="middle" fill="#B5B5B5" font-size="7.5" font-weight="700" font-family="-apple-system,sans-serif" letter-spacing="0.5">FITNESS</text>
+        <text x="70" y="53" text-anchor="middle" font-size="12" font-family="sans-serif">🏃</text>
+
+        <!-- Outer: Training (top-right) -->
+        <circle cx="210" cy="45" r="28" fill="url(#outerGlow)"/>
+        <circle cx="210" cy="45" r="19" fill="#141414" stroke="#FF8A00" stroke-width="0.8" stroke-opacity="0.45"/>
+        <text x="210" y="40" text-anchor="middle" fill="#B5B5B5" font-size="7" font-weight="700" font-family="-apple-system,sans-serif" letter-spacing="0.5">TRAINING</text>
+        <text x="210" y="53" text-anchor="middle" font-size="12" font-family="sans-serif">💪</text>
+
+        <!-- Outer: Results (bottom-right) -->
+        <circle cx="210" cy="155" r="28" fill="url(#outerGlow)"/>
+        <circle cx="210" cy="155" r="19" fill="#141414" stroke="#FF8A00" stroke-width="0.8" stroke-opacity="0.45"/>
+        <text x="210" y="150" text-anchor="middle" fill="#B5B5B5" font-size="7.5" font-weight="700" font-family="-apple-system,sans-serif" letter-spacing="0.5">RESULTS</text>
+        <text x="210" y="163" text-anchor="middle" font-size="12" font-family="sans-serif">📈</text>
+
+        <!-- Outer: Nutrition (bottom-left) -->
+        <circle cx="70" cy="155" r="28" fill="url(#outerGlow)"/>
+        <circle cx="70" cy="155" r="19" fill="#141414" stroke="#FF8A00" stroke-width="0.8" stroke-opacity="0.45"/>
+        <text x="70" y="150" text-anchor="middle" fill="#B5B5B5" font-size="7" font-weight="700" font-family="-apple-system,sans-serif" letter-spacing="0.5">NUTRITION</text>
+        <text x="70" y="163" text-anchor="middle" font-size="12" font-family="sans-serif">🥗</text>
+      </svg>
+    </div>
+
+    <!-- Social Proof Stats -->
+    <div class="login-stats" id="loginStats">
+      <div class="lstat-card">
+        <span class="lstat-num" data-target="50000" id="lstat0">0+</span>
+        <span class="lstat-label" data-i18n="login_stat_athletes">Members</span>
+      </div>
+      <div class="lstat-card">
+        <span class="lstat-num" data-target="1200" id="lstat1">0+</span>
+        <span class="lstat-label" data-i18n="login_stat_coaches">Nutritionists</span>
+      </div>
+      <div class="lstat-card">
+        <span class="lstat-num" data-target="25000" id="lstat2">0+</span>
+        <span class="lstat-label" data-i18n="login_stat_academies">Meal Plans</span>
+      </div>
+      <div class="lstat-card">
+        <span class="lstat-num" data-target="10000" id="lstat3">0+</span>
+        <span class="lstat-label" data-i18n="login_stat_opps">Goals Achieved</span>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ════════════ LOGIN CARD ════════════ -->
+  <section class="login-card-section">
+    <div class="login-card">
+
+      <!-- Card top accent line -->
+      <div class="card-accent-line" aria-hidden="true"></div>
+
+      <!-- Role Selector -->
+      <div class="role-selector" id="roleSelector">
+        <button type="button" class="role-tab active" id="roleTabAthlete">
+          <span class="role-tab-icon">🏃</span>
+          <span class="role-tab-label">Athlete</span>
+        </button>
+        <button type="button" class="role-tab" id="roleTabExpert">
+          <span class="role-tab-icon">👨‍⚕️</span>
+          <span class="role-tab-label">Expert</span>
+        </button>
+      </div>
+
+      <div class="login-card-header">
+        <h2 class="login-card-title" id="loginCardTitle">Welcome Back 👋</h2>
+        <p class="login-card-sub" id="loginCardSub">Sign in to continue your weight-loss journey</p>
+      </div>
+
+      <form class="login-form" id="loginForm" novalidate>
+
+        <!-- Email / Mobile -->
+        <div class="lf-input-group" id="emailGroup">
+          <span class="lf-input-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+              <polyline points="22,6 12,13 2,6"/>
+            </svg>
+          </span>
+          <input
+            type="email"
+            id="emailInput"
+            class="lf-input"
+            data-i18n-ph="login_email_ph"
+            placeholder="Email or Mobile Number"
+            autocomplete="email"
+            inputmode="email"
+          />
+        </div>
+
+        <!-- Password -->
+        <div class="lf-input-group" id="passwordGroup">
+          <span class="lf-input-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+          </span>
+          <input
+            type="password"
+            id="passwordInput"
+            class="lf-input"
+            data-i18n-ph="login_password_ph"
+            placeholder="Password"
+            autocomplete="current-password"
+          />
+          <button type="button" class="lf-pw-toggle" id="pwToggle" aria-label="Toggle password visibility">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="eyeIcon">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Forgot -->
+        <div class="lf-row-between">
+          <span></span>
+          <a href="#" class="lf-forgot" id="forgotLink" data-i18n="login_forgot">Forgot Password?</a>
+        </div>
+
+        <!-- Sign In Button -->
+        <button type="submit" class="btn-login" id="loginBtn">
+          <span id="loginBtnText" data-i18n="login_sign_in">Sign In</span>
+          <span class="btn-spinner" id="loginBtnSpinner" aria-hidden="true">
+            <svg class="spin" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+              <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+            </svg>
+          </span>
+        </button>
+
+      </form>
+
+      <!-- Divider -->
+      <div class="lf-divider"><span class="lf-divider-text" data-i18n="login_divider">or continue with</span></div>
+
+      <!-- Google -->
+      <button class="btn-google" id="googleBtn" type="button">
+        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+        </svg>
+        <span data-i18n="login_google">Continue with Google</span>
+      </button>
+
+      <!-- Footer -->
+      <div class="login-card-footer">
+        <a href="#" class="lf-create-link" id="createLink" data-i18n="login_create">Create Account</a>
+        <span class="lf-sep">·</span>
+        <button type="button" class="lf-skip-btn" id="skipBtn" data-i18n="login_skip">Skip for Now →</button>
+      </div>
+
+      <!-- Expert Hint -->
+      <p class="lf-expert-hint" id="expertHint">
+        Are you a certified expert?
+        <button type="button" class="lf-expert-link" id="expertHintBtn">Login as Expert</button>
+      </p>
+
+    </div>
+  </section>
+
+  <!-- ════════════ POST-LOGIN OVERLAY ════════════ -->
+  <div class="login-overlay" id="loginOverlay" aria-hidden="true">
+    <div class="overlay-inner">
+      <div class="overlay-logo-wrap">
+        <div class="overlay-ring overlay-ring-a"></div>
+        <div class="overlay-ring overlay-ring-b"></div>
+        <span class="overlay-logo-text">ZITLAS</span>
+      </div>
+      <div class="overlay-bars" aria-hidden="true">
+        <div class="overlay-bar"></div>
+        <div class="overlay-bar"></div>
+        <div class="overlay-bar"></div>
+        <div class="overlay-bar"></div>
+        <div class="overlay-bar"></div>
+      </div>
+      <p class="overlay-msg">Welcome back 👋</p>
+    </div>
+  </div>
+
+  <!-- ════════════ GOOGLE ROLE-SELECT MODAL ════════════ -->
+  <!-- Shown only for new Google sign-in users to pick Athlete or Expert -->
+  <div class="grm-backdrop" id="grmBackdrop" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="grmTitle">
+    <div class="grm-card">
+
+      <!-- Google user identity strip -->
+      <div class="grm-user-strip" id="grmUserStrip">
+        <img class="grm-photo" id="grmPhoto" src="" alt="Google profile photo" />
+        <div class="grm-user-info">
+          <span class="grm-user-name" id="grmUserName">User</span>
+          <span class="grm-user-email" id="grmUserEmail">user@gmail.com</span>
+        </div>
+        <span class="grm-google-badge">
+          <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
+            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+          </svg>
+          Google
+        </span>
+      </div>
+
+      <h2 class="grm-title" id="grmTitle">Select Account Type</h2>
+      <p class="grm-sub">How will you use ZITLAS?</p>
+
+      <div class="grm-options">
+        <button class="grm-option" id="grmOptAthlete" data-role="athlete" type="button">
+          <span class="grm-option-icon">🏃</span>
+          <div class="grm-option-text">
+            <strong class="grm-option-name">Athlete</strong>
+            <span class="grm-option-desc">Track fitness, get AI diet plans, consult experts</span>
+          </div>
+          <span class="grm-option-check" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          </span>
+        </button>
+        <button class="grm-option" id="grmOptExpert" data-role="expert" type="button">
+          <span class="grm-option-icon">👨‍⚕️</span>
+          <div class="grm-option-text">
+            <strong class="grm-option-name">Expert</strong>
+            <span class="grm-option-desc">Review plans, guide athletes, publish revisions</span>
+          </div>
+          <span class="grm-option-check" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          </span>
+        </button>
+      </div>
+
+      <button class="grm-confirm-btn" id="grmConfirm" type="button" disabled>
+        <span id="grmConfirmText">Continue →</span>
+        <span class="grm-confirm-spinner" id="grmConfirmSpinner" aria-hidden="true">
+          <svg class="spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+        </span>
+      </button>
+
+    </div>
+  </div>
+
+  <script src="login.js"></script>
+</body>
+</html>

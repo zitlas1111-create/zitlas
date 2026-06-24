@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ZITLAS — Expert Review</title>
+  <link rel="stylesheet" href="expert-review.css" />
+  <script src="../../assets/js/i18n.js"></script>
+</head>
+<body>
+
+  <!-- ════════════ HEADER ════════════ -->
+  <header class="er-header">
+    <button class="er-icon-btn" id="backBtn" aria-label="Go back">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="19" y1="12" x2="5" y2="12"/>
+        <polyline points="12 19 5 12 12 5"/>
+      </svg>
+    </button>
+    <div class="er-header-center">
+      <h1 class="er-header-title">Expert Review</h1>
+      <p class="er-header-sub" id="erRequestId">Loading…</p>
+    </div>
+    <div class="er-header-right">
+      <span class="er-status-badge" id="erStatusBadge">Pending</span>
+    </div>
+  </header>
+
+  <!-- ════════════ MAIN ════════════ -->
+  <main class="er-main">
+
+    <!-- No request state -->
+    <div class="er-empty" id="erEmpty" style="display:none">
+      <div class="er-empty-icon">📭</div>
+      <h2 class="er-empty-title">No Review Request</h2>
+      <p class="er-empty-sub">No diet plan has been submitted for review yet.</p>
+    </div>
+
+    <div id="erContent" style="display:none">
+
+      <!-- ── USER PROFILE STRIP ── -->
+      <section class="er-section er-profile-strip" id="erProfileStrip">
+        <!-- Filled by JS -->
+      </section>
+
+      <!-- ── ASSESSMENT ANSWERS ── -->
+      <section class="er-section" id="erAssessmentSection" style="display:none">
+        <h2 class="er-section-title">Assessment Answers</h2>
+        <div class="er-assessment-grid" id="erAssessmentGrid"></div>
+      </section>
+
+      <!-- ── FITNESS SNAPSHOT ── -->
+      <section class="er-section" id="erFitnessSection" style="display:none">
+        <h2 class="er-section-title">Fitness Snapshot</h2>
+        <div class="er-stats-grid" id="erStatsGrid"></div>
+      </section>
+
+      <!-- ── SWOT REPORT ── -->
+      <section class="er-section" id="erSwotSection" style="display:none">
+        <h2 class="er-section-title">SWOT Report</h2>
+        <div class="er-swot-grid" id="erSwotGrid"></div>
+      </section>
+
+      <!-- ── ATHLETE NOTE ── -->
+      <section class="er-section" id="erNoteSection" style="display:none">
+        <h2 class="er-section-title">Athlete Note</h2>
+        <div class="er-note-card" id="erNoteCard"></div>
+      </section>
+
+      <!-- ── AI DIET PLAN EDITOR ── -->
+      <section class="er-section" id="erDietSection" style="display:none">
+        <div class="er-plan-header">
+          <h2 class="er-section-title">AI Diet Plan</h2>
+          <div class="er-day-pills" id="erDayPills"></div>
+        </div>
+        <div class="er-plan-meta-bar" id="erDietMetaBar"></div>
+        <div class="er-meal-list" id="erMealList"></div>
+      </section>
+
+      <!-- ── AI WORKOUT PLAN ── -->
+      <section class="er-section" id="erWorkoutSection" style="display:none">
+        <h2 class="er-section-title">AI Workout Plan</h2>
+        <div id="erWorkoutWrap"></div>
+      </section>
+
+      <!-- ── EXPERT OVERALL NOTES ── -->
+      <section class="er-section">
+        <h2 class="er-section-title">Expert Notes</h2>
+        <textarea
+          class="er-notes-textarea"
+          id="erExpertNotes"
+          placeholder="Add overall notes for the athlete about the reviewed plan…"
+          rows="4"
+        ></textarea>
+      </section>
+
+      <!-- ── CHANGE SUMMARY ── -->
+      <div class="er-change-bar" id="erChangeBar">
+        <span class="er-change-count" id="erChangeCount">0 changes</span>
+        <span class="er-change-hint">Tap a meal to suggest a replacement</span>
+      </div>
+
+    </div><!-- /erContent -->
+
+  </main>
+
+  <!-- ════════════ FOOTER APPROVE BUTTON ════════════ -->
+  <div class="er-footer" id="erFooter" style="display:none">
+    <button class="er-approve-btn" id="erApproveBtn">Publish Revised Plan</button>
+  </div>
+
+  <!-- TOAST -->
+  <div class="er-toast" id="erToast" role="status" aria-live="polite"></div>
+
+  <script src="expert-review.js"></script>
+</body>
+</html>

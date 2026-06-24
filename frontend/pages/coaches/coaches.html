@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ZITLAS — Nutrition Experts</title>
+  <link rel="stylesheet" href="coaches.css" />
+  <script src="../../assets/js/i18n.js"></script>
+</head>
+<body>
+
+  <!-- ════════════ DRAWER OVERLAY ════════════ -->
+  <div class="drawer-overlay" id="drawerOverlay"></div>
+
+  <!-- ════════════ SORT & FILTER DRAWER ════════════ -->
+  <aside class="side-drawer" id="sideDrawer" role="dialog" aria-label="Sort and filter experts" aria-hidden="true">
+    <div class="drawer-header">
+      <h2 class="drawer-title">Choose an Expert</h2>
+      <button class="drawer-close-btn" id="drawerCloseBtn" aria-label="Close">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="drawer-body">
+
+      <!-- Sort By -->
+      <div class="drawer-section">
+        <p class="drawer-section-label">Sort By</p>
+        <div class="drawer-pill-group" id="drawerSortGroup">
+          <button class="drawer-pill active" data-sort="rated">⭐ Highest Rated</button>
+          <button class="drawer-pill" data-sort="price">💰 Lowest Price</button>
+          <button class="drawer-pill" data-sort="available">🟢 Available Now</button>
+        </div>
+      </div>
+
+      <!-- Specialty -->
+      <div class="drawer-section">
+        <p class="drawer-section-label">Specialty</p>
+        <div class="drawer-pill-group" id="drawerSpecialtyGroup">
+          <button class="drawer-pill active" data-specialty="all">All</button>
+          <button class="drawer-pill" data-specialty="weight_loss">⚖️ Weight Loss</button>
+          <button class="drawer-pill" data-specialty="muscle_gain">💪 Muscle Gain</button>
+          <button class="drawer-pill" data-specialty="pcos">🌸 PCOS</button>
+          <button class="drawer-pill" data-specialty="diabetes">🩸 Diabetes</button>
+          <button class="drawer-pill" data-specialty="general">🏃 General Fitness</button>
+        </div>
+      </div>
+
+      <!-- Earnings Model -->
+      <div class="drawer-earnings">
+        <div class="drawer-earnings-icon">💳</div>
+        <div>
+          <p class="drawer-earnings-title">How Consultations Work</p>
+          <p class="drawer-earnings-desc">You pay the consultation fee. ZITLAS retains a small platform commission. Your nutritionist receives the remaining amount directly — no hidden charges.</p>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="drawer-footer">
+      <button class="drawer-apply-btn" id="drawerApplyBtn">Apply</button>
+    </div>
+  </aside>
+
+  <!-- ════════════ HEADER ════════════ -->
+  <header class="coaches-header">
+    <button class="icon-btn" id="menuBtn" aria-label="Sort and filter">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="4"  y1="6"  x2="20" y2="6"/>
+        <line x1="8"  y1="12" x2="20" y2="12"/>
+        <line x1="12" y1="18" x2="20" y2="18"/>
+        <circle cx="4"  cy="6"  r="1.8" fill="currentColor" stroke="none"/>
+        <circle cx="8"  cy="12" r="1.8" fill="currentColor" stroke="none"/>
+        <circle cx="12" cy="18" r="1.8" fill="currentColor" stroke="none"/>
+      </svg>
+    </button>
+
+    <span class="logo-text">ZITLAS</span>
+
+    <button class="icon-btn" id="notifBtn" aria-label="Notifications">
+      <div class="notif-wrap">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+          <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+        </svg>
+        <span class="notif-dot" id="notifDot"></span>
+      </div>
+    </button>
+  </header>
+
+  <!-- ════════════ PAGE TITLE ════════════ -->
+  <div class="page-title-block">
+    <h1 class="page-heading">Experts</h1>
+    <p class="page-subheading">Verified experts · 1:1 consultations · Real results</p>
+  </div>
+
+  <!-- ════════════ MAIN CONTENT ════════════ -->
+  <main class="main-content">
+
+    <!-- ── SEARCH ── -->
+    <div class="search-row">
+      <div class="search-bar">
+        <svg class="search-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <input
+          type="text"
+          class="search-input"
+          id="searchInput"
+          placeholder="Search by name or specialty..."
+          autocomplete="off"
+        />
+        <button class="search-clear-btn" id="searchClearBtn" aria-label="Clear search">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- ── FILTER PILLS ── -->
+    <div class="categories-outer">
+      <div class="categories-scroll" id="filterPills">
+        <button class="cat-pill active" data-sort="rated" data-specialty="all">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+          <span>All</span>
+        </button>
+        <button class="cat-pill" data-sort="rated" data-specialty="all">
+          <span class="cat-icon">⭐</span><span>Highest Rated</span>
+        </button>
+        <button class="cat-pill" data-sort="price" data-specialty="all">
+          <span class="cat-icon">💰</span><span>Lowest Price</span>
+        </button>
+        <button class="cat-pill" data-sort="available" data-specialty="all">
+          <span class="cat-icon">🟢</span><span>Available Now</span>
+        </button>
+        <button class="cat-pill" data-sort="rated" data-specialty="weight_loss">
+          <span class="cat-icon">⚖️</span><span>Weight Loss</span>
+        </button>
+        <button class="cat-pill" data-sort="rated" data-specialty="muscle_gain">
+          <span class="cat-icon">💪</span><span>Muscle Gain</span>
+        </button>
+        <button class="cat-pill" data-sort="rated" data-specialty="pcos">
+          <span class="cat-icon">🌸</span><span>PCOS</span>
+        </button>
+        <button class="cat-pill" data-sort="rated" data-specialty="diabetes">
+          <span class="cat-icon">🩸</span><span>Diabetes</span>
+        </button>
+        <button class="cat-pill" data-sort="rated" data-specialty="general">
+          <span class="cat-icon">🏃</span><span>General Fitness</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- ── RESULTS ROW ── -->
+    <div class="results-row">
+      <span class="results-count" id="resultsCount">9 Experts</span>
+      <button class="sort-toggle-btn" id="sortToggleBtn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="21" y1="10" x2="7"  y2="10"/>
+          <line x1="21" y1="6"  x2="3"  y2="6"/>
+          <line x1="21" y1="14" x2="3"  y2="14"/>
+          <line x1="21" y1="18" x2="13" y2="18"/>
+        </svg>
+        Sort &amp; Filter
+      </button>
+    </div>
+
+    <!-- ── EXPERT LIST ── -->
+    <section class="all-coaches-section">
+      <div class="coaches-list" id="coachesList">
+        <!-- Populated by coaches.js -->
+      </div>
+    </section>
+
+    <!-- ── EARNINGS INFO STRIP ── -->
+    <div class="earnings-strip">
+      <span class="earnings-strip-icon">🔒</span>
+      <p class="earnings-strip-text">
+        Secure payments · Experts receive 80% of session fee · ZITLAS platform fee 20%
+      </p>
+    </div>
+
+  </main>
+
+  <!-- TOAST -->
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="../../components/wallet.js"></script>
+  <script src="../../components/navbar.js"></script>
+  <script src="coaches.js"></script>
+</body>
+</html>

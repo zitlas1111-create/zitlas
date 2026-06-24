@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Start-Sleep -Seconds 3; try { $r = Invoke-WebRequest -Uri \"http://localhost:8000/api/ai/health\" -TimeoutSec 5 -UseBasicParsing; $r.Content } catch { \"Server not responding: $_\" })",
+      "Bash(python -c ' *)",
+      "Bash(del \"c:\\\\Users\\\\Atharva\\\\Desktop\\\\zitlas\\\\backend\\\\append_vol2.py\")",
+      "Bash(del \"c:\\\\Users\\\\Atharva\\\\Desktop\\\\zitlas\\\\backend\\\\vol2_extracted.txt\")",
+      "PowerShell(Get-Content \"$env:TEMP\\\\uv_out3.txt\" | Select-String \"POST /api|HTTP/1\" | ForEach-Object { $_.Line })"
+    ]
+  }
+}

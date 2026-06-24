@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ZITLAS — Profile</title>
+  <link rel="stylesheet" href="profile.css" />
+  <script src="../../assets/js/i18n.js"></script>
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="../../assets/js/firebase-config.js"></script>
+</head>
+<body>
+
+  <!-- TOP APP BAR -->
+  <header class="app-bar">
+    <span class="logo-text">ZITLAS</span>
+  </header>
+
+  <!-- MAIN CONTENT -->
+  <main class="main-content">
+
+    <!-- ═══════════════════════════════════════
+         PROFILE HEADER
+         ═══════════════════════════════════════ -->
+    <section class="profile-header">
+
+      <!-- MEMBER HEADER -->
+      <div id="athleteHeaderContent">
+        <div class="avatar-wrapper">
+          <img
+            src="../../assets/images/arjun.png"
+            alt="Arjun Patil"
+            class="avatar-img"
+            id="avatarImg"
+          />
+          <div class="avatar-ring"></div>
+          <button class="avatar-edit-btn" aria-label="Edit photo">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="ai-label">AI Weight-Loss Member</div>
+        <h1 class="player-name">Arjun Patil</h1>
+
+        <div class="player-meta">
+          <span class="role-badge">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.09 6.26L20 9.27l-4.91 4.79L16.18 21 12 17.27 7.82 21l1.09-6.94L4 9.27l5.91-.01z"/></svg>
+            Premium Member
+          </span>
+          <span class="location-badge">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            Pune, India
+          </span>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ═══════════════════════════════════════
+         ATHLETE CONTENT
+         ═══════════════════════════════════════ -->
+    <div id="athleteContent">
+
+      <!-- ACCOUNT SETTINGS -->
+      <section class="settings-section">
+        <h2 class="section-title" data-i18n="profile_account">Account</h2>
+        <div class="settings-list">
+
+          <button class="settings-item" data-action="personal">
+            <span class="settings-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            </span>
+            <span class="settings-label" data-i18n="profile_personal_info">Personal Information</span>
+            <span class="settings-chevron">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </span>
+          </button>
+
+          <button class="settings-item" data-action="appearance" id="appearanceBtn">
+            <span class="settings-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+            </span>
+            <span class="settings-label" data-i18n="profile_appearance">Appearance</span>
+            <span class="settings-chevron">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </span>
+          </button>
+
+          <button class="settings-item" data-action="language">
+            <span class="settings-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            </span>
+            <span class="settings-label" data-i18n="profile_language">Language</span>
+            <span class="settings-chevron">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </span>
+          </button>
+
+          <button class="settings-item" data-action="subscription">
+            <span class="settings-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+            </span>
+            <span class="settings-label">Membership &amp; Billing</span>
+            <span class="settings-chevron">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </span>
+          </button>
+
+        </div>
+      </section>
+
+      <!-- QUICK ACTIONS -->
+      <section class="quick-actions-section">
+        <h2 class="section-title" data-i18n="profile_quick_actions">Quick Actions</h2>
+        <div class="quick-actions-list">
+
+          <button class="quick-action-item" id="editProfileBtn">
+            <span class="settings-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            </span>
+            <span class="settings-label" data-i18n="profile_edit_profile">Edit Profile</span>
+            <span class="settings-chevron">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </span>
+          </button>
+
+          <button class="quick-action-item" id="shareProfileBtn">
+            <span class="settings-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+            </span>
+            <span class="settings-label" data-i18n="profile_share_profile">Share Profile</span>
+            <span class="settings-chevron">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </span>
+          </button>
+
+          <button class="quick-action-item" data-action="help">
+            <span class="settings-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            </span>
+            <span class="settings-label" data-i18n="profile_contact_support">Contact Support</span>
+            <span class="settings-chevron">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </span>
+          </button>
+
+        </div>
+      </section>
+
+    </div><!-- end #athleteContent -->
+
+
+    <!-- ═══════════════════════════════════════
+         LOGOUT (always visible)
+         ═══════════════════════════════════════ -->
+    <section class="logout-section">
+      <button class="logout-btn" id="logoutBtn">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        <span data-i18n="profile_logout">Log Out</span>
+      </button>
+    </section>
+
+  </main>
+
+  <!-- APPEARANCE MODAL -->
+  <div class="modal-overlay" id="appearanceModal" role="dialog" aria-modal="true" aria-label="Appearance settings">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title" data-i18n="appearance_title">Appearance</h3>
+        <button class="modal-close" id="modalClose" aria-label="Close">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <p class="modal-subtitle" data-i18n="appearance_sub">Choose your preferred theme</p>
+      <div class="theme-options">
+        <button class="theme-option" data-theme="dark">
+          <div class="theme-preview theme-preview--dark">
+            <div class="tp-bar"></div>
+            <div class="tp-card"></div>
+          </div>
+          <span class="theme-option-label" data-i18n="theme_dark">Dark</span>
+          <span class="theme-check" id="check-dark">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          </span>
+        </button>
+        <button class="theme-option" data-theme="light">
+          <div class="theme-preview theme-preview--light">
+            <div class="tp-bar"></div>
+            <div class="tp-card"></div>
+          </div>
+          <span class="theme-option-label" data-i18n="theme_light">Light</span>
+          <span class="theme-check" id="check-light">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          </span>
+        </button>
+        <button class="theme-option" data-theme="system">
+          <div class="theme-preview theme-preview--system">
+            <div class="tp-bar"></div>
+            <div class="tp-card"></div>
+          </div>
+          <span class="theme-option-label" data-i18n="theme_system">System</span>
+          <span class="theme-check" id="check-system">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          </span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- LANGUAGE MODAL -->
+  <div class="modal-overlay" id="languageModal" role="dialog" aria-modal="true" aria-label="Language settings">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title" data-i18n="lang_modal_title">Language</h3>
+        <button class="modal-close" id="langModalClose" aria-label="Close">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <p class="modal-subtitle" data-i18n="lang_modal_sub">Choose your preferred language</p>
+      <div class="lang-options">
+        <button class="lang-option" data-lang="en">
+          <span class="lang-flag">🇬🇧</span>
+          <span class="lang-name" data-i18n="lang_english">English</span>
+          <span class="lang-check">✓</span>
+        </button>
+        <button class="lang-option" data-lang="hi">
+          <span class="lang-flag">🇮🇳</span>
+          <span class="lang-name" data-i18n="lang_hindi">हिन्दी</span>
+          <span class="lang-check">✓</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- LOGOUT CONFIRMATION MODAL -->
+  <div class="modal-overlay" id="logoutModal" role="dialog" aria-modal="true" aria-label="Logout confirmation">
+    <div class="modal-card">
+      <div class="logout-modal-icon">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#FF8A00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      </div>
+      <h3 class="modal-title" style="text-align:center;margin-top:12px" data-i18n="logout_title">Log Out?</h3>
+      <p class="modal-subtitle" style="text-align:center" data-i18n="logout_sub">You will be logged out of your ZITLAS account.</p>
+      <div class="logout-modal-actions">
+        <button class="logout-cancel-btn" id="logoutCancel" data-i18n="btn_cancel">Cancel</button>
+        <button class="logout-confirm-btn" id="logoutConfirm" data-i18n="logout_confirm">Log Out</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATION -->
+  <div class="toast" id="toast"></div>
+
+  <script src="../../components/wallet.js"></script>
+  <script src="../../components/navbar.js"></script>
+  <script src="profile.js"></script>
+</body>
+</html>
