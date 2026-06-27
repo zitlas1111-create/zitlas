@@ -9,6 +9,7 @@ GET  /api/assessment/health        → service health check
 import asyncio
 import json
 import re
+import time
 import traceback as _tb
 from typing import Any
 
@@ -921,10 +922,10 @@ async def generate_plan(body: AssessmentInput) -> dict[str, Any]:
     Response: {assessment, calculations, swot, diet_plan, workout_plan, sources}
     """
     fitness_goal = body.fitness_goal
-    print(f"\n[ASSESS] /generate-plan  weight={body.weight_kg}kg  goal={body.goal_weight_kg}kg  "
+    _t0 = time.time()
+    print(f"\n[ASSESS] /generate-plan ENTRY  weight={body.weight_kg}kg  goal={body.goal_weight_kg}kg  "
           f"diet={body.diet_preference}  workout={body.workout_preference}  "
-          f"living={body.living_situation}")
-    print(f"[GOAL] {fitness_goal}")
+          f"living={body.living_situation}  goal_type={fitness_goal!r}")
 
     # ── Step 1: Pure assessment ──────────────────────────────────────────────
     try:
@@ -933,7 +934,7 @@ async def generate_plan(body: AssessmentInput) -> dict[str, Any]:
         raise HTTPException(status_code=422, detail=str(e))
 
     calc = assessment_result["calculations"]
-    print(f"[ASSESS] Assessment complete — BMI={calc['bmi']}  "
+    print(f"[ASSESS] Step 1 done ({time.time()-_t0:.1f}s) — BMI={calc['bmi']}  "
           f"target={calc['weight_loss_calories_kcal']} kcal  "
           f"protein={calc['protein_target_g']}g")
 
@@ -976,16 +977,26 @@ async def generate_plan(body: AssessmentInput) -> dict[str, Any]:
             f"fat burning strength conditioning beginner"
         )
 
-    print(f"[ASSESS] RAG retrieval — fitness_goal={fitness_goal!r}")
-    # Both KB lookups run in thread pool so the async event loop stays free.
-    # On first request for a goal type, this may take ~2s (disk load) or
-    # ~30-60s (PDF build) — a thread prevents blocking other requests.
-    diet_context, diet_sources = await asyncio.to_thread(
-        rag_service.retrieve_context, diet_query, 5, fitness_goal
-    )
-    workout_context, workout_sources = await asyncio.to_thread(
-        rag_service.retrieve_context, workout_query, 5, fitness_goal
-    )
+    _t_rag = time.time()
+    print(f"[ASSESS] RAG start ({time.time()-_t0:.1f}s) — goal={fitness_goal!r}")
+    # Both KB lookups run in thread-pool workers so the async event loop stays free.
+    # Running them via asyncio.gather fires both concurrently; the per-goal lock in
+    # kb_manager serialises the actual KB load if both need the same goal (one loads,
+    # the other hits cache), but the FAISS searches overlap.
+    diet_sources: list[dict] = []
+    workout_sources: list[dict] = []
+    diet_context = ""
+    workout_context = ""
+    try:
+        (diet_context, diet_sources), (workout_context, workout_sources) = \
+            await asyncio.gather(
+                asyncio.to_thread(rag_service.retrieve_context, diet_query, 5, fitness_goal),
+                asyncio.to_thread(rag_service.retrieve_context, workout_query, 5, fitness_goal),
+            )
+    except Exception as _rag_exc:
+        _tb.print_exc()
+        print(f"[ASSESS] RAG FAILED ({time.time()-_t_rag:.1f}s): "
+              f"{type(_rag_exc).__name__}: {_rag_exc} — continuing with empty context")
 
     # Deduplicate sources by chunk_id
     seen: set[str] = set()
@@ -995,15 +1006,36 @@ async def generate_plan(body: AssessmentInput) -> dict[str, Any]:
             seen.add(src["chunk_id"])
             all_sources.append(src)
 
-    print(f"[ASSESS] RAG complete — diet_chunks={len(diet_sources)}  "
+    print(f"[ASSESS] RAG done ({time.time()-_t_rag:.1f}s) — "
+          f"diet_chunks={len(diet_sources)}  "
           f"workout_chunks={len(workout_sources)}  total_unique={len(all_sources)}")
 
     # ── Step 3 + 4: Generate plans in parallel ───────────────────────────────
-    (diet_structured, diet_llm_result), (workout_structured, workout_llm_result) = \
-        await asyncio.gather(
-            _generate_diet_plan(body, calc, diet_context, fitness_goal),
-            _generate_workout_plan(body, calc, workout_context, fitness_goal),
-        )
+    _t_llm = time.time()
+    print(f"[ASSESS] LLM generation start ({time.time()-_t0:.1f}s) — diet + workout in parallel")
+    _plan_results = await asyncio.gather(
+        _generate_diet_plan(body, calc, diet_context, fitness_goal),
+        _generate_workout_plan(body, calc, workout_context, fitness_goal),
+        return_exceptions=True,
+    )
+    print(f"[ASSESS] LLM done ({time.time()-_t_llm:.1f}s)")
+
+    _diet_raw, _workout_raw = _plan_results[0], _plan_results[1]
+    _empty_llm: dict = {"tokens_used": 0, "model": None, "reply": ""}
+
+    if isinstance(_diet_raw, Exception):
+        _tb.print_exception(type(_diet_raw), _diet_raw, _diet_raw.__traceback__)
+        print(f"[ASSESS] Diet LLM FAILED: {type(_diet_raw).__name__}: {_diet_raw}")
+        diet_structured, diet_llm_result = None, _empty_llm
+    else:
+        diet_structured, diet_llm_result = _diet_raw
+
+    if isinstance(_workout_raw, Exception):
+        _tb.print_exception(type(_workout_raw), _workout_raw, _workout_raw.__traceback__)
+        print(f"[ASSESS] Workout LLM FAILED: {type(_workout_raw).__name__}: {_workout_raw}")
+        workout_structured, workout_llm_result = None, _empty_llm
+    else:
+        workout_structured, workout_llm_result = _workout_raw
 
     # ── Build response ───────────────────────────────────────────────────────
     diet_tokens    = diet_llm_result.get("tokens_used", 0)
@@ -1016,7 +1048,7 @@ async def generate_plan(body: AssessmentInput) -> dict[str, Any]:
         print(f"[ASSESS] WARN: workout plan JSON parse failed — raw: "
               f"{workout_llm_result.get('reply','')[:300]}")
 
-    print(f"[ASSESS] Plans done — "
+    print(f"[ASSESS] Plans done ({time.time()-_t0:.1f}s total) — "
           f"diet_ok={diet_structured is not None}  "
           f"workout_ok={workout_structured is not None}  "
           f"total_tokens={diet_tokens + workout_tokens}")

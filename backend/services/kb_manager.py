@@ -343,6 +343,10 @@ class KnowledgeBaseManager:
         """
         True if any PDF for this goal has been modified since the index was built.
         Uses MD5 hashes stored alongside each per-goal index.
+
+        If no PDFs exist on disk (e.g. Render deployment where only the pre-built
+        vector_store/ is committed, not the source PDFs), the pre-built index is
+        trusted as-is — returning False skips the rebuild.
         """
         if not hash_path.exists():
             return True
@@ -357,7 +361,15 @@ class KnowledgeBaseManager:
                     for block in iter(lambda: fh.read(65536), b""):
                         h.update(block)
                 current[fname] = h.hexdigest()
-        return current != saved
+        # No PDFs present at all → trust the committed pre-built index.
+        if not current:
+            logger.info(
+                f"No source PDFs found for {goal_type} — "
+                "trusting pre-built index (deployment mode)"
+            )
+            return False
+        # Only compare hashes for PDFs that are actually present on disk.
+        return any(current.get(k) != saved.get(k) for k in current)
 
     def _write_hashes(self, goal_type: str, hash_path: Path) -> None:
         """Persist current PDF MD5 hashes for this goal to disk."""

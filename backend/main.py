@@ -36,12 +36,25 @@ FRONTEND_DIR = BASE_DIR.parent / "frontend"  # frontend/
 
 
 # ── Lifespan: startup tasks ───────────────────────────────────────────────────
+
+async def _prewarm_kb(goal: str) -> None:
+    """Pre-warm one goal KB in the background; failures never crash the server."""
+    from services.kb_manager import kb_manager
+    try:
+        await asyncio.to_thread(kb_manager.get_kb, goal)
+        print(f"[STARTUP] {goal} KB pre-warmed OK")
+    except Exception as exc:
+        print(f"[STARTUP] {goal} KB pre-warm failed (non-fatal): {exc}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: initialize logger + environment only.
     # rag_service.initialize() is now a lightweight no-op that sets _is_ready=True.
-    # NO FAISS index is loaded here — each goal KB loads on first request (lazy).
     await asyncio.to_thread(rag_service.initialize)
+    # Pre-warm the most-used goal KB in the background so the first real
+    # request is fast instead of waiting 2-30s for a cold disk load.
+    asyncio.create_task(_prewarm_kb("weight_loss"))
     yield
 
 
