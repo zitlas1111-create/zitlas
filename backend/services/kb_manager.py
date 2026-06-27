@@ -277,7 +277,7 @@ class KnowledgeBaseManager:
                 index = faiss.read_index(str(idx_path))
                 with open(meta_path, "rb") as fh:
                     chunks = pickle.load(fh)
-                        try:
+                try:
                     import psutil as _psutil
                     _rss = _psutil.Process().memory_info().rss / 1024 / 1024
                     logger.info(
