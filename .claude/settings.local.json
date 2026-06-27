@@ -7,7 +7,8 @@
       "Bash(del \"c:\\\\Users\\\\Atharva\\\\Desktop\\\\zitlas\\\\backend\\\\vol2_extracted.txt\")",
       "PowerShell(Get-Content \"$env:TEMP\\\\uv_out3.txt\" | Select-String \"POST /api|HTTP/1\" | ForEach-Object { $_.Line })",
       "Bash(cd /c/Users/Atharva/Desktop/zitlas/frontend && ls -la)",
-      "Read(//c/c/Users/Atharva/Desktop/zitlas/**)"
+      "Read(//c/c/Users/Atharva/Desktop/zitlas/**)",
+      "Bash(node --input-type=module)"
     ]
   }
 }

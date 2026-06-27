@@ -1303,6 +1303,86 @@ a      { text-decoration: none; color: inherit; }
 .zc-send-btn:hover  { transform: scale(1.07); box-shadow: 0 6px 22px rgba(255,138,0,0.62); }
 .zc-send-btn:active { transform: scale(0.93); }
 
+/* ── Attach button ── */
+.zc-attach-btn {
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.10);
+  display: flex; align-items: center; justify-content: center;
+  color: rgba(255,255,255,0.5);
+  flex-shrink: 0; cursor: pointer;
+  transition: color .15s, border-color .15s;
+}
+.zc-attach-btn:active { color: #FF8A00; border-color: #FF8A00; }
+
+/* ── Image source bottom sheet ── */
+.zc-img-sheet-overlay {
+  position: fixed; inset: 0; z-index: 2000;
+  background: rgba(0,0,0,.65);
+  display: flex; align-items: flex-end;
+  opacity: 0; pointer-events: none;
+  transition: opacity .2s;
+}
+.zc-img-sheet-overlay.open { opacity: 1; pointer-events: auto; }
+.zc-img-sheet {
+  width: 100%;
+  background: #1a1a1a;
+  border-radius: 20px 20px 0 0;
+  padding: 12px 0 calc(16px + env(safe-area-inset-bottom, 0px));
+  transform: translateY(100%);
+  transition: transform .25s cubic-bezier(.4,0,.2,1);
+}
+.zc-img-sheet-overlay.open .zc-img-sheet { transform: none; }
+.zc-img-sheet-handle {
+  width: 36px; height: 4px;
+  background: rgba(255,255,255,0.12);
+  border-radius: 2px;
+  margin: 0 auto 12px;
+}
+.zc-img-sheet-btn {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; padding: 15px 24px;
+  color: #eee; font-size: .95rem;
+  background: none; border: none; cursor: pointer;
+  text-align: left;
+  transition: background .1s;
+}
+.zc-img-sheet-btn:active { background: rgba(255,255,255,0.06); }
+.zc-img-sheet-btn--cancel {
+  color: rgba(255,255,255,0.35);
+  margin-top: 4px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  justify-content: center;
+}
+
+/* ── Chat image in bubble ── */
+.chat-image {
+  max-width: 220px;
+  border-radius: 16px;
+  cursor: pointer;
+  display: block;
+  margin: 2px 0;
+}
+.zc-bbl--img {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+}
+
+/* ── Upload placeholder bubble ── */
+.zc-img-placeholder {
+  width: 160px; height: 100px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 16px;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 6px;
+  font-size: .75rem;
+  color: rgba(255,255,255,0.4);
+}
+
 /* ── ⋮ Menu button ── */
 .zc-menu-wrap { position: relative; flex-shrink: 0; }
 .zc-menu-btn {

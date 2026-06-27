@@ -24,6 +24,7 @@ load_dotenv(Path(__file__).parent / ".env")
 
 from routes import auth, player, diet, assessment
 from routes import ai
+from routes import chat
 from routes import support
 from routes import rag
 from routes import review
@@ -88,12 +89,18 @@ app.include_router(rag.router,        prefix="/api/rag",        tags=["RAG"])
 app.include_router(support.router,    prefix="/api/support",    tags=["Support"])
 app.include_router(review.router,     prefix="/api/review",     tags=["Review"])
 app.include_router(system.router,     prefix="/api/system",     tags=["System"])
+app.include_router(chat.router,       prefix="/api/chat",       tags=["Chat"])
 
 # ── Root → dashboard ─────────────────────────────────────────────────────────
 @app.get("/", include_in_schema=False)
 async def root():
     """Redirect bare domain to the dashboard page."""
     return RedirectResponse(url="/pages/dashboard/dashboard.html")
+
+# ── Serve uploaded chat images ────────────────────────────────────────────────
+_UPLOADS_DIR = BASE_DIR / "uploads"
+_UPLOADS_DIR.mkdir(exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(_UPLOADS_DIR)), name="uploads")
 
 # ── Serve frontend (must be last — catches everything else) ───────────────────
 app.mount("/", StaticFiles(directory=str(FRONTEND_DIR)), name="frontend")

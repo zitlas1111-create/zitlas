@@ -1311,30 +1311,36 @@
     return div;
   }
 
-  function createUserMsg(text, timestamp, grouped) {
+  function createUserMsg(text, timestamp, grouped, imageUrl) {
     const div = document.createElement('div');
     div.className = 'zc-msg zc-msg--out ' + (grouped ? 'zc-msg--grouped' : 'zc-msg--first');
     var ts = '';
     try { if (timestamp) ts = new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); } catch(_) {}
+    var contentHtml = imageUrl
+      ? '<img class="chat-image" src="' + esc(imageUrl) + '" alt="Image" onclick="window.open(this.src)">'
+      : '<span class="zc-bbl-txt">' + esc(text).replace(/\n/g, '<br>') + '</span>';
     div.innerHTML =
-      '<div class="zc-bbl">' +
-        '<span class="zc-bbl-txt">' + esc(text).replace(/\n/g, '<br>') + '</span>' +
+      '<div class="zc-bbl' + (imageUrl ? ' zc-bbl--img' : '') + '">' +
+        contentHtml +
         (ts ? '<span class="zc-bbl-ts">' + esc(ts) + '</span>' : '') +
       '</div>';
     return div;
   }
 
-  function createExpertReplyMsg(text, expertName, timestamp, grouped) {
+  function createExpertReplyMsg(text, expertName, timestamp, grouped, imageUrl) {
     const div = document.createElement('div');
     div.className = 'zc-msg zc-msg--in ' + (grouped ? 'zc-msg--grouped' : 'zc-msg--first');
     var initials = (expertName || 'E').split(' ').map(function(w) { return w[0] || ''; }).join('').slice(0, 2).toUpperCase();
     var ts = '';
     try { if (timestamp) ts = new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); } catch(_) {}
     var avHtml = grouped ? '<div class="zc-av-ghost"></div>' : '<div class="zc-av">' + esc(initials) + '</div>';
+    var contentHtml = imageUrl
+      ? '<img class="chat-image" src="' + esc(imageUrl) + '" alt="Image" onclick="window.open(this.src)">'
+      : '<span class="zc-bbl-txt">' + esc(text).replace(/\n/g, '<br>') + '</span>';
     div.innerHTML =
       avHtml +
-      '<div class="zc-bbl">' +
-        '<span class="zc-bbl-txt">' + esc(text).replace(/\n/g, '<br>') + '</span>' +
+      '<div class="zc-bbl' + (imageUrl ? ' zc-bbl--img' : '') + '">' +
+        contentHtml +
         (ts ? '<span class="zc-bbl-ts">' + esc(ts) + '</span>' : '') +
       '</div>';
     return div;
@@ -1419,7 +1425,7 @@
     } catch(e) { console.error('[ZITLAS] persistReviewPacket failed:', e); }
   }
 
-  function persistChatMessage(conversationId, senderType, text) {
+  function persistChatMessage(conversationId, senderType, text, imageUrl) {
     var athleteId = getAthleteId();
     var msg = {
       id:             'msg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 5),
@@ -1427,6 +1433,8 @@
       senderId:       senderType === 'athlete' ? athleteId : (_currentChatCoach ? _currentChatCoach.id : 'expert'),
       senderType:     senderType,
       text:           text,
+      type:           imageUrl ? 'image' : 'text',
+      imageUrl:       imageUrl || null,
       timestamp:      new Date().toISOString(),
     };
     console.log("ATHLETE SAVING TO", conversationId);
@@ -1583,8 +1591,8 @@
           }
           var grouped = zcIsGrouped(prevMsg, msg);
           var el = msg.senderType === 'athlete'
-            ? createUserMsg(msg.text, msg.timestamp, grouped)
-            : createExpertReplyMsg(msg.text, conv.expertName, msg.timestamp, grouped);
+            ? createUserMsg(msg.text, msg.timestamp, grouped, msg.imageUrl)
+            : createExpertReplyMsg(msg.text, conv.expertName, msg.timestamp, grouped, msg.imageUrl);
           el.dataset.msgId = msg.id;
           container.appendChild(el);
           prevMsg = msg;
@@ -2791,13 +2799,147 @@
         }
         var grouped = zcIsGrouped(lastMsg, msg);
         var el = msg.senderType === 'athlete'
-          ? createUserMsg(msg.text, msg.timestamp, grouped)
-          : createExpertReplyMsg(msg.text, conv.expertName, msg.timestamp, grouped);
+          ? createUserMsg(msg.text, msg.timestamp, grouped, msg.imageUrl)
+          : createExpertReplyMsg(msg.text, conv.expertName, msg.timestamp, grouped, msg.imageUrl);
         el.dataset.msgId = msg.id;
         container.appendChild(el);
         lastMsg = msg;
       });
       container.scrollTop = container.scrollHeight;
+    }
+
+    initChatImageAttach();
+  }
+
+  /* ══════════════════════════════════════════
+     CHAT IMAGE ATTACH
+  ══════════════════════════════════════════ */
+
+  function compressImage(file) {
+    return new Promise(function(resolve, reject) {
+      var reader = new FileReader();
+      reader.onerror = reject;
+      reader.onload = function(e) {
+        var img = new Image();
+        img.onerror = reject;
+        img.onload = function() {
+          var MAX = 1280;
+          var w = img.naturalWidth, h = img.naturalHeight;
+          if (w > MAX || h > MAX) {
+            var scale = Math.min(MAX / w, MAX / h);
+            w = Math.round(w * scale);
+            h = Math.round(h * scale);
+          }
+          var canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          canvas.toBlob(function(blob) {
+            if (blob) resolve(blob); else reject(new Error('Canvas compression failed'));
+          }, 'image/jpeg', 0.8);
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function uploadChatImage(file) {
+    console.log('[CHAT IMAGE] Compressing…', file.name, file.type, file.size);
+    var blob = await compressImage(file);
+    console.log('[CHAT IMAGE] Compressed to', blob.size, 'bytes — uploading…');
+    var fd = new FormData();
+    fd.append('file', blob, 'photo.jpg');
+    var resp = await fetch('/api/chat/upload', { method: 'POST', body: fd });
+    console.log('[CHAT IMAGE] Response status:', resp.status, resp.statusText);
+    if (!resp.ok) throw new Error('Upload failed (' + resp.status + ' ' + resp.statusText + ')');
+    var data = await resp.json();
+    console.log('[CHAT IMAGE] Server response:', data);
+    if (!data.success) throw new Error('Server rejected the image');
+    console.log('[CHAT IMAGE] URL:', data.url);
+    return data.url;
+  }
+
+  function sendImageMessage(file) {
+    var container = document.getElementById('chatMessages');
+    if (!container) return;
+    var now = new Date().toISOString();
+
+    /* Show placeholder while uploading */
+    var placeholder = document.createElement('div');
+    placeholder.className = 'zc-msg zc-msg--out zc-msg--first';
+    placeholder.innerHTML =
+      '<div class="zc-bbl zc-bbl--img">' +
+        '<div class="zc-img-placeholder"><span>📎</span><span>Uploading…</span></div>' +
+      '</div>';
+    container.appendChild(placeholder);
+    container.scrollTop = container.scrollHeight;
+
+    uploadChatImage(file).then(function(url) {
+      placeholder.remove();
+      var grouped = false;
+      if (_currentChatCoach) {
+        var conv = loadConversation(getConversationId(_currentChatCoach.id));
+        if (conv && conv.messages && conv.messages.length) {
+          var last = conv.messages[conv.messages.length - 1];
+          grouped = zcIsGrouped(last, { senderType: 'athlete', timestamp: now });
+        }
+      }
+      var msgEl = createUserMsg('', now, grouped, url);
+      container.appendChild(msgEl);
+      container.scrollTop = container.scrollHeight;
+      if (_currentChatCoach) {
+        var conversationId = getConversationId(_currentChatCoach.id);
+        var msg = persistChatMessage(conversationId, 'athlete', '', url);
+        if (msg) msgEl.dataset.msgId = msg.id;
+      }
+    }).catch(function(err) {
+      var inner = placeholder.querySelector('.zc-img-placeholder');
+      if (inner) inner.innerHTML = '<span>❌</span><span>Failed — tap to retry</span>';
+      console.error('[CHAT IMAGE] Upload failed:', err);
+    });
+  }
+
+  function initChatImageAttach() {
+    var attachBtn    = document.getElementById('chatAttachBtn');
+    var fileInput    = document.getElementById('chatFileInput');
+    var cameraInput  = document.getElementById('chatCameraInput');
+    var sheet        = document.getElementById('chatImgSheet');
+    var sheetCamera  = document.getElementById('chatSheetCamera');
+    var sheetGallery = document.getElementById('chatSheetGallery');
+    var sheetCancel  = document.getElementById('chatSheetCancel');
+
+    function openSheet()  { if (sheet) sheet.classList.add('open'); }
+    function closeSheet() { if (sheet) sheet.classList.remove('open'); }
+
+    if (attachBtn)    attachBtn.addEventListener('click', openSheet);
+    if (sheetCancel)  sheetCancel.addEventListener('click', closeSheet);
+    if (sheet)        sheet.addEventListener('click', function(e) { if (e.target === sheet) closeSheet(); });
+
+    if (sheetCamera) {
+      sheetCamera.addEventListener('click', function() {
+        closeSheet();
+        if (cameraInput) cameraInput.click();
+      });
+    }
+    if (sheetGallery) {
+      sheetGallery.addEventListener('click', function() {
+        closeSheet();
+        if (fileInput) fileInput.click();
+      });
+    }
+    if (fileInput) {
+      fileInput.addEventListener('change', function() {
+        var f = fileInput.files[0];
+        if (f) sendImageMessage(f);
+        fileInput.value = '';
+      });
+    }
+    if (cameraInput) {
+      cameraInput.addEventListener('change', function() {
+        var f = cameraInput.files[0];
+        if (f) sendImageMessage(f);
+        cameraInput.value = '';
+      });
     }
   }
 

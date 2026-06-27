@@ -1454,6 +1454,86 @@ img { display: block; max-width: 100%; }
 }
 .zc-send-btn:active { filter: brightness(.85); }
 
+/* ── Attach button ── */
+.zc-attach-btn {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-sec);
+  flex-shrink: 0;
+  transition: color .15s, border-color .15s;
+}
+.zc-attach-btn:active { color: var(--accent); border-color: var(--accent); }
+
+/* ── Image source bottom sheet ── */
+.zc-img-sheet-overlay {
+  position: fixed; inset: 0; z-index: 1100;
+  background: rgba(0,0,0,.55);
+  display: flex; align-items: flex-end;
+  opacity: 0; pointer-events: none;
+  transition: opacity .2s;
+}
+.zc-img-sheet-overlay.open { opacity: 1; pointer-events: auto; }
+.zc-img-sheet {
+  width: 100%;
+  background: var(--surface);
+  border-radius: 20px 20px 0 0;
+  padding: 12px 0 calc(16px + env(safe-area-inset-bottom, 0px));
+  transform: translateY(100%);
+  transition: transform .25s cubic-bezier(.4,0,.2,1);
+}
+.zc-img-sheet-overlay.open .zc-img-sheet { transform: none; }
+.zc-img-sheet-handle {
+  width: 36px; height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  margin: 0 auto 12px;
+}
+.zc-img-sheet-btn {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; padding: 15px 24px;
+  color: var(--text); font-size: .95rem;
+  background: none; border: none; cursor: pointer;
+  text-align: left;
+  transition: background .1s;
+}
+.zc-img-sheet-btn:active { background: var(--surface2); }
+.zc-img-sheet-btn--cancel {
+  color: var(--text-muted);
+  margin-top: 4px;
+  border-top: 1px solid var(--border);
+  justify-content: center;
+}
+
+/* ── Chat image bubble ── */
+.chat-image {
+  max-width: 220px;
+  border-radius: 16px;
+  cursor: pointer;
+  display: block;
+  margin: 2px 0;
+}
+.zc-bbl--img {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+}
+
+/* ── Upload placeholder bubble ── */
+.zc-img-placeholder {
+  width: 160px; height: 100px;
+  background: var(--surface3);
+  border-radius: 16px;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 6px;
+  font-size: .75rem;
+  color: var(--text-sec);
+}
+
 /* Chat messages */
 .chat-msg { display: flex; flex-direction: column; }
 .chat-msg--user {

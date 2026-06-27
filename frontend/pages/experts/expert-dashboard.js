@@ -163,7 +163,7 @@ function chatGetExpertConversations(expertId) {
   return Object.values(all).filter(function(c) { return c.expertId === expertId; });
 }
 
-function chatSaveExpertReply(conversationId, expert, text) {
+function chatSaveExpertReply(conversationId, expert, text, imageUrl) {
   var all  = chatLoadAll();
   var conv = all[conversationId];
   if (!conv) return null;
@@ -173,10 +173,12 @@ function chatSaveExpertReply(conversationId, expert, text) {
     senderId:       expert.id,
     senderType:     'expert',
     text:           text,
+    type:           imageUrl ? 'image' : 'text',
+    imageUrl:       imageUrl || null,
     timestamp:      new Date().toISOString(),
   };
   conv.messages.push(msg);
-  conv.lastMessage   = text;
+  conv.lastMessage   = imageUrl ? '📷 Image' : text;
   conv.lastMessageAt = msg.timestamp;
   chatSaveAll(all);
   console.log('Message Sent', msg);
@@ -1426,19 +1428,25 @@ function buildExpertChatBubble(msg, expertName, grouped) {
   var ts = '';
   try { ts = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); } catch(_) {}
 
+  var isImage = msg.type === 'image' && msg.imageUrl;
+  var contentHtml = isImage
+    ? '<img class="chat-image" src="' + esc(msg.imageUrl) + '" alt="Image" onclick="window.open(this.src)">'
+    : '<span class="zc-bbl-txt">' + esc(msg.text || '').replace(/\n/g, '<br>') + '</span>';
+  var bblClass = 'zc-bbl' + (isImage ? ' zc-bbl--img' : '');
+
   if (isIn) {
     var initials = (expertName || 'E').split(' ').map(function(w) { return w[0] || ''; }).join('').slice(0, 2).toUpperCase();
     var avHtml = grouped ? '<div class="zc-av-ghost"></div>' : '<div class="zc-av">' + esc(initials) + '</div>';
     div.innerHTML =
       avHtml +
-      '<div class="zc-bbl">' +
-        '<span class="zc-bbl-txt">' + esc(msg.text).replace(/\n/g, '<br>') + '</span>' +
+      '<div class="' + bblClass + '">' +
+        contentHtml +
         (ts ? '<span class="zc-bbl-ts">' + esc(ts) + '</span>' : '') +
       '</div>';
   } else {
     div.innerHTML =
-      '<div class="zc-bbl">' +
-        '<span class="zc-bbl-txt">' + esc(msg.text).replace(/\n/g, '<br>') + '</span>' +
+      '<div class="' + bblClass + '">' +
+        contentHtml +
         (ts ? '<span class="zc-bbl-ts">' + esc(ts) + '</span>' : '') +
       '</div>';
   }
@@ -1702,6 +1710,136 @@ function initExpertChatOverlay() {
     });
     container.scrollTop = container.scrollHeight;
     chatClearUnread(_edChatConversationId);
+  }
+
+  /* ── wire image attach for expert ── */
+  initExpertChatImageAttach(expert, msgWrap);
+}
+
+/* ══════════════════════════════════════════════
+   EXPERT CHAT IMAGE ATTACH
+   ══════════════════════════════════════════════ */
+
+function edCompressImage(file) {
+  return new Promise(function(resolve, reject) {
+    var reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = function(e) {
+      var img = new Image();
+      img.onerror = reject;
+      img.onload = function() {
+        var MAX = 1280;
+        var w = img.naturalWidth, h = img.naturalHeight;
+        if (w > MAX || h > MAX) {
+          var scale = Math.min(MAX / w, MAX / h);
+          w = Math.round(w * scale);
+          h = Math.round(h * scale);
+        }
+        var canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        canvas.toBlob(function(blob) {
+          if (blob) resolve(blob); else reject(new Error('Canvas compression failed'));
+        }, 'image/jpeg', 0.8);
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function edUploadChatImage(file) {
+  console.log('[ED CHAT IMAGE] Compressing…', file.name, file.type, file.size);
+  var blob = await edCompressImage(file);
+  console.log('[ED CHAT IMAGE] Compressed to', blob.size, 'bytes — uploading…');
+  var fd = new FormData();
+  fd.append('file', blob, 'photo.jpg');
+  var resp = await fetch('/api/chat/upload', { method: 'POST', body: fd });
+  console.log('[ED CHAT IMAGE] Response status:', resp.status, resp.statusText);
+  if (!resp.ok) throw new Error('Upload failed (' + resp.status + ' ' + resp.statusText + ')');
+  var data = await resp.json();
+  console.log('[ED CHAT IMAGE] Server response:', data);
+  if (!data.success) throw new Error('Server rejected the image');
+  console.log('[ED CHAT IMAGE] URL:', data.url);
+  return data.url;
+}
+
+function expertSendImageMessage(file, expert, msgWrap) {
+  if (!_edChatConversationId) return;
+  var now = new Date().toISOString();
+
+  /* Placeholder */
+  var placeholder = document.createElement('div');
+  placeholder.className = 'zc-msg zc-msg--in zc-msg--first';
+  placeholder.innerHTML =
+    '<div class="zc-av">' + esc((expert.name || 'E')[0].toUpperCase()) + '</div>' +
+    '<div class="zc-bbl zc-bbl--img">' +
+      '<div class="zc-img-placeholder"><span>📎</span><span>Uploading…</span></div>' +
+    '</div>';
+  if (msgWrap) { msgWrap.appendChild(placeholder); msgWrap.scrollTop = msgWrap.scrollHeight; }
+
+  edUploadChatImage(file).then(function(url) {
+    placeholder.remove();
+    var conv = chatGetConversation(_edChatConversationId);
+    var grouped = false;
+    if (conv && conv.messages && conv.messages.length) {
+      var last = conv.messages[conv.messages.length - 1];
+      grouped = edZcIsGrouped(last, { senderType: 'expert', timestamp: now });
+    }
+    var msg = chatSaveExpertReply(_edChatConversationId, expert, '', url);
+    if (!msg) return;
+    if (msgWrap) {
+      msgWrap.appendChild(buildExpertChatBubble(msg, expert.name, grouped));
+      msgWrap.scrollTop = msgWrap.scrollHeight;
+    }
+  }).catch(function(err) {
+    var inner = placeholder.querySelector('.zc-img-placeholder');
+    if (inner) inner.innerHTML = '<span>❌</span><span>Failed — try again</span>';
+    console.error('[ED CHAT IMAGE] Upload failed:', err);
+  });
+}
+
+function initExpertChatImageAttach(expert, msgWrap) {
+  var attachBtn    = document.getElementById('edChatAttachBtn');
+  var fileInput    = document.getElementById('edChatFileInput');
+  var cameraInput  = document.getElementById('edChatCameraInput');
+  var sheet        = document.getElementById('edChatImgSheet');
+  var sheetCamera  = document.getElementById('edChatSheetCamera');
+  var sheetGallery = document.getElementById('edChatSheetGallery');
+  var sheetCancel  = document.getElementById('edChatSheetCancel');
+
+  function openSheet()  { if (sheet) sheet.classList.add('open'); }
+  function closeSheet() { if (sheet) sheet.classList.remove('open'); }
+
+  if (attachBtn)    attachBtn.addEventListener('click', openSheet);
+  if (sheetCancel)  sheetCancel.addEventListener('click', closeSheet);
+  if (sheet)        sheet.addEventListener('click', function(e) { if (e.target === sheet) closeSheet(); });
+
+  if (sheetCamera) {
+    sheetCamera.addEventListener('click', function() {
+      closeSheet();
+      if (cameraInput) cameraInput.click();
+    });
+  }
+  if (sheetGallery) {
+    sheetGallery.addEventListener('click', function() {
+      closeSheet();
+      if (fileInput) fileInput.click();
+    });
+  }
+  if (fileInput) {
+    fileInput.addEventListener('change', function() {
+      var f = fileInput.files[0];
+      if (f) expertSendImageMessage(f, expert, msgWrap);
+      fileInput.value = '';
+    });
+  }
+  if (cameraInput) {
+    cameraInput.addEventListener('change', function() {
+      var f = cameraInput.files[0];
+      if (f) expertSendImageMessage(f, expert, msgWrap);
+      cameraInput.value = '';
+    });
   }
 }
 
