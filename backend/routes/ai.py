@@ -136,9 +136,19 @@ async def chat(body: ChatRequest):
     - **module**: Which AI module to use (default: "general").
     """
     # ── RAG: retrieve relevant chunks — non-blocking (KB loads lazily in thread) ─
-    print(f"\n[CHAT] Query: {body.message[:120]!r}")
+    # Pull fitness_goal from user_context so we search one KB instead of all four.
+    # Searching all 4 KBs simultaneously causes OOM on free-tier (512 MB) deployments.
+    _rag_goal: str | None = None
+    if body.user_context:
+        _raw_goal = body.user_context.get("fitness_goal") or body.user_context.get("goal")
+        _VALID_RAG_GOALS = {"weight_loss", "muscle_gain", "general_fitness", "transformation"}
+        if isinstance(_raw_goal, str) and _raw_goal in _VALID_RAG_GOALS:
+            _rag_goal = _raw_goal
+    if _rag_goal is None:
+        _rag_goal = "weight_loss"  # safe default: single KB, stays within memory limits
+    print(f"\n[CHAT] goal={_rag_goal!r}  query={body.message[:120]!r}")
     rag_context, sources = await asyncio.to_thread(
-        rag_service.retrieve_context, body.message
+        rag_service.retrieve_context, body.message, 5, _rag_goal
     )
 
     # ── Build user message (user_context + RAG context + question) ──────────

@@ -21,6 +21,7 @@ Usage:
     # kb.chunks       — list of chunk dicts with text/source_pdf/page_number etc.
 """
 
+import gc
 import hashlib
 import json
 import logging
@@ -276,10 +277,19 @@ class KnowledgeBaseManager:
                 index = faiss.read_index(str(idx_path))
                 with open(meta_path, "rb") as fh:
                     chunks = pickle.load(fh)
-                logger.info(
-                    f"{display} KB loaded from disk  ({time.time() - t0:.1f}s)"
-                    f"  — {index.ntotal} vectors, {len(chunks)} chunks"
-                )
+                        try:
+                    import psutil as _psutil
+                    _rss = _psutil.Process().memory_info().rss / 1024 / 1024
+                    logger.info(
+                        f"{display} KB loaded from disk  ({time.time() - t0:.1f}s)"
+                        f"  — {index.ntotal} vectors, {len(chunks)} chunks"
+                        f"  | RAM: {_rss:.1f} MB"
+                    )
+                except Exception:
+                    logger.info(
+                        f"{display} KB loaded from disk  ({time.time() - t0:.1f}s)"
+                        f"  — {index.ntotal} vectors, {len(chunks)} chunks"
+                    )
                 return KnowledgeBase(goal_type, index, chunks)
             logger.info(f"{display} KB: PDF content changed — rebuilding index")
 
@@ -333,10 +343,19 @@ class KnowledgeBaseManager:
             pickle.dump(chunks, fh)
         self._write_hashes(goal_type, hash_path)
 
-        logger.info(
-            f"{display} KB built and saved  ({time.time() - t0:.1f}s)"
-            f"  — {index.ntotal} vectors, {len(chunks)} chunks"
-        )
+        try:
+            import psutil as _psutil
+            _rss = _psutil.Process().memory_info().rss / 1024 / 1024
+            logger.info(
+                f"{display} KB built and saved  ({time.time() - t0:.1f}s)"
+                f"  — {index.ntotal} vectors, {len(chunks)} chunks"
+                f"  | RAM: {_rss:.1f} MB"
+            )
+        except Exception:
+            logger.info(
+                f"{display} KB built and saved  ({time.time() - t0:.1f}s)"
+                f"  — {index.ntotal} vectors, {len(chunks)} chunks"
+            )
         return KnowledgeBase(goal_type, index, chunks)
 
     def _pdfs_changed(self, goal_type: str, hash_path: Path) -> bool:
@@ -397,10 +416,19 @@ class KnowledgeBaseManager:
                 break
             lru = min(candidates, key=lambda n: self._cache[n].last_used)
             del self._cache[lru]
-            logger.info(
-                f"LRU evicted {_KB_DISPLAY.get(lru, lru)} KB "
-                f"(limit={MAX_LOADED_KBS})"
-            )
+            gc.collect()  # release FAISS index + chunk list memory immediately
+            try:
+                import psutil as _psutil
+                _rss = _psutil.Process().memory_info().rss / 1024 / 1024
+                logger.info(
+                    f"LRU evicted {_KB_DISPLAY.get(lru, lru)} KB "
+                    f"(limit={MAX_LOADED_KBS})  | RAM after gc: {_rss:.1f} MB"
+                )
+            except Exception:
+                logger.info(
+                    f"LRU evicted {_KB_DISPLAY.get(lru, lru)} KB "
+                    f"(limit={MAX_LOADED_KBS})"
+                )
 
 
 # ── Module-level singleton ────────────────────────────────────────────────────

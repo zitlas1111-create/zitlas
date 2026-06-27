@@ -27,6 +27,7 @@ Pipeline:
 import hashlib
 import json
 import logging
+import os
 import pickle
 import time
 from pathlib import Path
@@ -648,9 +649,18 @@ def search_knowledge(
         logger.info(f"Query category: {query_category}")
 
     # Which goal KBs to search.
-    # goal-specific: one KB (fast, memory-efficient).
-    # goalless: all four KBs merged (used by /api/rag/query and /api/ai/chat).
-    goals_to_search = (goal,) if (goal and goal in _VALID_GOALS) else _VALID_GOALS
+    # goal-specific: one KB — fast, memory-efficient, the normal path.
+    # goalless: all four KBs — only enabled when ALLOW_MULTI_KB_SEARCH=true.
+    #   On Render free tier (512 MB) loading all 4 KBs simultaneously causes OOM.
+    #   Default: fall back to weight_loss so the process stays within memory limits.
+    if goal and goal in _VALID_GOALS:
+        goals_to_search = (goal,)
+    elif os.getenv("ALLOW_MULTI_KB_SEARCH", "false").lower() == "true":
+        goals_to_search = _VALID_GOALS
+        logger.info("ALLOW_MULTI_KB_SEARCH=true — searching all 4 KBs")
+    else:
+        goals_to_search = ("weight_loss",)
+        logger.info("ALLOW_MULTI_KB_SEARCH not set — defaulting to weight_loss KB to stay within memory limits")
 
     all_candidates: list[dict] = []
 
@@ -661,6 +671,13 @@ def search_knowledge(
         except Exception as exc:
             logger.error(f"Failed to load {g} KB — skipping: {exc}")
             continue
+
+        try:
+            import psutil as _psutil
+            _rss = _psutil.Process().memory_info().rss / 1024 / 1024
+            logger.info(f"RAM after loading {g} KB: {_rss:.1f} MB")
+        except Exception:
+            pass
 
         # Expand candidate pool so boosting has room to re-rank.
         # coaching_rules: gf1b is a small file — needs a deeper scan.

@@ -42,6 +42,11 @@ class RAGQueryRequest(BaseModel):
     question: str  = Field(..., min_length=1, max_length=2000, description="User's question")
     user_data: UserData | None = Field(default=None, description="User profile for personalization")
     top_k: int     = Field(default=5, ge=1, le=10, description="Max chunks to retrieve (1-10)")
+    goal: str | None = Field(
+        default=None,
+        description="Fitness goal filter: weight_loss | muscle_gain | general_fitness | transformation. "
+                    "Restricts search to the matching KB (recommended on free-tier deployments)."
+    )
 
 
 class RAGSource(BaseModel):
@@ -90,10 +95,12 @@ async def rag_query(body: RAGQueryRequest) -> RAGQueryResponse:
     print(f"  user_data: {'yes' if body.user_data else 'no'}")
     print("=" * 60)
 
-    # 1. Semantic search — run in thread pool so the event loop is never blocked,
-    #    especially on the first call where a KB may be built from PDFs (~30-60s).
+    # 1. Semantic search — run in thread pool so the event loop is never blocked.
+    #    Pass goal so search_knowledge() uses a single KB instead of all four,
+    #    which avoids OOM on free-tier deployments (512 MB limit).
+    print(f"[RAG QUERY] goal={body.goal!r}  question={body.question[:80]!r}")
     chunks = await asyncio.to_thread(
-        rag_service.search_knowledge, body.question, body.top_k
+        rag_service.search_knowledge, body.question, body.top_k, body.goal
     )
     print(f"[RAG QUERY] Retrieved {len(chunks)} chunk(s)")
 
