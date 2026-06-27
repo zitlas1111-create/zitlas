@@ -110,73 +110,26 @@
 
     </section>
 
-    <!-- ── SECTION: Review Requests ── -->
+    <!-- ── SECTION: Reviews Inbox ── -->
     <section class="ed-section" id="sectionReviews">
+      <div class="ed-section-label">Reviews Inbox</div>
 
-      <!-- ── Pending Plan Reviews (from Verify Plan flow) ── -->
-      <div class="ed-pr-header">
-        <div class="ed-section-label" style="margin-bottom:0">Pending Plan Reviews</div>
-        <span class="ed-pr-count-badge" id="prCountBadge" style="display:none">0</span>
-      </div>
-      <div id="planReviewsListWrap">
-        <div class="ed-empty-state" id="planReviewsEmpty">
-          <span class="ed-empty-icon">📄</span>
-          <p class="ed-empty-title">No Plan Reviews</p>
-          <p class="ed-empty-sub">When athletes request a plan review, they will appear here.</p>
-        </div>
-      </div>
-
-      <!-- ── Diet Plan Review Requests (legacy) ── -->
-      <div class="ed-section-label" style="margin-top:24px">Diet Review Requests</div>
-
-      <!-- Status Filter Tabs -->
-      <div class="erc-filter-tabs" id="ercFilterTabs">
-        <button class="erc-filter-tab active" data-filter="all">All</button>
-        <button class="erc-filter-tab" data-filter="pending">Pending</button>
-        <button class="erc-filter-tab" data-filter="expert_reviewing">Under Review</button>
-        <button class="erc-filter-tab" data-filter="approved">Approved</button>
+      <!-- Inbox tabs -->
+      <div class="pr-inbox-tabs">
+        <button class="pr-inbox-tab pr-inbox-tab--active" data-inbox-tab="pending">
+          Pending
+          <span class="pr-tab-badge" id="prTabBadgePending" style="display:none">0</span>
+        </button>
+        <button class="pr-inbox-tab" data-inbox-tab="in_progress">
+          In Progress
+          <span class="pr-tab-badge" id="prTabBadgeInProgress" style="display:none">0</span>
+        </button>
+        <button class="pr-inbox-tab" data-inbox-tab="completed">Completed</button>
       </div>
 
-      <div id="reviewsListWrap">
-        <div class="ed-empty-state" id="reviewsEmpty">
-          <span class="ed-empty-icon">📋</span>
-          <p class="ed-empty-title">No Review Requests</p>
-          <p class="ed-empty-sub">When athletes send diet plans for review, they will appear here.</p>
-        </div>
-      </div>
+      <!-- Cards rendered by JS -->
+      <div id="prInboxList"></div>
     </section>
-
-    <!-- ── PLAN REVIEW — SUGGEST MODIFICATIONS MODAL ── -->
-    <div class="erc-modal-overlay" id="prSuggestModal" style="display:none" role="dialog" aria-modal="true">
-      <div class="erc-modal-card">
-        <div class="erc-modal-header">
-          <h3 class="erc-modal-title">Suggest Modifications</h3>
-          <button class="erc-modal-close" id="prSuggestClose" aria-label="Close">✕</button>
-        </div>
-        <p class="erc-modal-sub">Describe what the athlete should change:</p>
-        <textarea class="erc-modal-textarea" id="prSuggestInput" placeholder="e.g. Increase protein at breakfast. Replace rice with quinoa on Day 3. Add 10 min warm-up before each session." rows="5"></textarea>
-        <div class="erc-modal-actions">
-          <button class="erc-modal-btn erc-modal-btn--cancel" id="prSuggestCancel">Cancel</button>
-          <button class="erc-modal-btn erc-modal-btn--confirm" id="prSuggestConfirm">Send Feedback →</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- ── APPROVE MODAL ── -->
-    <div class="erc-modal-overlay" id="approveModal" style="display:none" role="dialog" aria-modal="true">
-      <div class="erc-modal-card">
-        <div class="erc-modal-header">
-          <h3 class="erc-modal-title">Approve Diet Plan</h3>
-          <button class="erc-modal-close" id="approveModalClose" aria-label="Close">✕</button>
-        </div>
-        <p class="erc-modal-sub">Add optional notes or feedback for the athlete:</p>
-        <textarea class="erc-modal-textarea" id="approveNotesInput" placeholder="e.g. Follow this plan for 4 weeks. Stay hydrated with 3L water daily. Great discipline — keep it up!" rows="5"></textarea>
-        <div class="erc-modal-actions">
-          <button class="erc-modal-btn erc-modal-btn--cancel" id="approveModalCancel">Cancel</button>
-          <button class="erc-modal-btn erc-modal-btn--confirm" id="approveModalConfirm">✅ Approve &amp; Notify</button>
-        </div>
-      </div>
-    </div>
 
     <!-- ── SECTION: Client Chats ── -->
     <section class="ed-section" id="sectionChats">
@@ -347,6 +300,21 @@
       </button>
     </div>
 
+  </div>
+
+  <!-- Plan Edit Overlay — full-screen sheet for modifying plans, triggered from chat tools -->
+  <div class="pr-edit-overlay" id="prEditOverlay" style="display:none">
+    <div class="pr-edit-sheet">
+      <div class="pr-edit-header">
+        <button class="pr-edit-back" id="prEditBack" aria-label="Back">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
+          </svg>
+        </button>
+        <h3 class="pr-edit-title" id="prEditTitle">Modify Plan</h3>
+      </div>
+      <div class="pr-edit-body" id="prEditBody"></div>
+    </div>
   </div>
 
   <script src="expert-dashboard.js"></script>

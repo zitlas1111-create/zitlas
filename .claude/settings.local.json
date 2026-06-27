@@ -5,7 +5,9 @@
       "Bash(python -c ' *)",
       "Bash(del \"c:\\\\Users\\\\Atharva\\\\Desktop\\\\zitlas\\\\backend\\\\append_vol2.py\")",
       "Bash(del \"c:\\\\Users\\\\Atharva\\\\Desktop\\\\zitlas\\\\backend\\\\vol2_extracted.txt\")",
-      "PowerShell(Get-Content \"$env:TEMP\\\\uv_out3.txt\" | Select-String \"POST /api|HTTP/1\" | ForEach-Object { $_.Line })"
+      "PowerShell(Get-Content \"$env:TEMP\\\\uv_out3.txt\" | Select-String \"POST /api|HTTP/1\" | ForEach-Object { $_.Line })",
+      "Bash(cd /c/Users/Atharva/Desktop/zitlas/frontend && ls -la)",
+      "Read(//c/c/Users/Atharva/Desktop/zitlas/**)"
     ]
   }
 }

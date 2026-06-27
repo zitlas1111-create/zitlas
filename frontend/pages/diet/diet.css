@@ -3120,3 +3120,8 @@ img { display: block; max-width: 100%; }
   margin-top: 7px;
   line-height: 1.4;
 }
+.meal-expert-note--reviewed {
+  color: rgba(34, 197, 94, 0.65);
+  font-weight: 400;
+  margin-top: 2px;
+}

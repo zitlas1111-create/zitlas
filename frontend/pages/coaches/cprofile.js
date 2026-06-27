@@ -1748,38 +1748,350 @@
   }
 
   /* ══════════════════════════════════════════
+     DIET STORAGE HELPERS (new schema)
+  ══════════════════════════════════════════ */
+  function _cpMealKey(name) {
+    return (name || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '_');
+  }
+
+  function isNewDietSchema(obj) {
+    return !!(obj && obj.originalDietPlan && obj.currentDietPlan);
+  }
+
+  function _cpSaveDietStorage(storage) {
+    console.trace("[WRITE zitlas_diet_plan]", storage);
+    try { localStorage.setItem('zitlas_diet_plan', JSON.stringify(storage)); } catch (_) {}
+  }
+
+  /* Build the {originalDietPlan, currentDietPlan, expertModifications, isExpertPlan} schema
+     from an expert review object. Uses mealChangeHistory if present; falls back to _edited flags. */
+  function _buildDietStorageFromReview(review) {
+    var _expName    = review.expertName || review.expert_name || 'Expert';
+    var _reviewedAt = review.reviewedAt || new Date().toISOString();
+
+    /* Resolve original plan — unwrap if it was stored in new-schema format */
+    var _contextPlan = review.planData || null;
+    if (_contextPlan && (_contextPlan.originalDietPlan || _contextPlan.currentDietPlan)) {
+      _contextPlan = _contextPlan.originalDietPlan || _contextPlan.currentDietPlan;
+    }
+    var _originalPlan = _contextPlan || null;
+
+    /* Build expertModifications */
+    var _mods    = {};
+    var _history = review.mealChangeHistory || review.meal_change_history || [];
+
+    if (_history.length > 0) {
+      _history.forEach(function (change) {
+        var _dk      = String(change.dayIndex != null ? change.dayIndex : (change.day_index != null ? change.day_index : 0));
+        var _rawName = change.mealName || change.meal_name || change.name || '';
+        var _mk      = _cpMealKey(_rawName);
+        if (!_mods[_dk]) _mods[_dk] = {};
+        _mods[_dk][_mk] = {
+          modified:   true,
+          modifiedBy: change.modifiedBy || change.modified_by || _expName,
+          modifiedAt: change.modifiedAt || change.modified_at || _reviewedAt,
+          oldMeal: { foods: change.oldFoods || change.old_foods || [], calories: change.oldCalories || null, protein_g: change.oldProtein || null },
+          newMeal: { foods: change.newFoods || change.new_foods || [], calories: change.newCalories || null, protein_g: change.newProtein || null },
+        };
+      });
+    }
+
+    /* Always scan reviewedDietPlan for _edited meals.
+       Creates entries for meals missed by mealChangeHistory, and fixes empty newFoods
+       from history entries (reviewedDietPlan is authoritative for what the expert changed). */
+    if (review.reviewedDietPlan) {
+      var _revDays  = review.reviewedDietPlan.days || [];
+      var _origDays = _originalPlan ? (_originalPlan.days || []) : [];
+      _revDays.forEach(function (revDay, dayIdx) {
+        (revDay.meals || []).forEach(function (revMeal, mealIdx) {
+          if (!revMeal._edited) return;
+          var _mealName = revMeal.meal_name || revMeal.name || '';
+          var _dk       = String(dayIdx);
+          var _mk       = _cpMealKey(_mealName);
+          var _origDay  = _origDays[dayIdx];
+          var _origMeal = _origDay ? (_origDay.meals || [])[mealIdx] : null;
+          if (!_mods[_dk]) _mods[_dk] = {};
+          if (!_mods[_dk][_mk]) {
+            /* Entry not built from history — create from _edited flag */
+            _mods[_dk][_mk] = {
+              modified:   true,
+              modifiedBy: _expName,
+              modifiedAt: _reviewedAt,
+              oldMeal: _origMeal
+                ? { foods: _origMeal.foods || [], calories: _origMeal.calories || null, protein_g: _origMeal.protein_g || null }
+                : { foods: [] },
+              newMeal: { foods: revMeal.foods || [], calories: revMeal.calories || null, protein_g: revMeal.protein_g || null },
+            };
+          } else {
+            /* Entry exists from history — fix foods if history had empty newFoods */
+            if (!_mods[_dk][_mk].newMeal) _mods[_dk][_mk].newMeal = {};
+            if (!_mods[_dk][_mk].newMeal.foods || !_mods[_dk][_mk].newMeal.foods.length) {
+              _mods[_dk][_mk].newMeal.foods = revMeal.foods || [];
+            }
+            if (!_mods[_dk][_mk].newMeal.calories && revMeal.calories) {
+              _mods[_dk][_mk].newMeal.calories = revMeal.calories;
+            }
+            if (!_mods[_dk][_mk].newMeal.protein_g && revMeal.protein_g) {
+              _mods[_dk][_mk].newMeal.protein_g = revMeal.protein_g;
+            }
+          }
+        });
+      });
+    }
+
+    return {
+      originalDietPlan:    _originalPlan || review.reviewedDietPlan,
+      currentDietPlan:     _originalPlan || review.reviewedDietPlan,
+      expertModifications: _mods,
+      isExpertPlan:        true,
+      expertName:          _expName,
+      reviewedAt:          _reviewedAt,
+    };
+  }
+
+  function _cpSaveWorkoutStorage(storage) {
+    console.log("[_cpSaveWorkoutStorage] workoutModifications", storage.workoutModifications);
+    try {
+      localStorage.setItem('zitlas_workout_plan', JSON.stringify(storage));
+    } catch (saveErr) {
+      console.error("[_cpSaveWorkoutStorage] SAVE FAILED", saveErr);
+    }
+    var _savedWp = JSON.parse(localStorage.getItem('zitlas_workout_plan') || 'null');
+    console.log("[_cpSaveWorkoutStorage] AFTER SAVE workoutModifications", _savedWp ? _savedWp.workoutModifications : undefined);
+  }
+
+  /* Build {originalWorkoutPlan, currentWorkoutPlan, workoutModifications} from a workout review */
+  function _buildWorkoutStorageFromReview(review) {
+    /* Migrate: if reviewedWorkoutPlan is missing, fall back to planData */
+    if (!review.reviewedWorkoutPlan && review.planData) {
+      review.reviewedWorkoutPlan = review.planData;
+    }
+    if (!review.workoutChangeHistory) {
+      review.workoutChangeHistory = [];
+    }
+
+    console.log("REVIEW OBJECT", review);
+    console.log("WORKOUT HISTORY", review.workoutChangeHistory);
+    console.log("[BUILD WORKOUT STORAGE] reviewedWorkoutPlan present:", !!review.reviewedWorkoutPlan);
+
+    var _expName    = review.expertName || review.expert_name || 'Expert';
+    var _reviewedAt = review.reviewedAt || new Date().toISOString();
+
+    /* Resolve original plan */
+    var _contextPlan = review.planData || null;
+    if (_contextPlan && (_contextPlan.originalWorkoutPlan || _contextPlan.currentWorkoutPlan)) {
+      _contextPlan = _contextPlan.originalWorkoutPlan || _contextPlan.currentWorkoutPlan;
+    }
+    var _originalPlan = _contextPlan || null;
+    console.log("[BUILD WORKOUT STORAGE] _originalPlan", _originalPlan);
+
+    /* Build workoutModifications from workoutChangeHistory */
+    var _mods    = {};
+    var _history = review.workoutChangeHistory || [];
+
+    _history.forEach(function(change) {
+      var _dk = String(change.dayIndex != null ? change.dayIndex : 0);
+      _mods[_dk] = {
+        modified:   true,
+        modifiedBy: change.modifiedBy || _expName,
+        modifiedAt: change.modifiedAt || _reviewedAt,
+        oldWorkout: change.oldWorkout || null,
+        newWorkout: change.newWorkout || null,
+      };
+    });
+
+    /* Always also scan reviewedWorkoutPlan for _edited days */
+    if (review.reviewedWorkoutPlan) {
+      var _revDays  = review.reviewedWorkoutPlan.weekly_plan || review.reviewedWorkoutPlan.days || [];
+      var _origDays = _originalPlan ? (_originalPlan.weekly_plan || _originalPlan.days || []) : [];
+      _revDays.forEach(function(revDay, dayIdx) {
+        if (!revDay._edited) return;
+        var _dk     = String(dayIdx);
+        var origDay = _origDays[dayIdx];
+        if (!_mods[_dk]) {
+          _mods[_dk] = {
+            modified:   true,
+            modifiedBy: _expName,
+            modifiedAt: _reviewedAt,
+            oldWorkout: origDay ? {
+              focus: origDay.focus || origDay.type || '',
+              duration_minutes: origDay.duration_minutes || 0,
+              exercises: (origDay.exercises || []).map(function(e) {
+                return { name: e.name, sets: e.sets, reps_or_duration: e.reps_or_duration };
+              }),
+            } : null,
+            newWorkout: {
+              focus: revDay.focus || revDay.type || '',
+              duration_minutes: revDay.duration_minutes || 0,
+              exercises: (revDay.exercises || []).map(function(e) {
+                return { name: e.name, sets: e.sets, reps_or_duration: e.reps_or_duration };
+              }),
+            },
+          };
+        } else {
+          /* Fix empty exercises in existing history entry */
+          if (!_mods[_dk].newWorkout) _mods[_dk].newWorkout = {};
+          if (!_mods[_dk].newWorkout.exercises || !_mods[_dk].newWorkout.exercises.length) {
+            _mods[_dk].newWorkout.exercises = (revDay.exercises || []).map(function(e) {
+              return { name: e.name, sets: e.sets, reps_or_duration: e.reps_or_duration };
+            });
+          }
+        }
+      });
+    }
+
+    console.log("[BUILD WORKOUT STORAGE] _mods built from history", _mods);
+    console.log("[BUILD WORKOUT STORAGE] workoutChangeHistory length", _history.length);
+    console.log("[BUILD WORKOUT STORAGE] reviewedWorkoutPlan days with _edited",
+      review.reviewedWorkoutPlan
+        ? (review.reviewedWorkoutPlan.weekly_plan || review.reviewedWorkoutPlan.days || [])
+            .filter(function(d) { return d._edited; }).length
+        : 0);
+
+    return {
+      originalWorkoutPlan:  _originalPlan || review.reviewedWorkoutPlan,
+      currentWorkoutPlan:   _originalPlan || review.reviewedWorkoutPlan,
+      workoutModifications: _mods,
+      isExpertPlan:         true,
+      expertName:           _expName,
+      reviewedAt:           _reviewedAt,
+    };
+  }
+
+  /* HTML comparison view for workout plans */
+  function buildWorkoutComparisonPlanHTML(plan, originalPlan) {
+    if (!plan) return '<p class="rc-no-data">Workout plan not available.</p>';
+    /* Unwrap new schema {originalWorkoutPlan, currentWorkoutPlan, ...} so we can reach the day array */
+    if (plan.originalWorkoutPlan || plan.currentWorkoutPlan) {
+      plan = plan.currentWorkoutPlan || plan.originalWorkoutPlan;
+    }
+    if (originalPlan && (originalPlan.originalWorkoutPlan || originalPlan.currentWorkoutPlan)) {
+      originalPlan = originalPlan.currentWorkoutPlan || originalPlan.originalWorkoutPlan;
+    }
+    var days = plan.weekly_plan || plan.days || [];
+    if (!days.length) return '<p class="rc-no-data">No workout data.</p>';
+    var origDays = originalPlan ? (originalPlan.weekly_plan || originalPlan.days || []) : [];
+    var labels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+
+    var pills = '<div class="erc-day-pills">';
+    days.forEach(function(d, i) {
+      pills += '<button class="erc-day-pill' + (i === 0 ? ' active' : '') +
+        '" data-rc-day-pill="' + i + '">' + (labels[i] || 'D'+(i+1)) + '</button>';
+    });
+    pills += '</div>';
+
+    var content = '';
+    days.forEach(function(day, di) {
+      var origDay   = origDays[di] || {};
+      var isEdited  = !!day._edited;
+      var focus     = day.focus || day.type || 'Training';
+      var origFocus = origDay.focus || origDay.type || '';
+      var duration  = day.duration_minutes ? day.duration_minutes + ' min' : '';
+      content += '<div data-rc-day-content="' + di + '" style="display:' + (di === 0 ? 'block' : 'none') + '">';
+      content += '<div class="erc-day-theme' + (isEdited ? ' rc-meal-edited' : '') + '">' +
+        (isEdited && origFocus && origFocus !== focus
+          ? '<span style="text-decoration:line-through;opacity:.6">' + esc(origFocus) + '</span> → ' : '') +
+        esc(focus) +
+        (duration ? ' <span class="erc-meal-time">· ' + esc(duration) + '</span>' : '') +
+        (isEdited ? '<span class="rc-edited-badge">✏ Edited by Expert</span>' : '') +
+      '</div>';
+      (day.exercises || []).forEach(function(ex) {
+        var exEdited = !!ex._edited;
+        content += '<div class="erc-meal-row' + (exEdited ? ' rc-meal-edited' : '') + '">' +
+          '<div class="erc-meal-hdr">' +
+            '<span class="erc-meal-name">💪 ' + esc(ex.name || 'Exercise') + '</span>' +
+            (ex.sets ? '<span class="erc-meal-time">' + esc(String(ex.sets)) + ' sets' +
+              (ex.reps_or_duration ? ' × ' + esc(ex.reps_or_duration) : '') + '</span>' : '') +
+            (exEdited ? '<span class="rc-edited-badge">✏ Edited</span>' : '') +
+          '</div>' +
+          (ex.tip ? '<div class="erc-meal-foods">📝 ' + esc(ex.tip) + '</div>' : '') +
+        '</div>';
+      });
+      content += '</div>';
+    });
+
+    return pills + content;
+  }
+
+  /* ══════════════════════════════════════════
      REVIEW COMPARISON SHEET (athlete side)
   ══════════════════════════════════════════ */
   function openReviewComparisonSheet(coach, reviewOverride) {
     var sheet = document.getElementById('rcSheet');
     if (!sheet) return;
 
-    var review = reviewOverride || _getMyLatestPlanReview(coach);
-    if (!review || !review.reviewedDietPlan) {
+    /* Always re-fetch the review from localStorage FIRST.
+       reviewOverride is a closure var captured at render-time — it will be stale if the expert
+       saved reviewedWorkoutPlan / workoutChangeHistory after this page was loaded.
+       Using the stale object means _displayReviewedPlan, _isWorkout, and the accept handler
+       all operate on wrong data. */
+    var _rcAllFreshRevs = [];
+    try { _rcAllFreshRevs = JSON.parse(localStorage.getItem('expert_plan_reviews') || '[]'); } catch (_e) {}
+    var review;
+    if (reviewOverride && reviewOverride.id) {
+      review = _rcAllFreshRevs.find(function(r) { return r.id === reviewOverride.id; }) || reviewOverride;
+    } else {
+      review = _getMyLatestPlanReview(coach);
+    }
+
+    /* Diagnosis logs */
+    console.log("[openRC] fresh review", review);
+    console.log("[openRC] reviewedWorkoutPlan present:", !!(review && review.reviewedWorkoutPlan));
+    console.log("[openRC] workoutChangeHistory", review && review.workoutChangeHistory);
+    var _wpRaw = JSON.parse(localStorage.getItem("zitlas_workout_plan") || 'null');
+    console.log("[openRC] zitlas_workout_plan.workoutModifications", _wpRaw ? _wpRaw.workoutModifications : undefined);
+
+    /* Detect workout reviews — normalise planReviewType (old) vs reviewType (new) */
+    var _effectiveType = review && (review.reviewType || review.planReviewType || '');
+    var _isWorkout = _effectiveType === 'workout' ||
+      (_effectiveType === '' && !!(review && review.reviewedWorkoutPlan));
+    /* Fall back to planData when expert marked as reviewed without explicitly saving
+       (covers old reviews completed via "Mark as Reviewed" before the fix) */
+    var _reviewedPlan = _isWorkout
+      ? (review && (review.reviewedWorkoutPlan || review.planData))
+      : (review && (review.reviewedDietPlan   || review.planData));
+    console.log("ACCEPT WORKOUT REVIEW — review", review);
+    console.log("ACCEPT WORKOUT REVIEW — _isWorkout", _isWorkout, "| _reviewedPlan", !!_reviewedPlan);
+    if (!review || !_reviewedPlan) {
       showToast('Expert review is not available yet.');
       return;
     }
 
     var expertName = review.expertName || 'Expert';
-    var reviewType = review.reviewType || 'diet';
+    var reviewType = review.reviewType || review.planReviewType || 'diet';
 
     /* ── Populate tabs ── */
-    var originalTab = document.getElementById('rcTabOriginal');
-    var reviewedTab = document.getElementById('rcTabReviewed');
+    var originalTab  = document.getElementById('rcTabOriginal');
+    var reviewedTab  = document.getElementById('rcTabReviewed');
     var originalPane = document.getElementById('rcPaneOriginal');
     var reviewedPane = document.getElementById('rcPaneReviewed');
-    var titleEl = document.getElementById('rcTitle');
-    var acceptBtn = document.getElementById('rcAcceptBtn');
+    var titleEl      = document.getElementById('rcTitle');
+    var acceptBtn    = document.getElementById('rcAcceptBtn');
+
+    console.log('[RC SETUP] acceptBtn found:', !!acceptBtn, '| _isWorkout:', _isWorkout);
 
     if (titleEl) titleEl.textContent = expertName + '\'s Review';
 
-    /* Build original plan HTML */
-    if (originalPane) {
-      originalPane.innerHTML = buildComparisonPlanHTML(review.planData, null, reviewType);
-    }
-    /* Build reviewed plan HTML with highlights */
-    if (reviewedPane) {
-      reviewedPane.innerHTML = buildComparisonPlanHTML(review.reviewedDietPlan, review.planData, reviewType);
+    var _displayReviewedPlan = _isWorkout
+      ? (review.reviewedWorkoutPlan || review.planData)
+      : (review.reviewedDietPlan   || review.planData);
+
+    /* Build HTML inside its own try/catch — a rendering crash must NOT prevent acceptBtn wiring */
+    try {
+      if (originalPane) {
+        originalPane.innerHTML = _isWorkout
+          ? buildWorkoutComparisonPlanHTML(review.planData, null)
+          : buildComparisonPlanHTML(review.planData, null, reviewType);
+      }
+      if (reviewedPane) {
+        reviewedPane.innerHTML = _isWorkout
+          ? buildWorkoutComparisonPlanHTML(_displayReviewedPlan, review.planData)
+          : buildComparisonPlanHTML(_displayReviewedPlan, review.planData, reviewType);
+      }
+    } catch (_renderErr) {
+      console.error('[RC SETUP] HTML build crashed — acceptBtn will still be wired:', _renderErr);
+      if (originalPane) originalPane.innerHTML = '<p class="rc-no-data">Preview unavailable.</p>';
+      if (reviewedPane) reviewedPane.innerHTML = '<p class="rc-no-data">Preview unavailable.</p>';
     }
 
     /* Tab switching */
@@ -1814,23 +2126,74 @@
     });
 
     /* Accept Changes */
+    console.log('[RC SETUP] wiring acceptBtn.onclick now');
     if (acceptBtn) {
       acceptBtn.onclick = function() {
-        try {
-          localStorage.setItem('zitlas_diet_plan', JSON.stringify(review.reviewedDietPlan));
-        } catch (_) {}
-        /* Mark the review as athlete_accepted */
-        var all = [];
-        try { all = JSON.parse(localStorage.getItem('expert_plan_reviews') || '[]'); } catch (_) {}
-        var idx = all.findIndex(function(r) { return r.id === review.id; });
-        if (idx !== -1) {
-          all[idx].athleteAccepted = true;
-          try { localStorage.setItem('expert_plan_reviews', JSON.stringify(all)); } catch (_) {}
+        console.log("RC ACCEPT CLICKED");
+        console.log("ACCEPTING WORKOUT REVIEW", review);
+        console.log("HISTORY", review.workoutChangeHistory);
+        console.log("STORAGE BEFORE", JSON.parse(localStorage.getItem("zitlas_workout_plan") || 'null'));
+
+        if (_isWorkout) {
+          try {
+            /* Unwrap new schema if planData was saved in new format */
+            var _rawPlanData = review.planData || null;
+            if (_rawPlanData && (_rawPlanData.originalWorkoutPlan || _rawPlanData.currentWorkoutPlan)) {
+              _rawPlanData = _rawPlanData.currentWorkoutPlan || _rawPlanData.originalWorkoutPlan;
+            }
+
+            var workoutMods = {};
+            (review.workoutChangeHistory || []).forEach(function(change) {
+              if (change.dayIndex == null) return;
+              workoutMods[String(change.dayIndex)] = {
+                modified:   true,
+                modifiedBy: change.modifiedBy || review.expertName || 'Expert',
+                modifiedAt: change.modifiedAt || review.reviewedAt || new Date().toISOString(),
+                oldWorkout: change.oldWorkout || null,
+                newWorkout: change.newWorkout || null,
+              };
+            });
+
+            console.log("NEW MODS", workoutMods);
+
+            var _storage = {
+              originalWorkoutPlan:  _rawPlanData || review.reviewedWorkoutPlan || null,
+              currentWorkoutPlan:   _rawPlanData || review.reviewedWorkoutPlan || null,
+              workoutModifications: workoutMods,
+              workoutChangeHistory: review.workoutChangeHistory || [],
+              isExpertPlan:         true,
+              expertName:           review.expertName || 'Expert',
+              reviewedAt:           review.reviewedAt || new Date().toISOString(),
+            };
+
+            localStorage.setItem('zitlas_workout_plan', JSON.stringify(_storage));
+            console.log("STORAGE AFTER", JSON.parse(localStorage.getItem("zitlas_workout_plan") || 'null'));
+          } catch (_err) {
+            console.error("WORKOUT ACCEPT ERROR", _err);
+          }
+        } else {
+          var _builtStorage = _buildDietStorageFromReview(review);
+          _cpSaveDietStorage(_builtStorage);
         }
+
+        /* Mark athlete_accepted — always runs */
+        var _all = [];
+        try { _all = JSON.parse(localStorage.getItem('expert_plan_reviews') || '[]'); } catch (_) {}
+        var _ai = _all.findIndex(function(r) { return r.id === review.id; });
+        if (_ai !== -1) {
+          _all[_ai].athleteAccepted = true;
+          _all[_ai].acceptedAt      = _all[_ai].acceptedAt || new Date().toISOString();
+          try { localStorage.setItem('expert_plan_reviews', JSON.stringify(_all)); } catch (_) {}
+        }
+
         closeComparisonSheet();
-        showToast('✅ Expert\'s plan has been applied to your profile.');
+        showToast(_isWorkout
+          ? '✅ Expert\'s workout plan has been applied!'
+          : '✅ Expert\'s plan has been applied to your profile.');
         updateVerifyBtnState(coach);
       };
+    } else {
+      console.error('[RC SETUP] rcAcceptBtn not found in DOM — onclick cannot be wired');
     }
 
     function closeComparisonSheet() {
@@ -1972,10 +2335,14 @@
       btn.innerHTML = VP_SVG.clock + ' Under Review';
     }
 
-    /* Show "View Previous Reviews" link when any review has been completed */
-    var doneRevs = allRevs.filter(function(r) {
-      return r.status === 'completed' || r.status === 'review_completed';
-    });
+    /* Show "View Previous Reviews" link when any review has been completed.
+       Sort newest-first so the athlete clicks the correct (latest) review. */
+    var doneRevs = allRevs
+      .filter(function(r) { return r.status === 'completed' || r.status === 'review_completed'; })
+      .sort(function(a, b) {
+        return new Date(b.reviewedAt || b.completedAt || b.createdAt || 0) -
+               new Date(a.reviewedAt || a.completedAt || a.createdAt || 0);
+      });
     if (prevSection && doneRevs.length > 0) {
       renderPrevReviews(doneRevs, coach);
       prevSection.style.display = '';
@@ -1995,7 +2362,7 @@
       '</button>' +
       '<div class="cp-prev-list" id="prevReviewsList" style="display:none">' +
         reviews.map(function(r) {
-          var typeLabel  = r.reviewType === 'diet' ? '🥗 Diet' : '💪 Workout';
+          var typeLabel  = (r.reviewType || r.planReviewType || 'diet') === 'diet' ? '🥗 Diet' : '💪 Workout';
           var ver        = r.version ? 'Review #' + r.version : 'Review';
           var date       = r.createdAt
             ? new Date(r.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
@@ -2033,7 +2400,9 @@
           var rid = btn.dataset.prevRid;
           var rev = reviews.find(function(r) { return r.id === rid; });
           if (!rev) return;
-          if (rev.status === 'review_completed' && rev.reviewedDietPlan) {
+          var _revDone = rev.status === 'review_completed' || rev.status === 'completed';
+          var _hasplan = rev.reviewedDietPlan || rev.reviewedWorkoutPlan || rev.planData;
+          if (_revDone && _hasplan) {
             openReviewComparisonSheet(coach, rev);
           } else {
             openChatOverlay('', buildContextPackage(), 'chat', coach);
@@ -2113,9 +2482,10 @@
         var a      = ctx.assessment || ctx.survey || {};
         var userId = _getMyUserId();
 
-        /* Calculate version number for this user+expert+type combination */
+        /* Calculate version number for this user+expert+type combination
+           Normalise planReviewType (old field) vs reviewType (new field) */
         var allForType = _getAllMyPlanReviews(coach).filter(function(r) {
-          return r.reviewType === _selectedType;
+          return (r.reviewType || r.planReviewType) === _selectedType;
         });
         var maxVersion = allForType.reduce(function(max, r) {
           return Math.max(max, r.version || 0);
@@ -2164,7 +2534,7 @@
         try { existing = JSON.parse(localStorage.getItem('expert_plan_reviews') || '[]'); } catch (_) {}
         existing = existing.filter(function(r) {
           return !(r.userId === userId && r.expertId === coach.id &&
-                   r.reviewType === _selectedType &&
+                   (r.reviewType || r.planReviewType) === _selectedType &&
                    r.status === 'pending');
         });
         existing.unshift(review);

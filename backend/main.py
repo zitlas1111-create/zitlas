@@ -27,6 +27,7 @@ from routes import ai
 from routes import support
 from routes import rag
 from routes import review
+from routes import system
 from services import rag_service
 
 # ── Directory paths ──────────────────────────────────────────────────────────
@@ -37,8 +38,9 @@ FRONTEND_DIR = BASE_DIR.parent / "frontend"  # frontend/
 # ── Lifespan: startup tasks ───────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Run RAG initialization in a thread so it doesn't block the event loop.
-    # First run builds embeddings (~30s); subsequent runs load from cache (<2s).
+    # Startup: initialize logger + environment only.
+    # rag_service.initialize() is now a lightweight no-op that sets _is_ready=True.
+    # NO FAISS index is loaded here — each goal KB loads on first request (lazy).
     await asyncio.to_thread(rag_service.initialize)
     yield
 
@@ -72,6 +74,7 @@ app.include_router(ai.router,         prefix="/api/ai",         tags=["AI"])
 app.include_router(rag.router,        prefix="/api/rag",        tags=["RAG"])
 app.include_router(support.router,    prefix="/api/support",    tags=["Support"])
 app.include_router(review.router,     prefix="/api/review",     tags=["Review"])
+app.include_router(system.router,     prefix="/api/system",     tags=["System"])
 
 # ── Root → dashboard ─────────────────────────────────────────────────────────
 @app.get("/", include_in_schema=False)

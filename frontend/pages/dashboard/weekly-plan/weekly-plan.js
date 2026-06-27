@@ -50,15 +50,181 @@
     return (wp && (wp.weekly_plan || wp.days || wp.weekly_schedule || wp.workout_days)) || [];
   }
 
+  /* Apply workoutModifications on top of currentWorkoutPlan */
+  function buildEffectiveWorkoutPlan(storage) {
+    console.log('[BUILD EFFECTIVE WORKOUT] workoutModifications', storage.workoutModifications);
+    /* currentWorkoutPlan may be null if accept handler saved before the fix — fall back to originalWorkoutPlan */
+    var source = storage.currentWorkoutPlan || storage.originalWorkoutPlan;
+    var plan = JSON.parse(JSON.stringify(source));
+    var mods = storage.workoutModifications || {};
+    var days = normalizeWorkoutDays(plan);
+    days.forEach(function(day, idx) {
+      var mod = mods[String(idx)];
+      if (!mod) return;
+      var nw = mod.newWorkout || {};
+      if (nw.focus)            { day.focus = nw.focus; day.type = nw.focus; }
+      if (nw.duration_minutes) day.duration_minutes = nw.duration_minutes;
+      if (nw.exercises)        day.exercises = nw.exercises;
+      day._modified   = true;
+      day._modifiedBy = mod.modifiedBy;
+      day._modifiedAt = mod.modifiedAt;
+    });
+    return plan;
+  }
+
+  /* Returns the newest workout review with workoutChangeHistory.
+     NEVER relies on array order — cprofile.js unshifts new reviews so index 0 is newest,
+     index -1 is oldest. Always sort by timestamp. No status/accept filter here — the
+     normalization uses this to sync to the latest expert edit even before athlete accepts. */
+  function getLatestWorkoutReview(reviews) {
+    return (reviews || [])
+      .filter(function(r) {
+        return r.reviewType === 'workout' &&
+          r.workoutChangeHistory && r.workoutChangeHistory.length;
+      })
+      .sort(function(a, b) {
+        var aDate = new Date(a.reviewedAt || a.completedAt || a.createdAt || 0);
+        var bDate = new Date(b.reviewedAt || b.completedAt || b.createdAt || 0);
+        return bDate - aDate;
+      })[0] || null;
+  }
+
+  /* Used only for CASE 1 flat-schema migration — requires completion + athlete acceptance. */
+  function getCompletedWorkoutReview() {
+    const reviews = JSON.parse(localStorage.getItem('expert_plan_reviews') || '[]');
+    const workoutReviews = reviews
+      .filter(function(r) {
+        return r.reviewType === 'workout' &&
+          (r.status === 'completed' || r.status === 'review_completed') &&
+          (r.athleteAccepted === true || !!r.acceptedAt) &&
+          r.workoutChangeHistory && r.workoutChangeHistory.length > 0;
+      })
+      .sort(function(a, b) {
+        return new Date(b.reviewedAt || b.completedAt || b.acceptedAt || 0) -
+               new Date(a.reviewedAt || a.completedAt || a.acceptedAt || 0);
+      });
+    return workoutReviews[0] || null;
+  }
+
+  /* Build new schema storage from a completed workout review and persist it.
+     Called when zitlas_workout_plan doesn't yet have workoutModifications (CASE 1 recovery). */
+  function _migrateWorkoutPlanFromReview(review, existingWp) {
+    var rawPlan = existingWp || null;
+    /* Unwrap if existingWp is already in new schema */
+    if (rawPlan && (rawPlan.originalWorkoutPlan || rawPlan.currentWorkoutPlan)) {
+      rawPlan = rawPlan.currentWorkoutPlan || rawPlan.originalWorkoutPlan;
+    }
+    var mods = {};
+    (review.workoutChangeHistory || []).forEach(function(change) {
+      if (change.dayIndex == null) return;
+      mods[String(change.dayIndex)] = {
+        modified:   true,
+        modifiedBy: change.modifiedBy || review.expertName || 'Expert',
+        modifiedAt: change.modifiedAt || review.reviewedAt || new Date().toISOString(),
+        oldWorkout: change.oldWorkout || null,
+        newWorkout: change.newWorkout || null,
+      };
+    });
+    var newStorage = {
+      originalWorkoutPlan:  rawPlan || review.planData || null,
+      currentWorkoutPlan:   rawPlan || review.planData || null,
+      workoutModifications: mods,
+      isExpertPlan:         true,
+      expertName:           review.expertName || 'Expert',
+      reviewedAt:           review.reviewedAt || new Date().toISOString(),
+    };
+    try {
+      localStorage.setItem('zitlas_workout_plan', JSON.stringify(newStorage));
+      console.log('[WeeklyPlan] CASE 1 recovery — migrated workout plan from review, mods:', mods);
+    } catch (e) {
+      console.error('[WeeklyPlan] Migration save failed', e);
+    }
+    return newStorage;
+  }
+
   function loadPlan() {
     try {
-      /* 0. Expert-reviewed workout plan — highest priority */
-      const er          = JSON.parse(localStorage.getItem('zitlas_expert_review') || 'null');
+      /* Diagnosis logs */
+      var _diagAllRevs = JSON.parse(localStorage.getItem('expert_plan_reviews') || '[]');
+      console.log('ALL REVIEWS', _diagAllRevs);
+      var _diagWpRaw = JSON.parse(localStorage.getItem('zitlas_workout_plan') || 'null');
+      console.log('WORKOUT STORAGE', _diagWpRaw);
+      console.log('WORKOUT MODIFICATIONS', _diagWpRaw ? _diagWpRaw.workoutModifications : undefined);
+      const _latestReview = getCompletedWorkoutReview();
+      console.log('WEEKLY EXPERT REVIEW', _latestReview);
+
+      /* 0. Legacy: Expert-reviewed workout plan via zitlas_expert_review */
+      const er           = JSON.parse(localStorage.getItem('zitlas_expert_review') || 'null');
       const activePlanId = localStorage.getItem('zitlas_plan_id');
-      console.log('WEEKLY EXPERT REVIEW', er);
 
       /* Load original AI plan for diff computation */
       const originalWp = JSON.parse(localStorage.getItem('zitlas_workout_plan') || 'null');
+
+      /* ── Normalize new schema so every code path can read .weekly_plan at root ── */
+      if (originalWp) {
+        /* 1. Lift weekly_plan to root — new schema stores it under originalWorkoutPlan */
+        if (!originalWp.weekly_plan && originalWp.originalWorkoutPlan && originalWp.originalWorkoutPlan.weekly_plan) {
+          originalWp.weekly_plan = originalWp.originalWorkoutPlan.weekly_plan;
+        }
+        /* Fallback: also try currentWorkoutPlan */
+        if (!originalWp.weekly_plan && originalWp.currentWorkoutPlan && originalWp.currentWorkoutPlan.weekly_plan) {
+          originalWp.weekly_plan = originalWp.currentWorkoutPlan.weekly_plan;
+        }
+        /* 2. Ensure currentWorkoutPlan is never null — fall back to originalWorkoutPlan */
+        if (!originalWp.currentWorkoutPlan && originalWp.originalWorkoutPlan) {
+          originalWp.currentWorkoutPlan = originalWp.originalWorkoutPlan;
+        }
+        /* 3. Sync workoutModifications to the NEWEST expert review.
+              Runs when storage has no mods (first time) OR when a newer review exists (re-edit).
+              Timestamp comparison means array insertion order is irrelevant. */
+        var _normRevs = [];
+        try { _normRevs = JSON.parse(localStorage.getItem('expert_plan_reviews') || '[]'); } catch (_) {}
+        var _latestRev = getLatestWorkoutReview(_normRevs);
+
+        console.log('ALL WORKOUT REVIEWS', (_normRevs || [])
+          .filter(function(r) { return r.reviewType === 'workout' && r.workoutChangeHistory && r.workoutChangeHistory.length; })
+          .map(function(r) {
+            var ch = r.workoutChangeHistory;
+            return {
+              id: r.id, reviewedAt: r.reviewedAt, completedAt: r.completedAt, createdAt: r.createdAt,
+              modified: ch && ch[0] && ch[0].newWorkout && ch[0].newWorkout.exercises &&
+                        ch[0].newWorkout.exercises[0] && ch[0].newWorkout.exercises[0].name,
+            };
+          }));
+        var _selCh = _latestRev && _latestRev.workoutChangeHistory;
+        console.log('SELECTED REVIEW', _latestRev && _latestRev.id,
+          _selCh && _selCh[0] && _selCh[0].newWorkout && _selCh[0].newWorkout.exercises &&
+          _selCh[0].newWorkout.exercises[0] && _selCh[0].newWorkout.exercises[0].name);
+
+        if (_latestRev) {
+          var _storedTs = new Date(originalWp.reviewedAt || 0).getTime();
+          var _reviewTs = new Date(_latestRev.reviewedAt || _latestRev.completedAt || _latestRev.createdAt || 0).getTime();
+          var _noMods   = !originalWp.workoutModifications || !Object.keys(originalWp.workoutModifications).length;
+          if (_noMods || _reviewTs > _storedTs) {
+            var _rebuildMods = {};
+            _latestRev.workoutChangeHistory.forEach(function(change) {
+              if (change.dayIndex == null) return;
+              _rebuildMods[String(change.dayIndex)] = {
+                modified:   true,
+                modifiedBy: change.modifiedBy || _latestRev.expertName || 'Expert',
+                modifiedAt: change.modifiedAt || _latestRev.reviewedAt || new Date().toISOString(),
+                oldWorkout: change.oldWorkout || null,
+                newWorkout: change.newWorkout || null,
+              };
+            });
+            originalWp.workoutModifications = _rebuildMods;
+            originalWp.isExpertPlan = true;
+            originalWp.expertName   = _latestRev.expertName || 'Expert';
+            originalWp.reviewedAt   = _latestRev.reviewedAt || new Date().toISOString();
+          }
+        }
+        /* Persist normalization so subsequent page loads are already clean */
+        try { localStorage.setItem('zitlas_workout_plan', JSON.stringify(originalWp)); } catch (_) {}
+      }
+
+      console.log('NORMALIZED STORAGE', originalWp);
+      console.log('WEEKLY PLAN SOURCE', originalWp ? originalWp.weekly_plan : null);
+      console.log('ORIGINAL PLAN SOURCE', originalWp ? (originalWp.originalWorkoutPlan && originalWp.originalWorkoutPlan.weekly_plan) : null);
 
       if (er && er.status === 'APPROVED' && er.modifiedWorkoutPlan) {
         const planIdMismatch = er.planId && activePlanId && (er.planId !== activePlanId);
@@ -71,7 +237,10 @@
               : '',
           };
           console.log('[WeeklyPlan] Loading EXPERT-REVIEWED plan —', normalizeWorkoutDays(er.modifiedWorkoutPlan).length, 'days | reviewer:', expertMeta.reviewedBy);
-          return transformWorkoutPlan(er.modifiedWorkoutPlan, originalWp, expertMeta);
+          const _origForDiff = originalWp && (originalWp.originalWorkoutPlan || originalWp.currentWorkoutPlan)
+            ? (originalWp.originalWorkoutPlan || originalWp.currentWorkoutPlan)
+            : originalWp;
+          return transformWorkoutPlan(er.modifiedWorkoutPlan, _origForDiff, expertMeta);
         }
       }
 
@@ -83,10 +252,45 @@
         return plan;
       }
 
-      /* 2. Fitness AI plan */
-      if (originalWp && normalizeWorkoutDays(originalWp).length) {
-        console.log('[Zitlas] Fallback: zitlas_workout_plan | Days:', normalizeWorkoutDays(originalWp).length);
-        return transformWorkoutPlan(originalWp, null, null);
+      /* 2. Fitness AI plan (or new expert-modified schema) */
+      if (originalWp) {
+        /* 2a. New schema already has workoutModifications — apply and render */
+        if (originalWp.originalWorkoutPlan || originalWp.currentWorkoutPlan) {
+          const hasMods = !!(originalWp.workoutModifications &&
+            Object.keys(originalWp.workoutModifications).length > 0);
+          console.log('[WeeklyPlan] New workout schema detected | hasMods:', hasMods, '| by:', originalWp.expertName);
+          const effectivePlan = hasMods
+            ? buildEffectiveWorkoutPlan(originalWp)
+            : (originalWp.currentWorkoutPlan || originalWp.originalWorkoutPlan);
+          const wmMeta = hasMods ? {
+            reviewedBy: originalWp.expertName || 'Expert',
+            reviewedAt: originalWp.reviewedAt
+              ? new Date(originalWp.reviewedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+              : '',
+          } : null;
+          return transformWorkoutPlan(effectivePlan, originalWp.originalWorkoutPlan, wmMeta);
+        }
+
+        /* 2b. Flat schema — check if athlete accepted a workout review that wasn't written (CASE 1 recovery) */
+        if (normalizeWorkoutDays(originalWp).length) {
+          if (_latestReview) {
+            console.log('[WeeklyPlan] CASE 1 recovery: flat schema + accepted review detected. Migrating...');
+            const _migratedStorage = _migrateWorkoutPlanFromReview(_latestReview, originalWp);
+            const _hasMods = Object.keys(_migratedStorage.workoutModifications).length > 0;
+            const _effectivePlan = _hasMods
+              ? buildEffectiveWorkoutPlan(_migratedStorage)
+              : (_migratedStorage.currentWorkoutPlan || _migratedStorage.originalWorkoutPlan);
+            const _wmMeta = _hasMods ? {
+              reviewedBy: _migratedStorage.expertName || 'Expert',
+              reviewedAt: _migratedStorage.reviewedAt
+                ? new Date(_migratedStorage.reviewedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+                : '',
+            } : null;
+            return transformWorkoutPlan(_effectivePlan, _migratedStorage.originalWorkoutPlan, _wmMeta);
+          }
+          console.log('[Zitlas] Fallback: zitlas_workout_plan | Days:', normalizeWorkoutDays(originalWp).length);
+          return transformWorkoutPlan(originalWp, null, null);
+        }
       }
 
       console.log('[Zitlas] No plan found. Keys:', Object.keys(localStorage).join(', '));
@@ -132,6 +336,7 @@
           theme:           newTheme || 'Training Session',
           _originalTheme:  focusDiff ? origTheme : null,
           _expertModified: !!(day._modified),
+          _modifiedBy:     day._modifiedBy || null,
           icon:            iconForType(day.focus || day.type),
           totalTime:       day.duration_minutes ? (day.duration_minutes + ' min') : '—',
           date:            day.date || '',
@@ -433,9 +638,10 @@
       /* Duration — from plan data */
       const duration = day.totalTime || '—';
 
-      /* Expert badge — shown only on modified days */
+      /* Expert badge — shown only on modified days, using per-day modifiedBy when available */
+      const _badgeName = day._modifiedBy || (plan._expertMeta && plan._expertMeta.reviewedBy) || 'Expert';
       const expertBadgeHtml = (day._expertModified && plan._expertMeta)
-        ? `<div class="wp-expert-badge">✓ Modified by ${escHtml(plan._expertMeta.reviewedBy)}${plan._expertMeta.reviewedAt ? ' · ' + escHtml(plan._expertMeta.reviewedAt) : ''}</div>`
+        ? `<div class="wp-expert-badge">✏️ Modified by ${escHtml(_badgeName)}${plan._expertMeta.reviewedAt ? ' · ' + escHtml(plan._expertMeta.reviewedAt) : ''}</div>`
         : '';
 
       /* Theme HTML — show strikethrough diff when focus changed */

@@ -144,6 +144,22 @@
       </div>
     </section>
 
+    <!-- ── TODAY'S ACTIVITY (Step Counter) ── -->
+    <section class="step-counter-section" id="stepCounterSection">
+      <div class="section-header">
+        <div class="section-header-left">
+          <div class="widget-badge">👣</div>
+          <div>
+            <h2 class="section-title">Today's Activity</h2>
+            <p class="roadmap-sub" id="stepCounterLabel">Daily step tracking</p>
+          </div>
+        </div>
+      </div>
+      <div id="stepCounterContent">
+        <!-- populated by renderStepCounterCard() -->
+      </div>
+    </section>
+
     <!-- ── TODAY'S TRAINING ── -->
     <section class="training-widget-section" id="trainingWidgetSection">
       <div class="section-header">
@@ -157,7 +173,7 @@
         <button class="view-link-btn" id="viewWeeklyPlanBtn" data-i18n="dash_view_weekly_plan">View Weekly Plan →</button>
       </div>
       <div id="trainingWidgetContent">
-        <!-- populated by dashboard.js -->
+        <!-- populated by renderTrainingWidget() -->
       </div>
     </section>
 

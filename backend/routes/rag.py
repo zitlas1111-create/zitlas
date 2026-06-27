@@ -5,6 +5,7 @@ POST /api/rag/query   — RAG-powered AI nutrition query with full source attrib
 GET  /api/rag/status  — RAG service health and index statistics
 """
 
+import asyncio
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -89,8 +90,11 @@ async def rag_query(body: RAGQueryRequest) -> RAGQueryResponse:
     print(f"  user_data: {'yes' if body.user_data else 'no'}")
     print("=" * 60)
 
-    # 1. Semantic search
-    chunks = rag_service.search_knowledge(body.question, top_k=body.top_k)
+    # 1. Semantic search — run in thread pool so the event loop is never blocked,
+    #    especially on the first call where a KB may be built from PDFs (~30-60s).
+    chunks = await asyncio.to_thread(
+        rag_service.search_knowledge, body.question, body.top_k
+    )
     print(f"[RAG QUERY] Retrieved {len(chunks)} chunk(s)")
 
     # 2. Build structured prompt
@@ -147,20 +151,31 @@ async def rag_status() -> dict[str, Any]:
     """
     RAG service health check.
 
-    Returns index size, PDF list, vector store path, and readiness flag.
+    With lazy loading active, chunks_indexed reflects only currently-loaded KBs.
+    Use GET /api/system/kb-status for full cache details.
     """
-    # Count chunks per source PDF
+    from services.kb_manager import kb_manager, MAX_LOADED_KBS
+
+    stats = kb_manager.get_cache_stats()
+
+    # Count chunks per source PDF across all currently-loaded KBs.
     source_counts: dict[str, int] = {}
-    for c in rag_service._chunks:
-        source_counts[c["source_pdf"]] = source_counts.get(c["source_pdf"], 0) + 1
+    total_chunks = 0
+    with kb_manager._global_lock:
+        for kb in kb_manager._cache.values():
+            for c in kb.chunks:
+                source_counts[c["source_pdf"]] = source_counts.get(c["source_pdf"], 0) + 1
+            total_chunks += len(kb.chunks)
 
     return {
         "ready":          rag_service._is_ready,
-        "chunks_indexed": len(rag_service._chunks),
+        "lazy_loading":   True,
+        "chunks_indexed": total_chunks,       # only loaded KBs; grows on first requests
         "chunks_per_pdf": source_counts,
+        "loaded_kbs":     stats["loaded_kbs"],
+        "cache_size":     stats["cache_size"],
+        "max_loaded_kbs": MAX_LOADED_KBS,
         "vector_store":   str(rag_service.VECTOR_STORE),
-        "pdf_dir":        str(rag_service.PDF_DIR),
-        "pdf_files":      rag_service.PDF_FILES,
         "chunk_size":     rag_service.CHUNK_SIZE,
         "chunk_overlap":  rag_service.CHUNK_OVERLAP,
         "min_score":      rag_service.MIN_SCORE,

@@ -34,6 +34,11 @@ from typing import Any
 
 import numpy as np
 
+# kb_manager is imported at module level because search_knowledge() delegates to it.
+# kb_manager.py does NOT import rag_service at module level (only lazily inside
+# _load_kb), so there is no circular import.
+from services.kb_manager import kb_manager, get_embedding_model as _kb_get_embedding_model
+
 # ── Logger ─────────────────────────────────────────────────────────────────────
 logger = logging.getLogger("zitlas.rag")
 if not logger.handlers:
@@ -113,10 +118,13 @@ MIN_CHUNK_LEN = 80     # fragments shorter than this are discarded
 DEFAULT_TOP_K = 5
 MIN_SCORE     = 0.20   # cosine similarity floor — below this is noise
 
-# ── Runtime state (populated once in initialize(), never mutated afterward) ────
+# ── Runtime state ─────────────────────────────────────────────────────────────
+# _faiss_index and _chunks are kept as stubs for backward compatibility but are
+# no longer populated.  All FAISS state lives inside kb_manager._cache.
+# _is_ready is set to True immediately in initialize() — the system is ready
+# to serve requests as soon as the server starts; KBs load lazily on demand.
 _faiss_index        = None
 _chunks: list[dict] = []
-_embed_model        = None
 _is_ready           = False
 
 
@@ -180,15 +188,12 @@ def _file_md5(path: Path) -> str:
 
 
 def _get_embed_model():
-    """Lazy-load the sentence-transformers model (cached after first call)."""
-    global _embed_model
-    if _embed_model is None:
-        from sentence_transformers import SentenceTransformer
-        logger.info("Loading embedding model: all-MiniLM-L6-v2 ...")
-        t0 = time.time()
-        _embed_model = SentenceTransformer("all-MiniLM-L6-v2")
-        logger.info(f"Embedding model ready  ({time.time() - t0:.1f}s)")
-    return _embed_model
+    """
+    Return the shared embedding model.
+    The singleton is managed by kb_manager so only one instance ever exists,
+    whether the caller is search_knowledge() or kb_manager._load_kb().
+    """
+    return _kb_get_embedding_model()
 
 
 def _current_hashes() -> dict[str, str]:
@@ -578,48 +583,26 @@ def initialize() -> None:
     """
     Called once at server startup via asyncio.to_thread() in main.py lifespan.
 
-    Flow:
-      1. Try load_faiss_index() — returns cached index if PDFs unchanged.
-      2. If cache is missing/stale:
-            load_documents() → chunk_documents() → create_embeddings()
-            → build_faiss_index() → _save_metadata() → _write_hashes()
+    LAZY LOADING MODE — this function no longer loads any FAISS index.
+    It only sets _is_ready=True so health checks pass immediately.
 
-    After this call, _is_ready=True and search_knowledge() is safe to call.
-    First run: ~30-60s (embedding generation).
-    Cached run: ~1-2s (disk load).
+    Each goal's KB is loaded on the first request that needs it by kb_manager:
+      weight_loss     → loads on first /api/assessment/generate-plan?goal=weight_loss
+      muscle_gain     → loads on first muscle-gain request
+      general_fitness → loads on first general-fitness request
+      transformation  → loads on first transformation request
+
+    Startup memory impact: ~0 MB for indexes (only FastAPI + logger + env vars).
     """
-    global _faiss_index, _chunks, _is_ready
+    global _is_ready
 
     logger.info("=" * 60)
-    logger.info("Initializing ZITLAS knowledge base (weight-loss + muscle-gain + general-fitness + transformation)")
+    logger.info("ZITLAS RAG — lazy loading mode active")
+    logger.info("No FAISS index loaded at startup.")
+    logger.info("Each goal KB loads on first request (cached to disk afterward).")
     logger.info("=" * 60)
-
-    # ── Try cache ──────────────────────────────────────────────────────────────
-    cached = load_faiss_index()
-    if cached is not None:
-        _faiss_index, _chunks = cached
-        _is_ready = True
-        logger.info(f"Ready (from cache) — {len(_chunks)} chunks indexed")
-        logger.info("=" * 60)
-        return
-
-    # ── Build from scratch ─────────────────────────────────────────────────────
-    documents = load_documents()
-    if not documents:
-        logger.warning("No PDFs found — RAG is DISABLED for this session")
-        _is_ready = True
-        logger.info("=" * 60)
-        return
-
-    _chunks      = chunk_documents(documents)
-    embeddings   = create_embeddings(_chunks)
-    _faiss_index = build_faiss_index(embeddings)
-    _save_metadata(_chunks)
-    _write_hashes(_current_hashes())
 
     _is_ready = True
-    logger.info(f"Ready — {len(_chunks)} chunks indexed and cached to disk")
-    logger.info("=" * 60)
 
 
 # ════════════════════════════════════════════════════════════════════════════════
@@ -632,117 +615,124 @@ def search_knowledge(
     goal: str | None = None,
 ) -> list[dict]:
     """
-    Semantic search over the FAISS index.
+    Semantic search over per-goal FAISS knowledge base(s).
+
+    With lazy loading, the first call for a given goal triggers a disk load
+    (~1-2s from cache) or a PDF build (~30-60s on first ever run).
+    Subsequent calls for the same goal return from the in-memory cache.
 
     Args:
         query:  Natural-language question.
         top_k:  Maximum results to return (default: 5).
-        goal:   Optional fitness goal filter.
-                "muscle_gain"  → only mg1.pdf / mg2.pdf chunks returned
-                "weight_loss"  → only wl1.pdf / wl2.pdf chunks returned
-                None           → all chunks considered
+        goal:   Fitness goal. One of:
+                  "weight_loss" | "muscle_gain" | "general_fitness" | "transformation"
+                  None → search all 4 goal KBs and return the best combined results.
 
     Returns:
-        List of chunk dicts sorted by relevance (highest first):
-            {text, source_pdf, page_number, chunk_id, score}
-
-        Chunks with cosine similarity < MIN_SCORE (0.20) are excluded.
-        Returns [] if RAG is not ready or index is empty.
+        List of chunk dicts sorted by cosine score (descending):
+            {text, source_pdf, source, category, page_number, chunk_id, score}
+        Chunks below MIN_SCORE (0.20) are excluded.  Returns [] on error.
     """
-    if not _is_ready or _faiss_index is None or not _chunks:
-        logger.warning("search_knowledge() called before RAG is ready — returning []")
-        return []
+    import faiss as _faiss
 
-    import faiss
+    _VALID_GOALS = ("weight_loss", "muscle_gain", "general_fitness", "transformation")
 
     model = _get_embed_model()
     q_vec = model.encode([query], convert_to_numpy=True).astype("float32")
-    faiss.normalize_L2(q_vec)
+    _faiss.normalize_L2(q_vec)
 
-    # When no goal is set, classify the query so we can boost preferred sources.
-    # Retrieve extra candidates to give boosting room to re-rank.
+    # Query classification drives source boosting (only for goalless queries).
     query_category: str | None = None
     if not goal:
         query_category = classify_query(query)
         logger.info(f"Query category: {query_category}")
 
-    # Expand the FAISS candidate pool so boosting has room to re-rank:
-    # • coaching_rules: gf1b is a smaller file (309 chunks) so needs a wider scan
-    # • general_fitness goal: 3 different GF sources compete — widen pool
-    # • other categories: standard 3× expansion
-    if query_category == "coaching_rules":
-        search_k = top_k * 5   # deeper scan — gf1b chunks often rank 4-15 raw
-    elif query_category:
-        search_k = top_k * 3
-    elif goal == "general_fitness":
-        search_k = top_k * 3   # ensure all 3 GF sources (gf1/gf1b/gf2) get a chance
-    else:
-        search_k = top_k
-    scores, idxs = _faiss_index.search(q_vec, search_k)
+    # Which goal KBs to search.
+    # goal-specific: one KB (fast, memory-efficient).
+    # goalless: all four KBs merged (used by /api/rag/query and /api/ai/chat).
+    goals_to_search = (goal,) if (goal and goal in _VALID_GOALS) else _VALID_GOALS
 
-    # Goal-based hard filter (existing behaviour — used by assessment.py)
-    _GOAL_SOURCES: dict[str, set[str]] = {
-        "muscle_gain":     {"mg1.pdf", "mg2.pdf"},
-        "weight_loss":     {"wl1.pdf", "wl2.pdf"},
-        "general_fitness": {"gf1.pdf", "gf1b.pdf", "gf2.pdf"},
-        "transformation":  {"tf1.pdf"},
-    }
-    allowed_sources = _GOAL_SOURCES.get(goal) if goal else None
+    all_candidates: list[dict] = []
 
-    candidates: list[dict] = []
-    for score, idx in zip(scores[0], idxs[0]):
-        if idx < 0:
-            continue
-        score_f = float(score)
-        if score_f < MIN_SCORE:
-            continue
-        chunk = _chunks[idx]
-
-        # Goal-based source filtering (unchanged behaviour)
-        if allowed_sources and chunk["source_pdf"] not in allowed_sources:
+    for g in goals_to_search:
+        # get_kb() loads the KB lazily on first call, returns from cache otherwise.
+        try:
+            kb = kb_manager.get_kb(g)
+        except Exception as exc:
+            logger.error(f"Failed to load {g} KB — skipping: {exc}")
             continue
 
-        # Source boosting — add a small bonus when the chunk's category aligns
-        # with the classified query intent (no hard filter; off-category chunks
-        # still surface if their cosine score is high enough).
-        if query_category:
-            boost = _CATEGORY_BOOST.get(query_category, {}).get(chunk["source_pdf"], 0.0)
-            score_f = min(1.0, score_f + boost)
-        elif goal == "general_fitness" and chunk["source_pdf"] == "gf1b.pdf":
-            # gf1b (coaching rules) is a small file; give it a nudge so coaching
-            # content surfaces alongside the larger gf1 and gf2 sources.
-            score_f = min(1.0, score_f + 0.08)
+        # Expand candidate pool so boosting has room to re-rank.
+        # coaching_rules: gf1b is a small file — needs a deeper scan.
+        # general_fitness: 3 sources compete — widen pool.
+        if query_category == "coaching_rules":
+            search_k = top_k * 5
+        elif query_category:
+            search_k = top_k * 3
+        elif g == "general_fitness":
+            search_k = top_k * 3
+        else:
+            search_k = top_k
 
-        # Terminal log per goal
-        if goal == "muscle_gain":
-            print(f"[MUSCLE_GAIN RAG]\nRetrieved Source: {chunk['source_pdf']}")
-        elif goal == "general_fitness":
-            print(f"[GENERAL_FITNESS RAG]\nRetrieved Source: {chunk['source_pdf']}")
-        elif goal == "transformation":
-            print(f"[TRANSFORMATION RAG]\nRetrieved Source: {chunk['source_pdf']}  Page {chunk['page_number']}  category={chunk.get('category', '?')}")
+        # Guard: never ask FAISS for more vectors than it has.
+        search_k = min(search_k, kb.faiss_index.ntotal)
+        if search_k == 0:
+            continue
 
-        logger.info(
-            f"Search Score: {score_f:.4f}  |  "
-            f"Retrieved Source: {chunk['source_pdf']} Page {chunk['page_number']}  |  "
-            f"chunk_id={chunk['chunk_id']}  category={chunk.get('category', '?')}"
-        )
-        candidates.append({
-            "text":        chunk["text"],
-            "source_pdf":  chunk["source_pdf"],
-            "source":      chunk.get("source", chunk["source_pdf"].replace(".pdf", "")),
-            "category":    chunk.get("category", "general"),
-            "page_number": chunk["page_number"],
-            "chunk_id":    chunk["chunk_id"],
-            "score":       score_f,
-        })
+        scores, idxs = kb.faiss_index.search(q_vec, search_k)
 
-    # Re-sort after boosting and trim to requested top_k
-    candidates.sort(key=lambda x: x["score"], reverse=True)
-    results = candidates[:top_k]
+        for score, idx in zip(scores[0], idxs[0]):
+            if idx < 0:
+                continue
+            score_f = float(score)
+            if score_f < MIN_SCORE:
+                continue
+            chunk = kb.chunks[idx]
+
+            # Source boosting — nudges preferred-category chunks upward without
+            # hard-filtering off-category chunks that score highly.
+            if query_category:
+                boost = _CATEGORY_BOOST.get(query_category, {}).get(chunk["source_pdf"], 0.0)
+                score_f = min(1.0, score_f + boost)
+            elif g == "general_fitness" and chunk["source_pdf"] == "gf1b.pdf":
+                # gf1b (coaching rules) is small — nudge so it surfaces alongside gf1/gf2.
+                score_f = min(1.0, score_f + 0.08)
+
+            # Terminal per-goal logging (preserved from original behaviour).
+            if g == "muscle_gain":
+                print(f"[MUSCLE_GAIN RAG]\nRetrieved Source: {chunk['source_pdf']}")
+            elif g == "general_fitness":
+                print(f"[GENERAL_FITNESS RAG]\nRetrieved Source: {chunk['source_pdf']}")
+            elif g == "transformation":
+                print(
+                    f"[TRANSFORMATION RAG]\nRetrieved Source: {chunk['source_pdf']}"
+                    f"  Page {chunk['page_number']}"
+                    f"  category={chunk.get('category', '?')}"
+                )
+
+            logger.info(
+                f"Search Score: {score_f:.4f}  |  "
+                f"Retrieved Source: {chunk['source_pdf']} Page {chunk['page_number']}  |  "
+                f"chunk_id={chunk['chunk_id']}  category={chunk.get('category', '?')}"
+            )
+            all_candidates.append({
+                "text":        chunk["text"],
+                "source_pdf":  chunk["source_pdf"],
+                "source":      chunk.get("source", chunk["source_pdf"].replace(".pdf", "")),
+                "category":    chunk.get("category", "general"),
+                "page_number": chunk["page_number"],
+                "chunk_id":    chunk["chunk_id"],
+                "score":       score_f,
+            })
+
+    # Global re-sort and trim after merging across all searched KBs.
+    all_candidates.sort(key=lambda x: x["score"], reverse=True)
+    results = all_candidates[:top_k]
 
     logger.info(
         f"Retrieved {len(results)} chunk(s) above threshold  "
-        f"(top_k={top_k}, min_score={MIN_SCORE}, category={query_category or 'goal-filtered'})"
+        f"(top_k={top_k}, min_score={MIN_SCORE}, "
+        f"category={query_category or 'goal-filtered'})"
     )
     return results
 

@@ -412,6 +412,45 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
   .app-bar, .main-content { padding-left: 12px; padding-right: 12px; }
 }
 
+/* =============================================
+   BODY METRICS — unit toggle
+   ============================================= */
+.metric-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 7px;
+}
+.metric-label-row .form-label { margin-bottom: 0; }
+
+.unit-toggle {
+  display: flex;
+  gap: 4px;
+}
+.unit-btn {
+  padding: 5px 14px;
+  border-radius: 16px;
+  border: 1.5px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition), color var(--transition);
+  -webkit-tap-highlight-color: transparent;
+}
+.unit-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(255, 138, 0, 0.28);
+}
+.unit-btn:not(.active):hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 @media (min-width: 600px) {
   .main-content { padding: 0 24px 32px; }
   .form-section { padding: 22px 22px 24px; }

@@ -754,6 +754,141 @@
   }
 
   /* ══════════════════════════════════════════
+     UNIT CONVERSION HELPERS
+  ══════════════════════════════════════════ */
+  function cmToFtIn(cm) {
+    var totalIn = cm / 2.54;
+    var ft      = Math.floor(totalIn / 12);
+    var inches  = Math.round(totalIn - ft * 12);
+    if (inches === 12) { ft++; inches = 0; }
+    return { ft: Math.max(3, Math.min(8, ft)), inches: Math.max(0, Math.min(11, inches)) };
+  }
+  function ftInToCm(ft, inches) { return Math.round(ft * 30.48 + inches * 2.54); }
+  function kgToLbs(kg)          { return Math.round(kg * 2.20462); }
+  function lbsToKg(lbs)         { return Math.round(lbs * 0.45359237 * 10) / 10; }
+
+  /* ══════════════════════════════════════════
+     HEIGHT WHEEL PICKER (CM / FT+IN toggle)
+  ══════════════════════════════════════════ */
+  function mountHeightPicker(mount, contBtn) {
+    var wpRef = null;
+
+    function getInitCm() {
+      var v = state.answers.height_cm;
+      var cfg = WHEEL_CONFIG.height_cm;
+      return (v !== undefined && v >= cfg.min && v <= cfg.max) ? Math.round(v) : cfg.defaultVal;
+    }
+
+    function applyUnit(unit) {
+      if (wpRef) { wpRef.cleanup(); }
+      mount.innerHTML = '';
+
+      if (unit === 'cm') {
+        var cfg = WHEEL_CONFIG.height_cm;
+        var wp  = createWheelPicker({ min: cfg.min, max: cfg.max, unit: 'cm',
+          value: getInitCm(), defaultVal: cfg.defaultVal });
+        wpRef = { getValue: wp.getValue, cleanup: wp.cleanup };
+        mount.appendChild(wp.el);
+        wp.el.querySelector('.wheel-picker').focus();
+      } else {
+        var cv      = cmToFtIn(getInitCm());
+        var dualRow = document.createElement('div');
+        dualRow.className = 'wheel-dual-row';
+        var wpFt = createWheelPicker({ min: 3, max: 8,  unit: 'ft', value: cv.ft,     defaultVal: 5 });
+        var wpIn = createWheelPicker({ min: 0, max: 11, unit: 'in', value: cv.inches, defaultVal: 7 });
+        dualRow.appendChild(wpFt.el);
+        dualRow.appendChild(wpIn.el);
+        mount.appendChild(dualRow);
+        wpRef = {
+          getValue: function () { return ftInToCm(wpFt.getValue(), wpIn.getValue()); },
+          cleanup:  function () { wpFt.cleanup(); wpIn.cleanup(); },
+        };
+        wpFt.el.querySelector('.wheel-picker').focus();
+      }
+      _wpCleanup = wpRef.cleanup;
+    }
+
+    mount.parentNode.querySelectorAll('.unit-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var unit = btn.dataset.unit;
+        mount.parentNode.querySelectorAll('.unit-btn').forEach(function (b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        if (wpRef) state.answers.height_cm = wpRef.getValue();
+        state.answers.preferred_height_unit = unit;
+        applyUnit(unit);
+      });
+    });
+
+    applyUnit(state.answers.preferred_height_unit || 'cm');
+
+    if (contBtn) {
+      contBtn.addEventListener('click', function () {
+        state.answers.height_cm = wpRef ? wpRef.getValue() : WHEEL_CONFIG.height_cm.defaultVal;
+        state.answers.preferred_height_unit = state.answers.preferred_height_unit || 'cm';
+        advanceQuestion();
+      });
+    }
+  }
+
+  /* ══════════════════════════════════════════
+     WEIGHT WHEEL PICKER (KG / LBS toggle)
+  ══════════════════════════════════════════ */
+  function mountWeightPicker(mount, contBtn, field) {
+    var cfg   = WHEEL_CONFIG[field];
+    var wpRef = null;
+
+    function getInitKg() {
+      var v = state.answers[field];
+      return (v !== undefined && v >= cfg.min && v <= cfg.max) ? Math.round(v) : cfg.defaultVal;
+    }
+
+    function applyUnit(unit) {
+      if (wpRef) { wpRef.cleanup(); }
+      mount.innerHTML = '';
+
+      if (unit === 'kg') {
+        var wp = createWheelPicker({ min: cfg.min, max: cfg.max, unit: 'kg',
+          value: getInitKg(), defaultVal: cfg.defaultVal });
+        wpRef = { getValue: wp.getValue, cleanup: wp.cleanup };
+        mount.appendChild(wp.el);
+        wp.el.querySelector('.wheel-picker').focus();
+      } else {
+        var minLbs = kgToLbs(cfg.min), maxLbs = kgToLbs(cfg.max), defLbs = kgToLbs(cfg.defaultVal);
+        var wp = createWheelPicker({ min: minLbs, max: maxLbs, unit: 'lbs',
+          value: kgToLbs(getInitKg()), defaultVal: defLbs });
+        wpRef = {
+          getValue: function () { return lbsToKg(wp.getValue()); },
+          cleanup:  wp.cleanup,
+        };
+        mount.appendChild(wp.el);
+        wp.el.querySelector('.wheel-picker').focus();
+      }
+      _wpCleanup = wpRef.cleanup;
+    }
+
+    mount.parentNode.querySelectorAll('.unit-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var unit = btn.dataset.unit;
+        mount.parentNode.querySelectorAll('.unit-btn').forEach(function (b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        if (wpRef) state.answers[field] = wpRef.getValue();
+        state.answers.preferred_weight_unit = unit;
+        applyUnit(unit);
+      });
+    });
+
+    applyUnit(state.answers.preferred_weight_unit || 'kg');
+
+    if (contBtn) {
+      contBtn.addEventListener('click', function () {
+        state.answers[field] = wpRef ? wpRef.getValue() : cfg.defaultVal;
+        state.answers.preferred_weight_unit = state.answers.preferred_weight_unit || 'kg';
+        advanceQuestion();
+      });
+    }
+  }
+
+  /* ══════════════════════════════════════════
      PROCESSING STEPS (shown during API call)
   ══════════════════════════════════════════ */
   var PROC_STEPS = [
@@ -835,6 +970,20 @@
         '<div class="q-slider-labels"><span>' + q.min + ' (calm)</span><span>' + q.max + ' (stressed)</span></div>' +
         '</div>' +
         '<button class="q-continue-btn" id="qContinueBtn">Continue →</button>';
+    } else if (q.field === 'height_cm') {
+      var hUnit = state.answers.preferred_height_unit || 'cm';
+      html += '<div class="unit-toggle">' +
+        '<button class="unit-btn' + (hUnit === 'cm'   ? ' active' : '') + '" data-unit="cm">CM</button>' +
+        '<button class="unit-btn' + (hUnit !== 'cm'   ? ' active' : '') + '" data-unit="ftin">FT / IN</button>' +
+        '</div><div id="unitPickerMount"></div>' +
+        '<button class="q-continue-btn" id="qContinueBtn" style="margin-top:20px">Continue →</button>';
+    } else if (q.field === 'weight_kg' || q.field === 'goal_weight_kg') {
+      var wUnit = state.answers.preferred_weight_unit || 'kg';
+      html += '<div class="unit-toggle">' +
+        '<button class="unit-btn' + (wUnit === 'kg'   ? ' active' : '') + '" data-unit="kg">KG</button>' +
+        '<button class="unit-btn' + (wUnit !== 'kg'   ? ' active' : '') + '" data-unit="lbs">LBS</button>' +
+        '</div><div id="unitPickerMount"></div>' +
+        '<button class="q-continue-btn" id="qContinueBtn" style="margin-top:20px">Continue →</button>';
     } else if (WHEEL_CONFIG[q.field]) {
       // Wheel picker — actual component mounted after innerHTML is set
       html += '<div id="wheelPickerMount"></div>' +
@@ -852,8 +1001,19 @@
     html += '</div>';
     body.innerHTML = html;
 
-    // Mount wheel picker for numeric wheel fields
-    if (q.type === 'text' && WHEEL_CONFIG[q.field]) {
+    // Mount unit-toggle pickers for height and weight
+    if (q.field === 'height_cm') {
+      var uMount = document.getElementById('unitPickerMount');
+      var uBtn   = document.getElementById('qContinueBtn');
+      if (uMount) mountHeightPicker(uMount, uBtn);
+    } else if (q.field === 'weight_kg' || q.field === 'goal_weight_kg') {
+      var uMount = document.getElementById('unitPickerMount');
+      var uBtn   = document.getElementById('qContinueBtn');
+      if (uMount) mountWeightPicker(uMount, uBtn, q.field);
+    }
+
+    // Mount wheel picker for other numeric wheel fields
+    if (q.type === 'text' && WHEEL_CONFIG[q.field] && q.field !== 'height_cm' && q.field !== 'weight_kg' && q.field !== 'goal_weight_kg') {
       var wcfg    = WHEEL_CONFIG[q.field];
       var initVal = state.answers[q.field] !== undefined ? state.answers[q.field] : wcfg.defaultVal;
       var wp      = createWheelPicker({
@@ -1868,8 +2028,29 @@
     try {
       if (data.calculations)  localStorage.setItem('zitlas_calculations',  JSON.stringify(data.calculations));
       if (data.swot)          localStorage.setItem('zitlas_swot',          JSON.stringify(data.swot));
-      if (data.diet_plan)     localStorage.setItem('zitlas_diet_plan',     JSON.stringify(data.diet_plan));
-      if (data.workout_plan)  localStorage.setItem('zitlas_workout_plan',  JSON.stringify(data.workout_plan));
+      if (data.diet_plan) {
+        var _aiPlanStorage = {
+          originalDietPlan:    data.diet_plan,
+          currentDietPlan:     data.diet_plan,
+          expertModifications: {},
+          isExpertPlan:        false,
+        };
+        console.trace("[WRITE zitlas_diet_plan]", _aiPlanStorage);
+        localStorage.setItem('zitlas_diet_plan', JSON.stringify(_aiPlanStorage));
+      }
+      if (data.workout_plan) {
+        /* Wrap in new schema (mirrors diet) so schema detection in weekly-plan / day.js
+           always finds originalWorkoutPlan and workoutModifications is always present. */
+        var _aiWorkoutStorage = {
+          originalWorkoutPlan:  data.workout_plan,
+          currentWorkoutPlan:   JSON.parse(JSON.stringify(data.workout_plan)),
+          workoutModifications: {},
+          isExpertPlan:         false,
+          expertName:           null,
+          reviewedAt:           null,
+        };
+        localStorage.setItem('zitlas_workout_plan', JSON.stringify(_aiWorkoutStorage));
+      }
       if (data.sources)       localStorage.setItem('zitlas_sources',       JSON.stringify(data.sources));
       if (data.assessment)    localStorage.setItem('zitlas_assessment',    JSON.stringify(data.assessment));
       localStorage.setItem('zitlas_plan_generated_at', new Date().toISOString());
@@ -1904,6 +2085,7 @@
       localStorage.removeItem('nutrition_weekly_plan');
       /* New plan ID was already stamped above — clear stale expert review for old planId */
       ['zitlas_expert_review', 'zitlas_plan_versions', 'zitlas_review_request',
+       'expert_plan_reviews',
        'expert_review', 'expert_diet_override', 'reviewed_diet_plan',
        'modifiedBy', 'expertApproval', 'review_request',
        'expertDiet', 'expertOverride', 'dietOverride', 'reviewStatus',

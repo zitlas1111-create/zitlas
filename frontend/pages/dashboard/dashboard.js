@@ -1088,6 +1088,201 @@
   }
 
   /* ══════════════════════════════════════════
+     TODAY'S ACTIVITY — STEP COUNTER CARD
+     All values come from window.zitlasSteps so
+     Health Connect can swap in live data later
+     without touching the UI code.
+  ══════════════════════════════════════════ */
+
+  /* Seed the global data object — replace these values with Health Connect later */
+  window.zitlasSteps = window.zitlasSteps || {
+    today_steps:     6162,
+    daily_step_goal: 10000,
+    calories_burned: 204,
+    distance_km:     4.5,
+    active_minutes:  85,
+    streak_days:     7,
+  };
+
+  /* Returns { pct, circumference, targetOffset } for the SVG ring */
+  function calculateStepProgress() {
+    const { today_steps, daily_step_goal } = window.zitlasSteps;
+    const pct           = Math.min(100, (today_steps / daily_step_goal) * 100);
+    const R             = 80;
+    const circumference = +(2 * Math.PI * R).toFixed(2);
+    const targetOffset  = +(circumference * (1 - pct / 100)).toFixed(2);
+    return { pct, circumference, targetOffset, R };
+  }
+
+  /* Animates an already-rendered ring to the current progress value.
+     Call this after updateStepRing() to drive the animation, or when
+     window.zitlasSteps changes without a full re-render. */
+  function updateStepRing() {
+    const content = document.getElementById('stepCounterContent');
+    if (!content) return;
+    const { pct, targetOffset } = calculateStepProgress();
+    const arc   = content.querySelector('.sac-ring-progress');
+    const count = content.querySelector('.sac-step-count');
+    const label = document.getElementById('stepCounterLabel');
+
+    if (label) label.textContent = `${Math.round(pct)}% of daily goal`;
+
+    if (arc) {
+      arc.style.transition = 'none';
+      arc.style.strokeDashoffset = arc.getAttribute('stroke-dasharray');
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          arc.style.transition = '';
+          arc.style.strokeDashoffset = String(targetOffset);
+        });
+      });
+    }
+
+    if (count) {
+      const target = window.zitlasSteps.today_steps || 0;
+      const goal   = window.zitlasSteps.daily_step_goal || 10000;
+      const pctEl  = content.querySelector('#sacStepPct');
+      const dur    = 1000;
+      const start  = performance.now();
+      const tick   = (now) => {
+        const t       = Math.min(1, (now - start) / dur);
+        const eased   = 1 - Math.pow(1 - t, 3);
+        const current = Math.round(eased * target);
+        count.textContent = current.toLocaleString();
+        if (pctEl) pctEl.textContent = Math.round(Math.min(100, (current / goal) * 100)) + '%';
+        if (t < 1) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    }
+  }
+
+  /* Renders the full step counter card then triggers the animation */
+  function renderStepCounterCard() {
+    const content = document.getElementById('stepCounterContent');
+    const label   = document.getElementById('stepCounterLabel');
+    if (!content) return;
+
+    const d = window.zitlasSteps;
+    const { pct, circumference, targetOffset, R } = calculateStepProgress();
+    const CX = 96, CY = 96;
+    const pctRounded = Math.round(pct);
+
+    /* Format active_minutes as "Xh Ym" when >= 60 */
+    const mins    = d.active_minutes || 0;
+    const hStr    = mins >= 60 ? `${Math.floor(mins / 60)}h ` : '';
+    const mStr    = `${mins % 60}m`;
+    const timeStr = hStr + mStr;
+
+    /* Remaining steps */
+    const remaining = Math.max((d.daily_step_goal || 10000) - (d.today_steps || 0), 0);
+    const remainingLine = remaining === 0
+      ? `<p class="sac-remaining sac-remaining--done">🎉 Goal completed! Amazing work today.</p>`
+      : `<p class="sac-remaining">🚀 ${remaining.toLocaleString()} steps left today</p>`;
+
+    /* Motivational message */
+    const motiveMsg = pctRounded >= 100
+      ? `🏆 Outstanding! You've smashed today's goal!`
+      : `🚶 Keep going, you're ${pctRounded}% of the way there!`;
+
+    /* Streak badge */
+    const streakDays  = d.streak_days || 0;
+    const streakBadge = streakDays > 0
+      ? `<div class="sac-streak-badge">🔥 ${streakDays} Day Streak</div>`
+      : '';
+
+    if (label) label.textContent = `${pctRounded}% of daily goal`;
+
+    content.innerHTML = `
+      <div class="sac-card">
+
+        <div class="sac-ring-wrap">
+          <svg class="sac-ring-svg" viewBox="0 0 192 192"
+               aria-label="${pctRounded}% of step goal reached">
+            <circle class="sac-ring-bg"
+              cx="${CX}" cy="${CY}" r="${R}"
+              fill="none" stroke-width="14"/>
+            <circle class="sac-ring-glow"
+              cx="${CX}" cy="${CY}" r="${R}"
+              fill="none" stroke-width="14"
+              stroke-linecap="round"
+              stroke-dasharray="${circumference}"
+              stroke-dashoffset="${circumference}"
+              transform="rotate(-90 ${CX} ${CY})"/>
+            <circle class="sac-ring-progress"
+              cx="${CX}" cy="${CY}" r="${R}"
+              fill="none" stroke-width="14"
+              stroke-linecap="round"
+              stroke-dasharray="${circumference}"
+              stroke-dashoffset="${circumference}"
+              transform="rotate(-90 ${CX} ${CY})"/>
+          </svg>
+
+          <div class="sac-ring-center">
+            <span class="sac-step-count">0</span>
+            <span class="sac-step-lbl">Steps</span>
+            <span class="sac-step-pct" id="sacStepPct">0%</span>
+          </div>
+        </div>
+
+        <div class="sac-right">
+          <p class="sac-goal-line">🎯 Today's Target: ${(d.daily_step_goal || 10000).toLocaleString()} Steps</p>
+          ${remainingLine}
+
+          <div class="sac-stats-row">
+            <div class="sac-stat">
+              <span class="sac-stat-icon">🔥</span>
+              <span class="sac-stat-val">${d.calories_burned} kcal</span>
+              <span class="sac-stat-lbl">Calories</span>
+            </div>
+            <div class="sac-stat-div"></div>
+            <div class="sac-stat">
+              <span class="sac-stat-icon">🚶</span>
+              <span class="sac-stat-val">${d.distance_km} km</span>
+              <span class="sac-stat-lbl">Distance</span>
+            </div>
+            <div class="sac-stat-div"></div>
+            <div class="sac-stat">
+              <span class="sac-stat-icon">⏱</span>
+              <span class="sac-stat-val">${timeStr}</span>
+              <span class="sac-stat-lbl">Active Time</span>
+            </div>
+          </div>
+
+          ${streakBadge}
+
+          <p class="sac-motive">${motiveMsg}</p>
+        </div>
+
+      </div>
+    `;
+
+    /* Animate ring + count-up + percentage after two frames */
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const arc  = content.querySelector('.sac-ring-progress');
+        const glow = content.querySelector('.sac-ring-glow');
+        if (arc)  arc.style.strokeDashoffset  = String(targetOffset);
+        if (glow) glow.style.strokeDashoffset = String(targetOffset);
+
+        const count  = content.querySelector('.sac-step-count');
+        const pctEl  = content.querySelector('#sacStepPct');
+        const target = d.today_steps || 0;
+        const dur    = 1000;
+        const start  = performance.now();
+        const tick   = (now) => {
+          const t       = Math.min(1, (now - start) / dur);
+          const eased   = 1 - Math.pow(1 - t, 3);
+          const current = Math.round(eased * target);
+          if (count)  count.textContent = current.toLocaleString();
+          if (pctEl)  pctEl.textContent = Math.round(Math.min(100, (current / (d.daily_step_goal || 10000)) * 100)) + '%';
+          if (t < 1) requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      });
+    });
+  }
+
+  /* ══════════════════════════════════════════
      TODAY'S TRAINING CARD
   ══════════════════════════════════════════ */
   function renderTrainingWidget() {
@@ -1097,8 +1292,6 @@
 
     let plan = null;
     try { plan = JSON.parse(localStorage.getItem('zitlas_workout_plan') || 'null'); } catch (_) {}
-
-    console.log('WORKOUT PLAN:', plan);
 
     if (!plan || !plan.weekly_plan || !plan.weekly_plan.length) {
       if (dayLabel) dayLabel.textContent = 'Complete assessment to unlock';
@@ -1134,7 +1327,6 @@
 
     content.innerHTML = `
       <div class="ttc-card">
-
         <div class="ttc-header">
           <div class="ttc-day-row">
             <span class="ttc-day-name">${todayDay.day || todayName}</span>
@@ -1167,7 +1359,6 @@
         </div>
 
         ${todayDay.daily_tip ? `<p class="ttc-tip">💡 ${todayDay.daily_tip}</p>` : ''}
-
       </div>
     `;
   }
@@ -1407,8 +1598,10 @@
     safeRun('initTaskCardClick',    initTaskCardClick);
     safeRun('initImageFallbacks',   initImageFallbacks);
     safeRun('initViewButtons',      initViewButtons);
-    safeRun('renderSwotWidget',     renderSwotWidget);
-    safeRun('renderTrainingWidget', renderTrainingWidget);
+    safeRun('renderSwotWidget',       renderSwotWidget);
+    safeRun('renderStepCounterCard',  renderStepCounterCard);
+    loadHealthConnectData();
+    safeRun('renderTrainingWidget',   renderTrainingWidget);
     safeRun('initWeeklyPlanModal',  initWeeklyPlanModal);
     safeRun('renderChats',          renderChats);
     safeRun('initStatCountUp',      initStatCountUp);
@@ -1423,4 +1616,57 @@
   } else {
     init();
   }
+
+  /* ══════════════════════════════════════════
+     HEALTH CONNECT — live data loader
+     Runs after renderStepCounterCard() so dummy
+     data is always visible first. On success,
+     updates window.zitlasSteps and re-renders.
+  ══════════════════════════════════════════ */
+  async function loadHealthConnectData() {
+    console.log('[HealthConnect] Plugin:', !!(window.Capacitor?.Plugins?.HealthConnect));
+
+    if (!window.Capacitor) return;
+
+    try {
+      const HealthConnect = window.Capacitor.Plugins.HealthConnect;
+      if (!HealthConnect) {
+        console.log('[HealthConnect] Plugin not found — using dummy data');
+        return;
+      }
+
+      const status = await HealthConnect.isAvailable();
+      console.log('[HealthConnect] Status:', status);
+      if (!status.available) {
+        console.log('[HealthConnect] Not installed — using dummy data');
+        return;
+      }
+
+      const permission = await HealthConnect.requestPermissions();
+      console.log('[HealthConnect] Permission:', permission);
+      if (!permission.permissionGranted) {
+        console.log('[HealthConnect] Permission denied — using dummy data');
+        return;
+      }
+
+      const activity = await HealthConnect.getTodayActivity();
+      console.log('[HealthConnect] Activity:', activity);
+
+      window.zitlasSteps = {
+        today_steps:     activity.today_steps     || 0,
+        daily_step_goal: window.zitlasSteps?.daily_step_goal || 10000,
+        calories_burned: activity.calories_burned || 0,
+        distance_km:     activity.distance_km     || 0,
+        active_minutes:  activity.active_minutes  || 0,
+        streak_days:     window.zitlasSteps?.streak_days    || 0,
+      };
+
+      console.log('[HealthConnect] Updated Steps:', window.zitlasSteps);
+      renderStepCounterCard();
+
+    } catch (e) {
+      console.error('[HealthConnect] Failed:', e);
+    }
+  }
+
 })();

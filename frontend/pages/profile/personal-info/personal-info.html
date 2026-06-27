@@ -102,6 +102,60 @@
       </div>
     </section>
 
+    <!-- BODY METRICS -->
+    <section class="form-section">
+      <div class="section-head">
+        <span class="section-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/>
+          </svg>
+        </span>
+        <h2 class="section-title">Body Metrics</h2>
+      </div>
+
+      <!-- HEIGHT -->
+      <div class="form-group">
+        <div class="metric-label-row">
+          <label class="form-label">Height</label>
+          <div class="unit-toggle">
+            <button class="unit-btn active" id="piHeightUnitCm" data-unit="cm">CM</button>
+            <button class="unit-btn" id="piHeightUnitFt" data-unit="ftin">FT / IN</button>
+          </div>
+        </div>
+        <div id="piHeightCmWrap">
+          <input type="number" id="piHeightCm" class="form-input" placeholder="e.g. 170" min="120" max="230" />
+        </div>
+        <div id="piHeightFtWrap" style="display:none">
+          <div class="form-row">
+            <div class="form-group">
+              <input type="number" id="piHeightFt" class="form-input" placeholder="Feet (3–8)" min="3" max="8" />
+            </div>
+            <div class="form-group">
+              <input type="number" id="piHeightIn" class="form-input" placeholder="Inches (0–11)" min="0" max="11" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- WEIGHT -->
+      <div class="form-group">
+        <div class="metric-label-row">
+          <label class="form-label">Weight</label>
+          <div class="unit-toggle">
+            <button class="unit-btn active" id="piWeightUnitKg" data-unit="kg">KG</button>
+            <button class="unit-btn" id="piWeightUnitLbs" data-unit="lbs">LBS</button>
+          </div>
+        </div>
+        <div id="piWeightKgWrap">
+          <input type="number" id="piWeightKg" class="form-input" placeholder="e.g. 70" min="25" max="250" />
+        </div>
+        <div id="piWeightLbsWrap" style="display:none">
+          <input type="number" id="piWeightLbs" class="form-input" placeholder="e.g. 154" min="55" max="551" />
+        </div>
+      </div>
+
+    </section>
+
   </main>
 
   <div class="toast" id="toast"></div>

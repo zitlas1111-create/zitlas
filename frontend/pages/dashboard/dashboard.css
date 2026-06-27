@@ -1342,6 +1342,7 @@ a   { text-decoration: none; }
    SWOT SUMMARY WIDGET
 ══════════════════════════════════════════ */
 .swot-widget-section,
+.step-counter-section,
 .training-widget-section {
   margin: 0 16px 28px;
 }
@@ -1507,9 +1508,9 @@ a   { text-decoration: none; }
    TODAY'S TRAINING CARD  (.ttc-*)
 ══════════════════════════════════════════ */
 .ttc-card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  background: #151515;
+  border: 1px solid #242424;
+  border-radius: 24px;
   overflow: hidden;
 }
 
@@ -1900,4 +1901,242 @@ a   { text-decoration: none; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+/* ══════════════════════════════════════════
+   TODAY'S ACTIVITY — STEP COUNTER CARD
+   Samsung Health style circular progress ring
+══════════════════════════════════════════ */
+
+/* ── Card shell ── */
+.sac-card {
+  background: #151515;
+  border: 1px solid #242424;
+  border-radius: 24px;
+  padding: 28px 20px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+}
+
+/* ── Ring container — mobile 180px ── */
+.sac-ring-wrap {
+  position: relative;
+  width: 180px;
+  height: 180px;
+  flex-shrink: 0;
+}
+
+.sac-ring-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: visible;
+}
+
+/* Track (background ring) */
+.sac-ring-bg {
+  stroke: #2A2A2A;
+}
+
+/* Blurred glow drawn before crisp arc */
+.sac-ring-glow {
+  stroke: #FFB347;
+  filter: blur(8px);
+  opacity: 0.5;
+  transition: stroke-dashoffset 1s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+/* Crisp progress arc */
+.sac-ring-progress {
+  stroke: #FF9800;
+  transition: stroke-dashoffset 1s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+/* ── Center text ── */
+.sac-ring-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  pointer-events: none;
+}
+
+/* Mobile: 48px | Desktop: 56px (overridden at 600px) */
+.sac-step-count {
+  font-size: 48px;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: -2px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.sac-step-lbl {
+  font-size: 11px;
+  font-weight: 600;
+  color: #9A9A9A;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-top: 1px;
+}
+
+/* Orange percentage counter animates in sync with step count */
+.sac-step-pct {
+  font-size: 13px;
+  font-weight: 700;
+  color: #FF9800;
+  letter-spacing: 0.02em;
+  margin-top: 3px;
+}
+
+/* ── Goal + remaining lines ── */
+.sac-goal-line {
+  margin-top: 20px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #9A9A9A;
+  text-align: center;
+}
+
+.sac-remaining {
+  margin-top: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #cccccc;
+  text-align: center;
+}
+
+.sac-remaining--done {
+  color: #4ade80;
+}
+
+/* ── Stats row ── */
+.sac-stats-row {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  margin-top: 18px;
+  width: 100%;
+  background: #111111;
+  border: 1px solid #242424;
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.sac-stat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 18px 10px;
+  min-height: 90px;
+  transition: transform .25s ease, background .25s ease;
+}
+
+.sac-stat:hover {
+  transform: translateY(-2px);
+  background: #1a1a1a;
+}
+
+.sac-stat-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.sac-stat-val {
+  font-size: 14px;
+  font-weight: 700;
+  color: #ffffff;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.sac-stat-lbl {
+  font-size: 10px;
+  font-weight: 500;
+  color: #9A9A9A;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.sac-stat-div {
+  width: 1px;
+  background: #242424;
+  flex-shrink: 0;
+  align-self: stretch;
+}
+
+/* ── Right column ── */
+.sac-right {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* ── Streak badge ── */
+.sac-streak-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 16px;
+  padding: 7px 16px;
+  background: rgba(255, 152, 0, 0.12);
+  border: 1px solid rgba(255, 152, 0, 0.3);
+  border-radius: 100px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #FF9800;
+  align-self: center;
+}
+
+/* ── Motivational message ── */
+.sac-motive {
+  margin-top: 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #9A9A9A;
+  text-align: center;
+  font-style: italic;
+}
+
+/* ── Desktop: 220px ring, 56px count ── */
+@media (min-width: 600px) {
+  .sac-ring-wrap  { width: 220px; height: 220px; }
+  .sac-step-count { font-size: 56px; letter-spacing: -3px; }
+}
+
+@media (min-width: 768px) {
+  .sac-card {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 36px;
+    padding: 32px 28px;
+  }
+
+  .sac-ring-wrap { width: 220px; height: 220px; flex-shrink: 0; }
+
+  .sac-right { flex: 1; }
+
+  .sac-goal-line,
+  .sac-remaining,
+  .sac-motive    { text-align: left; }
+
+  .sac-goal-line  { margin-top: 4px; }
+  .sac-stats-row  { margin-top: 16px; }
+
+  .sac-streak-badge { align-self: flex-start; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sac-ring-progress,
+  .sac-ring-glow { transition: none; }
+  .sac-stat      { transition: none; }
 }

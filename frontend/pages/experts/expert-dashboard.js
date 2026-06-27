@@ -143,6 +143,8 @@ function getExpert() {
    ══════════════════════════════════════════════ */
 
 let _edChatConversationId = null;  /* active expert chat overlay conversation */
+let _edCurrentReview      = null;  /* review linked to the currently open chat */
+let _prInboxActiveTab     = 'pending'; /* which inbox tab is visible */
 
 function chatLoadAll() {
   try { return JSON.parse(localStorage.getItem('zitlas_chats') || '{}'); } catch(_) { return {}; }
@@ -179,6 +181,17 @@ function chatSaveExpertReply(conversationId, expert, text) {
   chatSaveAll(all);
   console.log('Message Sent', msg);
   return msg;
+}
+
+function chatAppendMessage(conversationId, msg) {
+  var all  = chatLoadAll();
+  var conv = all[conversationId];
+  if (!conv) return; /* conversation not yet created; athlete must initiate first */
+  conv.messages = conv.messages || [];
+  conv.messages.push(msg);
+  conv.lastMessage   = msg.text || '';
+  conv.lastMessageAt = msg.timestamp || new Date().toISOString();
+  chatSaveAll(all);
 }
 
 function chatClearUnread(conversationId) {
@@ -466,8 +479,12 @@ function buildReviewCard(req, expert) {
 
   let dietHTML = '';
   if (ctx.diet_plan) {
+    var _ctxDiet = ctx.diet_plan;
+    if (_ctxDiet.originalDietPlan || _ctxDiet.currentDietPlan) {
+      _ctxDiet = _ctxDiet.currentDietPlan || _ctxDiet.originalDietPlan;
+    }
     dietHTML = '<div class="erc-exp-section"><div class="erc-exp-label">AI Diet Plan</div>' +
-      '<div class="erc-plan-wrap">' + buildDietPlanHTML(ctx.diet_plan) + '</div></div>';
+      '<div class="erc-plan-wrap">' + buildDietPlanHTML(_ctxDiet) + '</div></div>';
   }
 
   let workoutHTML = '';
@@ -935,32 +952,36 @@ function renderChatsFromList(requests) {
 
   const expert = getExpert();
 
-  /* Merge: real chat conversations + review requests with no conversation yet */
-  const convList = chatGetExpertConversations(expert.id);
+  /* Real chat conversations from localStorage */
+  var rawConvList = chatGetExpertConversations(expert.id);
 
-  /* Build a set of athleteIds that already have a conversation */
-  const convAthleteIds = new Set(convList.map(function(c) { return c.athleteId; }));
-
-  /* Add stub entries for review requests that haven't started chatting yet */
-  requests.forEach(function(req) {
-    var athleteId = req.athleteId || req.userId || null;
-    /* If no conversationId linkage, fall back to athlete name matching */
-    var alreadyHasConv = convList.some(function(c) {
-      return (athleteId && c.athleteId === athleteId) ||
-             (c.athleteName === (req.athlete_name || ''));
+  /* For each real conversation, compute the effective visible messages
+     (those after the hiddenForExpert cutoff, if any). Discard the
+     conversation entirely if no messages survive the cutoff. */
+  var convList = [];
+  rawConvList.forEach(function(conv) {
+    var cutoff = conv.hiddenForExpert || null;
+    var effectiveMsgs = (conv.messages || []).filter(function(m) {
+      if (!cutoff) return true;
+      if (!m.timestamp) return false;      /* no timestamp → predates cutoff, hide it */
+      return m.timestamp > cutoff;
     });
-    if (!alreadyHasConv) {
-      convList.push({
-        conversationId:  null,  /* stub — no messages yet */
-        athleteName:     req.athlete_name || 'Athlete',
-        expertId:        expert.id,
-        messages:        [],
-        lastMessage:     req.note || 'Sent their AI diet plan for expert review.',
-        lastMessageAt:   req.submittedAt || null,
-        unreadByExpert:  0,
-        _reviewStatus:   req.status,
-      });
-    }
+
+    /* Drop conversations with no visible messages */
+    if (effectiveMsgs.length === 0) return;
+
+    /* Use the last visible message as the preview */
+    var lastVisible = effectiveMsgs[effectiveMsgs.length - 1];
+    convList.push(Object.assign({}, conv, {
+      _effectiveMsgs:  effectiveMsgs,
+      lastMessage:     lastVisible.text || conv.lastMessage || '',
+      lastMessageAt:   lastVisible.timestamp || conv.lastMessageAt,
+    }));
+  });
+
+  /* Global guard: never render conversations with no visible messages */
+  convList = convList.filter(function(c) {
+    return c._effectiveMsgs && c._effectiveMsgs.length > 0;
   });
 
   if (!convList.length) {
@@ -970,7 +991,7 @@ function renderChatsFromList(requests) {
   }
   if (empty) empty.style.display = 'none';
 
-  /* Sort: most recent message first */
+  /* Sort: most recent visible message first */
   convList.sort(function(a, b) {
     var ta = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
     var tb = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
@@ -1523,20 +1544,34 @@ function initExpertChatOverlay() {
   if (edConfirmBtn) {
     edConfirmBtn.addEventListener('click', function() {
       if (!_edChatConversationId) { edBackdrop.classList.remove('open'); return; }
-      /* Stamp hiddenForExpert — never delete actual messages */
+
+      /* Delete the conversation entirely from localStorage so it disappears
+         from the Chats list. The athlete's own zitlas_chats copy is keyed
+         separately (athlete writes, expert reads) — removing the expert-side
+         entry does not affect the athlete's history. If the athlete sends a
+         new message the conversation is recreated via ensureConversation. */
       var all = chatLoadAll();
-      if (all[_edChatConversationId]) {
-        all[_edChatConversationId].hiddenForExpert = new Date().toISOString();
-        chatSaveAll(all);
-      }
+      delete all[_edChatConversationId];
+      chatSaveAll(all);
+
       edBackdrop.classList.remove('open');
-      /* Re-render the now-empty chat */
+
+      /* Clear the open chat overlay */
       if (msgWrap) msgWrap.innerHTML = '';
       var emptyEl = document.createElement('div');
       emptyEl.className = 'zc-empty';
       emptyEl.textContent = 'Chat cleared. New messages will appear here.';
       if (msgWrap) msgWrap.appendChild(emptyEl);
-      console.log('[CHAT] Expert cleared chat for', _edChatConversationId);
+
+      /* Close the chat overlay */
+      overlay.classList.remove('open');
+      _edChatConversationId = null;
+
+      /* Re-render the Chats section so the card disappears immediately */
+      var req = getReviewRequest();
+      renderChatsFromList(req ? [req] : []);
+
+      console.log('[CHAT] Expert cleared and removed conversation from localStorage');
     });
   }
 
@@ -2018,6 +2053,9 @@ function buildEditableMealEl(meal, di, plan, card) {
     meal.notes     = g('notes');
     meal._edited   = true;
 
+    console.log("[EDITED PLAN]", plan);
+    console.log("[BREAKFAST AFTER EDIT]", plan.days[0] && plan.days[0].meals);
+
     /* Update display */
     hdr.querySelector('.ed-disp-name').textContent = meal.meal_name;
     var tEl = hdr.querySelector('.ed-disp-time');
@@ -2048,7 +2086,26 @@ function buildEditableMealEl(meal, di, plan, card) {
 }
 
 function buildEditableDietPlanEl(review, card) {
-  var plan = JSON.parse(JSON.stringify(review.planData || {}));
+  console.log("review", review);
+  console.log("review.reviewedDietPlan", review.reviewedDietPlan);
+  console.log("review.context", review.context);
+  console.log("review.context.diet_plan", review.context && review.context.diet_plan);
+
+  /* Unwrap new schema {originalDietPlan, currentDietPlan, ...} → flat diet plan */
+  var _rawPlanData = review.planData || {};
+  if (_rawPlanData.originalDietPlan || _rawPlanData.currentDietPlan) {
+    _rawPlanData = _rawPlanData.currentDietPlan || _rawPlanData.originalDietPlan;
+  }
+
+  var diet = review.reviewedDietPlan || (review.context && review.context.diet_plan) || review.planData;
+  if (diet && (diet.originalDietPlan || diet.currentDietPlan)) {
+    diet = diet.currentDietPlan || diet.originalDietPlan;
+  }
+  console.log("diet", diet);
+  console.log("diet.days", diet && diet.days);
+  console.log("days length", diet && diet.days && diet.days.length);
+
+  var plan = JSON.parse(JSON.stringify(_rawPlanData));
   card._editedPlan = plan;
   card._hasEdits   = false;
 
@@ -2200,23 +2257,341 @@ function buildMealChangeHistory(origPlan, newPlan, expertName) {
   return history;
 }
 
+/* ══════════════════════════════════════════════
+   EDITABLE WORKOUT PLAN UI (mirrors diet editing)
+   ══════════════════════════════════════════════ */
+
+function buildEditableExerciseEl(exercise, day, plan, card) {
+  var exEl = document.createElement('div');
+  exEl.className = 'erc-exercise-row ed-exercise-editable' + (exercise._edited ? ' ed-meal-modified' : '');
+
+  var hdr = document.createElement('div');
+  hdr.className = 'ed-exercise-hdr erc-meal-hdr';
+  hdr.innerHTML =
+    '<span class="ed-ex-name ed-disp-name erc-meal-name">' + esc(exercise.name || 'Exercise') + '</span>' +
+    '<span class="ed-ex-meta ed-disp-meta erc-meal-time">' +
+      (exercise.sets ? exercise.sets + ' sets' : '') +
+      (exercise.sets && exercise.reps_or_duration ? ' × ' : '') +
+      esc(exercise.reps_or_duration || '') +
+    '</span>' +
+    '<span class="ed-meal-edited-badge"' + (exercise._edited ? '' : ' style="display:none"') + '>✏ Edited</span>';
+  exEl.appendChild(hdr);
+
+  var actionsEl = document.createElement('div');
+  actionsEl.className = 'ed-meal-actions';
+  actionsEl.innerHTML =
+    '<button class="ed-meal-action ed-action--edit" title="Edit exercise">✏ Edit</button>' +
+    '<button class="ed-meal-action ed-action--delete" title="Remove exercise">🗑 Remove</button>';
+  exEl.appendChild(actionsEl);
+
+  var editForm = document.createElement('div');
+  editForm.className = 'ed-meal-edit-form';
+  editForm.style.display = 'none';
+  editForm.innerHTML =
+    '<div class="ed-form-row"><label class="ed-form-label">Exercise Name</label>' +
+    '<input class="ed-form-input" data-f="name" value="' + esc(exercise.name || '') + '"></div>' +
+    '<div class="ed-form-2col">' +
+      '<div class="ed-form-row"><label class="ed-form-label">Sets</label>' +
+      '<input class="ed-form-input" type="number" data-f="sets" value="' + esc(String(exercise.sets || '')) + '"></div>' +
+      '<div class="ed-form-row"><label class="ed-form-label">Reps / Duration</label>' +
+      '<input class="ed-form-input" data-f="reps_or_duration" value="' + esc(exercise.reps_or_duration || '') + '"></div>' +
+    '</div>' +
+    '<div class="ed-form-row"><label class="ed-form-label">Coaching Notes</label>' +
+    '<textarea class="ed-form-textarea" data-f="tip" placeholder="Tips for the athlete...">' + esc(exercise.tip || '') + '</textarea></div>' +
+    '<div class="ed-form-btns">' +
+      '<button class="ed-form-save-btn">💾 Save Exercise</button>' +
+      '<button class="ed-form-cancel-btn">Cancel</button>' +
+    '</div>';
+  exEl.appendChild(editForm);
+
+  actionsEl.querySelector('.ed-action--edit').addEventListener('click', function() {
+    var open = editForm.style.display !== 'none';
+    editForm.style.display = open ? 'none' : 'block';
+    if (!open) { var f = editForm.querySelector('[data-f="name"]'); if (f) { f.focus(); if (f.select) f.select(); } }
+  });
+
+  actionsEl.querySelector('.ed-action--delete').addEventListener('click', function() {
+    var mi = Array.from(exEl.parentNode.querySelectorAll('.ed-exercise-editable')).indexOf(exEl);
+    if (mi > -1) (day.exercises = day.exercises || []).splice(mi, 1);
+    day._edited = true;
+    _markPlanEdited(card);
+    exEl.style.transition = 'opacity .2s, transform .2s';
+    exEl.style.opacity = '0'; exEl.style.transform = 'translateX(-12px)';
+    setTimeout(function() { exEl.remove(); }, 210);
+  });
+
+  editForm.querySelector('.ed-form-save-btn').addEventListener('click', function() {
+    var g = function(f) { return (editForm.querySelector('[data-f="' + f + '"]') || {}).value || ''; };
+    exercise.name             = g('name') || exercise.name;
+    exercise.sets             = parseInt(g('sets'), 10) || exercise.sets || 0;
+    exercise.reps_or_duration = g('reps_or_duration') || exercise.reps_or_duration;
+    exercise.tip              = g('tip');
+    exercise._edited          = true;
+    day._edited               = true;
+
+    hdr.querySelector('.ed-disp-name').textContent = exercise.name;
+    hdr.querySelector('.ed-disp-meta').textContent =
+      (exercise.sets ? exercise.sets + ' sets' : '') +
+      (exercise.sets && exercise.reps_or_duration ? ' × ' : '') +
+      (exercise.reps_or_duration || '');
+    hdr.querySelector('.ed-meal-edited-badge').style.display = '';
+    exEl.classList.add('ed-meal-modified');
+    editForm.style.display = 'none';
+    _markPlanEdited(card);
+  });
+
+  editForm.querySelector('.ed-form-cancel-btn').addEventListener('click', function() {
+    editForm.style.display = 'none';
+  });
+
+  return exEl;
+}
+
+function buildEditableWorkoutPlanEl(review, card) {
+  var _rawPlanData = review.planData || {};
+  if (_rawPlanData.originalWorkoutPlan || _rawPlanData.currentWorkoutPlan) {
+    _rawPlanData = _rawPlanData.currentWorkoutPlan || _rawPlanData.originalWorkoutPlan;
+  }
+
+  var plan = JSON.parse(JSON.stringify(_rawPlanData));
+  card._editedWorkoutPlan = plan;
+  card._hasEdits          = false;
+
+  var days   = plan.weekly_plan || plan.days || [];
+  var labels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+
+  var wrap = document.createElement('div');
+  wrap.className = 'ed-editable-plan-wrap';
+
+  var hdrDiv = document.createElement('div');
+  hdrDiv.className = 'erc-plan-header';
+  hdrDiv.innerHTML = '<span class="erc-plan-icon">💪</span><div><div class="erc-plan-title">' +
+    esc(plan.plan_name || 'AI Workout Plan') + '</div>' +
+    (plan.goal ? '<div class="erc-plan-sub">' + esc(plan.goal) + '</div>' : '') + '</div>';
+  wrap.appendChild(hdrDiv);
+
+  var pillsDiv = document.createElement('div');
+  pillsDiv.className = 'erc-day-pills';
+  days.forEach(function(d, i) {
+    var pill = document.createElement('button');
+    pill.className = 'erc-day-pill' + (i === 0 ? ' active' : '');
+    pill.dataset.epWoDayPill = i;
+    pill.textContent = labels[i] || ('D' + (i + 1));
+    pillsDiv.appendChild(pill);
+  });
+  wrap.appendChild(pillsDiv);
+
+  var panelsDiv = document.createElement('div');
+  panelsDiv.className = 'erc-meals-wrap';
+
+  days.forEach(function(day, di) {
+    var panel = document.createElement('div');
+    panel.className = 'erc-day-content';
+    panel.dataset.woDayEl = di;
+    panel.style.display = di === 0 ? 'block' : 'none';
+
+    /* Day focus + duration inline editor */
+    var dayHdrEl = document.createElement('div');
+    dayHdrEl.className = 'ed-wo-day-hdr erc-day-theme';
+
+    var focusDisp = document.createElement('div');
+    focusDisp.className = 'ed-wo-focus-disp';
+    focusDisp.innerHTML =
+      '<span class="ed-wo-focus-val">' + esc(day.focus || day.type || '—') + '</span>' +
+      '<span class="ed-wo-duration-val erc-meal-time">' +
+        esc(day.duration_minutes ? ' · ' + day.duration_minutes + ' min' : '') + '</span>' +
+      '<button class="ed-meal-action ed-action--edit" style="margin-left:8px">✏ Edit Day</button>';
+    dayHdrEl.appendChild(focusDisp);
+
+    var dayEditForm = document.createElement('div');
+    dayEditForm.className = 'ed-meal-edit-form';
+    dayEditForm.style.display = 'none';
+    dayEditForm.innerHTML =
+      '<div class="ed-form-row"><label class="ed-form-label">Workout Focus</label>' +
+      '<input class="ed-form-input" data-wf="focus" value="' + esc(day.focus || day.type || '') + '"></div>' +
+      '<div class="ed-form-row"><label class="ed-form-label">Duration (minutes)</label>' +
+      '<input class="ed-form-input" type="number" data-wf="duration_minutes" value="' +
+        esc(String(day.duration_minutes || '')) + '"></div>' +
+      '<div class="ed-form-row"><label class="ed-form-label">Expert Notes for this Day</label>' +
+      '<textarea class="ed-form-textarea" data-wf="daily_tip" placeholder="Tips for the athlete...">' +
+        esc(day.daily_tip || '') + '</textarea></div>' +
+      '<div class="ed-form-btns">' +
+        '<button class="ed-form-save-btn">💾 Save</button>' +
+        '<button class="ed-form-cancel-btn">Cancel</button>' +
+      '</div>';
+    dayHdrEl.appendChild(dayEditForm);
+
+    focusDisp.querySelector('.ed-action--edit').addEventListener('click', function() {
+      var open = dayEditForm.style.display !== 'none';
+      dayEditForm.style.display = open ? 'none' : 'block';
+      if (!open) { var f = dayEditForm.querySelector('[data-wf="focus"]'); if (f) f.focus(); }
+    });
+
+    dayEditForm.querySelector('.ed-form-save-btn').addEventListener('click', function() {
+      var newFocus = (dayEditForm.querySelector('[data-wf="focus"]') || {}).value || '';
+      var newDur   = parseInt((dayEditForm.querySelector('[data-wf="duration_minutes"]') || {}).value || '0', 10);
+      var newTip   = (dayEditForm.querySelector('[data-wf="daily_tip"]') || {}).value || '';
+      if (newFocus)   { day.focus = newFocus; day.type = newFocus; }
+      if (newDur > 0) day.duration_minutes = newDur;
+      if (newTip)     day.daily_tip = newTip;
+      day._edited = true;
+      focusDisp.querySelector('.ed-wo-focus-val').textContent    = day.focus || '—';
+      focusDisp.querySelector('.ed-wo-duration-val').textContent =
+        day.duration_minutes ? ' · ' + day.duration_minutes + ' min' : '';
+      dayEditForm.style.display = 'none';
+      _markPlanEdited(card);
+    });
+
+    dayEditForm.querySelector('.ed-form-cancel-btn').addEventListener('click', function() {
+      dayEditForm.style.display = 'none';
+    });
+
+    panel.appendChild(dayHdrEl);
+
+    var exLabel = document.createElement('div');
+    exLabel.className = 'erc-exp-sublabel';
+    exLabel.style.marginTop = '8px';
+    exLabel.textContent = 'Exercises:';
+    panel.appendChild(exLabel);
+
+    var exContainer = document.createElement('div');
+    exContainer.className = 'ed-meals-container';
+    (day.exercises || []).forEach(function(exercise) {
+      exContainer.appendChild(buildEditableExerciseEl(exercise, day, plan, card));
+    });
+    panel.appendChild(exContainer);
+
+    var addExBtn = document.createElement('button');
+    addExBtn.className = 'ed-add-meal-btn';
+    addExBtn.textContent = '➕ Add Exercise';
+    addExBtn.addEventListener('click', function() {
+      var newEx = { name: 'New Exercise', sets: 3, reps_or_duration: '10 reps', _edited: true };
+      day.exercises = day.exercises || [];
+      day.exercises.push(newEx);
+      day._edited = true;
+      var exEl = buildEditableExerciseEl(newEx, day, plan, card);
+      exContainer.appendChild(exEl);
+      var ef = exEl.querySelector('.ed-meal-edit-form');
+      if (ef) { ef.style.display = 'block'; var inp = ef.querySelector('[data-f="name"]'); if (inp) inp.focus(); }
+      _markPlanEdited(card);
+    });
+    panel.appendChild(addExBtn);
+
+    panelsDiv.appendChild(panel);
+  });
+  wrap.appendChild(panelsDiv);
+
+  /* Day pill switcher */
+  pillsDiv.addEventListener('click', function(e) {
+    var pill = e.target.closest('[data-ep-wo-day-pill]');
+    if (!pill) return;
+    var idx = parseInt(pill.dataset.epWoDayPill, 10);
+    pillsDiv.querySelectorAll('[data-ep-wo-day-pill]').forEach(function(p) { p.classList.remove('active'); });
+    pill.classList.add('active');
+    panelsDiv.querySelectorAll('[data-wo-day-el]').forEach(function(c) {
+      c.style.display = parseInt(c.dataset.woDayEl, 10) === idx ? 'block' : 'none';
+    });
+  });
+
+  var saveBtn = document.createElement('button');
+  saveBtn.className = 'ed-save-changes-btn';
+  saveBtn.textContent = '💾 Save Changes';
+  saveBtn.disabled = true;
+  card._saveChangesBtn = saveBtn;
+  wrap.appendChild(saveBtn);
+
+  return wrap;
+}
+
+/* Build workoutChangeHistory by diffing original plan against expert-edited plan */
+function buildWorkoutChangeHistory(origPlan, newPlan, expertName) {
+  var history  = [];
+  var DAY_NAMES = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+  var now      = new Date().toISOString();
+
+  var origDays = (origPlan && (origPlan.weekly_plan || origPlan.days)) || [];
+  var newDays  = (newPlan  && (newPlan.weekly_plan  || newPlan.days))  || [];
+  if (!newDays.length) return history;
+
+  newDays.forEach(function(day, di) {
+    if (!day._edited) return;
+    var origDay = origDays[di];
+    history.push({
+      dayIndex:    di,
+      dayLabel:    DAY_NAMES[di] || ('Day ' + (di + 1)),
+      oldWorkout:  origDay ? {
+        focus:             origDay.focus || origDay.type || '',
+        duration_minutes:  origDay.duration_minutes || 0,
+        exercises:         (origDay.exercises || []).map(function(e) {
+          return { name: e.name, sets: e.sets, reps_or_duration: e.reps_or_duration };
+        }),
+      } : null,
+      newWorkout:  {
+        focus:             day.focus || day.type || '',
+        duration_minutes:  day.duration_minutes || 0,
+        exercises:         (day.exercises || []).map(function(e) {
+          return { name: e.name, sets: e.sets, reps_or_duration: e.reps_or_duration };
+        }),
+      },
+      modifiedBy: expertName,
+      modifiedAt: now,
+    });
+  });
+  return history;
+}
+
 function savePlanEdits(reviewId, card, expert) {
   var all = [];
   try { all = JSON.parse(localStorage.getItem('expert_plan_reviews') || '[]'); } catch (_) {}
   var idx = all.findIndex(function(r) { return r.id === reviewId; });
   if (idx === -1) return;
 
-  var mealChangeHistory = buildMealChangeHistory(all[idx].planData, card._editedPlan, expert.name);
+  var _rev = all[idx];
+  var _origForDiff = _rev.planData;
 
-  all[idx].reviewedDietPlan  = card._editedPlan;
-  all[idx].mealChangeHistory = mealChangeHistory;
-  all[idx].status            = 'review_completed';
-  all[idx].reviewedAt        = new Date().toISOString();
-  all[idx].completedAt       = new Date().toISOString();
-  all[idx].expertId          = expert.id;
-  all[idx].expertName        = expert.name;
+  /* Detect workout review — normalise: old reviews used planReviewType, new ones reviewType */
+  var _revType = _rev.reviewType || _rev.planReviewType || '';
+  var _isWorkoutReview = _revType === 'workout' ||
+    (_revType === '' && card._editedWorkoutPlan !== undefined);
+
+  console.log("SAVE PLAN EDITS CARD", card);
+  console.log("EDITED WORKOUT", card._editedWorkoutPlan);
+  console.log("REVIEW BEFORE SAVE", _rev);
+  console.log("REVIEW OBJECT", _rev);
+  console.log("[savePlanEdits] reviewType:", _rev.reviewType, "| planReviewType:", _rev.planReviewType, "| _revType:", _revType, "| _isWorkoutReview:", _isWorkoutReview);
+
+  if (_isWorkoutReview) {
+    if (_origForDiff && (_origForDiff.originalWorkoutPlan || _origForDiff.currentWorkoutPlan)) {
+      _origForDiff = _origForDiff.originalWorkoutPlan || _origForDiff.currentWorkoutPlan;
+    }
+    var workoutChangeHistory = buildWorkoutChangeHistory(_origForDiff, card._editedWorkoutPlan, expert.name);
+    console.log("WORKOUT HISTORY", workoutChangeHistory);
+    _rev.reviewedWorkoutPlan  = card._editedWorkoutPlan || null;
+    _rev.workoutChangeHistory = workoutChangeHistory;
+  } else {
+    if (_origForDiff && (_origForDiff.originalDietPlan || _origForDiff.currentDietPlan)) {
+      _origForDiff = _origForDiff.originalDietPlan || _origForDiff.currentDietPlan;
+    }
+    var mealChangeHistory = buildMealChangeHistory(_origForDiff, card._editedPlan, expert.name);
+    console.log("[REVIEW BEFORE SAVE]", _rev);
+    console.log("[REVIEW planData]", _rev.planData);
+    console.log("[REVIEW reviewedDietPlan]", card._editedPlan);
+    console.log("[REVIEW mealChangeHistory]", mealChangeHistory);
+    _rev.reviewedDietPlan  = card._editedPlan;
+    _rev.mealChangeHistory = mealChangeHistory;
+  }
+
+  _rev.status      = 'review_completed';
+  _rev.reviewedAt  = new Date().toISOString();
+  _rev.completedAt = new Date().toISOString();
+  _rev.expertId    = expert.id;
+  _rev.expertName  = expert.name;
 
   try { localStorage.setItem('expert_plan_reviews', JSON.stringify(all)); } catch (_) {}
+  var _updatedReview = (JSON.parse(localStorage.getItem('expert_plan_reviews') || '[]') || []).find(function(r) { return r.id === reviewId; }) || null;
+  console.log("REVIEW AFTER SAVE", _updatedReview);
+  console.log("[STORED REVIEW] reviewedWorkoutPlan present:", !!(_updatedReview && _updatedReview.reviewedWorkoutPlan));
+  console.log("[STORED REVIEW] workoutChangeHistory length:", _updatedReview && _updatedReview.workoutChangeHistory ? _updatedReview.workoutChangeHistory.length : 0);
 
   edShowToast('✅ Review saved — athlete will be notified.');
 
@@ -2239,9 +2614,11 @@ function buildPlanReviewCard(review, expert) {
   card.dataset.prId = review.id;
   card.dataset.prStatus = review.status || 'pending';
 
-  var typeIcon  = review.reviewType === 'diet' ? '🥗' : '💪';
-  var typeLabel = review.reviewType === 'diet' ? 'Diet Plan' : 'Workout Plan';
-  var typeCls   = review.reviewType === 'diet' ? 'pr-type--diet' : 'pr-type--workout';
+  /* Normalise: old reviews used planReviewType, new ones use reviewType */
+  var _rtype    = review.reviewType || review.planReviewType || 'diet';
+  var typeIcon  = _rtype === 'diet' ? '🥗' : '💪';
+  var typeLabel = _rtype === 'diet' ? 'Diet Plan' : 'Workout Plan';
+  var typeCls   = _rtype === 'diet' ? 'pr-type--diet' : 'pr-type--workout';
   var sb        = statusBadge(review.status);
   var submittedAt = review.createdAt ? formatDate(review.createdAt) : '';
   var notesHtml   = review.expertNotes
@@ -2315,25 +2692,37 @@ function buildPlanReviewCard(review, expert) {
   planSection.className = 'erc-exp-section';
   var planLabelEl = document.createElement('div');
   planLabelEl.className = 'erc-exp-label';
-  planLabelEl.textContent = review.reviewType === 'diet'
+  /* _rtype already normalised above */
+  planLabelEl.textContent = _rtype === 'diet'
     ? (st === 'accepted' ? '✏ Edit Diet Plan Below' : 'Diet Plan to Review')
-    : 'Workout Plan to Review';
+    : ((st === 'pending' || st === 'accepted') ? '✏ Edit Workout Plan Below' : 'Workout Plan to Review');
   planSection.appendChild(planLabelEl);
 
-  if (review.reviewType === 'diet' && review.planData && (st === 'pending' || st === 'accepted')) {
+  if (_rtype === 'diet' && review.planData && (st === 'pending' || st === 'accepted')) {
     /* Editable plan */
     planSection.appendChild(buildEditableDietPlanEl(review, card));
-  } else if (review.reviewType === 'diet' && review.planData) {
+  } else if (_rtype === 'diet' && review.planData) {
     /* Read-only for completed/rejected */
+    var _roPlan = review.planData;
+    if (_roPlan && (_roPlan.originalDietPlan || _roPlan.currentDietPlan)) {
+      _roPlan = _roPlan.currentDietPlan || _roPlan.originalDietPlan;
+    }
     var roWrap = document.createElement('div');
     roWrap.className = 'erc-plan-wrap';
-    roWrap.innerHTML = buildDietPlanHTML(review.planData);
+    roWrap.innerHTML = buildDietPlanHTML(_roPlan);
     planSection.appendChild(roWrap);
-  } else if (review.reviewType === 'workout' && review.planData) {
-    var woWrap = document.createElement('div');
-    woWrap.className = 'erc-plan-wrap';
-    woWrap.innerHTML = buildWorkoutPlanHTML(review.planData);
-    planSection.appendChild(woWrap);
+  } else if (_rtype === 'workout') {
+    /* Always render editable UI for pending/accepted — even when planData is null,
+       buildEditableWorkoutPlanEl handles it with an empty plan so card._editedWorkoutPlan
+       is always set, which savePlanEdits requires to detect workout vs diet review. */
+    if (st === 'pending' || st === 'accepted') {
+      planSection.appendChild(buildEditableWorkoutPlanEl(review, card));
+    } else if (review.planData) {
+      var woWrap = document.createElement('div');
+      woWrap.className = 'erc-plan-wrap';
+      woWrap.innerHTML = buildWorkoutPlanHTML(review.planData);
+      planSection.appendChild(woWrap);
+    }
   }
 
   expanded.appendChild(planSection);
@@ -2379,18 +2768,64 @@ function initPlanReviewCardInteractions(card, review, expert) {
       edShowToast('✅ Request accepted. Athlete can now chat with you.');
     }
 
-    /* Mark as Reviewed (Complete) */
+    /* Mark as Reviewed — write workout fields DIRECTLY to avoid any branching bug */
     var completeBtn = e.target.closest('.pr-complete-btn');
     if (completeBtn) {
       var prId = completeBtn.dataset.prId;
-      savePlanReviewStatus(prId, 'completed', { completedAt: new Date().toISOString(), expertId: expert.id });
-      var badge = card.querySelector('.erc-badge');
-      var sb = statusBadge('completed');
-      if (badge) { badge.textContent = sb.label; badge.className = 'erc-badge ' + sb.cls; }
-      var actions = card.querySelector('.erc-actions');
-      if (actions) actions.innerHTML = '<span class="erc-approved-stamp">✅ Review Complete</span>';
+
+      var _cAllRevs = [];
+      try { _cAllRevs = JSON.parse(localStorage.getItem('expert_plan_reviews') || '[]'); } catch (_e) {}
+      var _cIdx = _cAllRevs.findIndex(function(r) { return r.id === prId; });
+
+      console.log("CARD EDITED WORKOUT", card._editedWorkoutPlan);
+      console.log("CARD HISTORY", card._workoutChangeHistory);
+
+      if (_cIdx !== -1) {
+        var _cRev = _cAllRevs[_cIdx];
+        var _cType = _cRev.reviewType || _cRev.planReviewType || '';
+
+        console.log("REVIEW BEFORE SAVE", JSON.parse(JSON.stringify(_cRev)));
+
+        if (_cType === 'workout') {
+          /* Unwrap original plan for diff */
+          var _cOrig = _cRev.planData || null;
+          if (_cOrig && (_cOrig.originalWorkoutPlan || _cOrig.currentWorkoutPlan)) {
+            _cOrig = _cOrig.originalWorkoutPlan || _cOrig.currentWorkoutPlan;
+          }
+
+          /* reviewedWorkoutPlan = what the expert produced; fall back to planData if no edits */
+          var _cReviewedPlan = card._editedWorkoutPlan || _cOrig || null;
+          var _cHistory = buildWorkoutChangeHistory(_cOrig, card._editedWorkoutPlan, expert.name);
+
+          console.log("WORKOUT HISTORY", _cHistory);
+
+          _cRev.reviewedWorkoutPlan  = _cReviewedPlan;
+          _cRev.workoutChangeHistory = _cHistory;
+          _cRev.athleteAccepted      = false;
+        } else {
+          /* Diet review — use the existing savePlanEdits path */
+          savePlanEdits(prId, card, expert);
+        }
+
+        _cRev.status      = 'completed';
+        _cRev.reviewedAt  = new Date().toISOString();
+        _cRev.completedAt = new Date().toISOString();
+        _cRev.expertId    = expert.id;
+        _cRev.expertName  = expert.name;
+
+        try { localStorage.setItem('expert_plan_reviews', JSON.stringify(_cAllRevs)); } catch (_e) {}
+        var _cUpdated = _cAllRevs[_cIdx];
+        console.log("REVIEW AFTER SAVE", _cUpdated);
+        console.log("[STORED] reviewedWorkoutPlan present:", !!(_cUpdated && _cUpdated.reviewedWorkoutPlan));
+        console.log("[STORED] workoutChangeHistory length:", _cUpdated && _cUpdated.workoutChangeHistory ? _cUpdated.workoutChangeHistory.length : 0);
+      }
+
+      var _cBadge = card.querySelector('.erc-badge');
+      if (_cBadge) { _cBadge.textContent = 'Completed'; _cBadge.className = 'erc-badge status-completed'; }
+      var _cActions = card.querySelector('.erc-actions');
+      if (_cActions) _cActions.innerHTML = '<span class="erc-approved-stamp">✅ Review Sent to Athlete</span>';
       card.dataset.prStatus = 'completed';
-      edShowToast('✅ Review marked as complete.');
+      edShowToast('✅ Review saved — athlete will be notified.');
     }
 
     /* Reject */
@@ -2491,43 +2926,339 @@ function initPrSuggestModal() {
   }
 }
 
-function renderPlanReviews(expert) {
-  var wrap  = document.getElementById('planReviewsListWrap');
-  var empty = document.getElementById('planReviewsEmpty');
-  var badge = document.getElementById('prCountBadge');
-  if (!wrap) return;
+/* ══════════════════════════════════════════════
+   REVIEWS INBOX — tab-based, chat-first
+   ══════════════════════════════════════════════ */
+
+function renderInbox(expert) {
+  var list = document.getElementById('prInboxList');
+  if (!list) return;
 
   var reviews = getPlanReviews(expert.id);
 
-  if (!reviews.length) {
-    wrap.innerHTML = '';
-    if (empty) empty.style.display = '';
-    if (badge) badge.style.display = 'none';
+  /* Bucket by display-tab */
+  var pending    = reviews.filter(function(r) { return !r.status || r.status === 'pending'; });
+  var inProgress = reviews.filter(function(r) { return r.status === 'accepted' || r.status === 'in_progress' || r.status === 'expert_reviewing'; });
+  var completed  = reviews.filter(function(r) {
+    return r.status === 'completed' || r.status === 'review_completed' || r.status === 'rejected';
+  });
+
+  /* Update tab badges */
+  var badgePending    = document.getElementById('prTabBadgePending');
+  var badgeInProgress = document.getElementById('prTabBadgeInProgress');
+  if (badgePending) {
+    badgePending.textContent  = pending.length;
+    badgePending.style.display = pending.length ? 'inline-flex' : 'none';
+  }
+  if (badgeInProgress) {
+    badgeInProgress.textContent  = inProgress.length;
+    badgeInProgress.style.display = inProgress.length ? 'inline-flex' : 'none';
+  }
+
+  /* Also update main nav badge */
+  var navBadge = document.getElementById('navBadgeReviews');
+  if (navBadge) {
+    var total = pending.length + inProgress.length;
+    navBadge.textContent  = total;
+    navBadge.style.display = total ? 'inline-flex' : 'none';
+  }
+
+  /* Pick the correct bucket for the active tab */
+  var bucket;
+  if (_prInboxActiveTab === 'in_progress') bucket = inProgress;
+  else if (_prInboxActiveTab === 'completed') bucket = completed;
+  else bucket = pending;
+
+  /* Render cards */
+  list.innerHTML = '';
+
+  if (!bucket.length) {
+    var emptyMsgs = {
+      pending:     ['📋', 'No Pending Reviews', 'New athlete requests will appear here.'],
+      in_progress: ['💬', 'No Active Reviews', 'Accepted reviews open here for consultation.'],
+      completed:   ['✅', 'No Completed Reviews', 'Finished reviews are archived here.'],
+    };
+    var em = emptyMsgs[_prInboxActiveTab] || emptyMsgs.pending;
+    list.innerHTML =
+      '<div class="pr-inbox-empty">' +
+        '<span class="pr-inbox-empty-icon">' + em[0] + '</span>' +
+        '<p class="pr-inbox-empty-title">' + em[1] + '</p>' +
+        '<p class="pr-inbox-empty-sub">' + em[2] + '</p>' +
+      '</div>';
     return;
   }
 
-  if (empty) empty.style.display = 'none';
-  var pendingCount = reviews.filter(function(r) { return !r.status || r.status === 'pending' || r.status === 'expert_reviewing'; }).length;
-  if (badge) {
-    badge.textContent  = pendingCount;
-    badge.style.display = pendingCount > 0 ? 'inline-flex' : 'none';
-  }
-
-  wrap.innerHTML = '';
-  reviews.forEach(function(review) {
-    var card = buildPlanReviewCard(review, expert);
-    wrap.appendChild(card);
-    initPlanReviewCardInteractions(card, review, expert);
+  /* Sort newest first */
+  bucket = bucket.slice().sort(function(a, b) {
+    return new Date(b.createdAt || b.acceptedAt || 0) - new Date(a.createdAt || a.acceptedAt || 0);
   });
 
-  /* Listen for new plan reviews submitted from athlete side (cross-tab) */
-  if (!wrap._storageWired) {
-    wrap._storageWired = true;
+  bucket.forEach(function(review) {
+    var card = _prBuildInboxCard(review, expert);
+    list.appendChild(card);
+  });
+
+  /* Cross-tab live update */
+  if (!list._storageWired) {
+    list._storageWired = true;
     window.addEventListener('storage', function(e) {
-      if (e.key === 'expert_plan_reviews') renderPlanReviews(expert);
+      if (e.key === 'expert_plan_reviews') renderInbox(expert);
     });
   }
 }
+
+function _prBuildInboxCard(review, expert) {
+  var card = document.createElement('div');
+  card.className = 'pr-inbox-card';
+
+  var rtype     = review.reviewType || review.planReviewType || 'diet';
+  var typeLabel = rtype === 'workout' ? '💪 Workout Plan Review' : '🥗 Diet Plan Review';
+  var nameInit  = ((review.athleteName || review.userName || 'A').split(' ')
+                    .map(function(w) { return w[0] || ''; }).join('').slice(0, 2) || 'A').toUpperCase();
+  var displayName = review.athleteName || review.userName || 'Athlete';
+  var timeAgo     = review.createdAt ? _prTimeAgo(review.createdAt) : '';
+
+  var actionsHtml = '';
+  var st = review.status || 'pending';
+
+  if (st === 'pending') {
+    actionsHtml =
+      '<button class="pr-inbox-btn pr-inbox-btn--accept" data-pr-accept="' + esc(review.id) + '">✅ Accept Review</button>' +
+      '<button class="pr-inbox-btn pr-inbox-btn--reject" data-pr-reject="' + esc(review.id) + '">✕ Reject</button>';
+  } else if (st === 'accepted' || st === 'in_progress') {
+    actionsHtml =
+      '<button class="pr-inbox-btn pr-inbox-btn--accept" data-pr-editplan="' + esc(review.id) + '">✏️ Edit Plan</button>' +
+      '<button class="pr-inbox-btn pr-inbox-btn--chat" data-pr-openchat="' + esc(review.id) + '">💬 Chat</button>';
+  } else if (st === 'completed' || st === 'review_completed') {
+    actionsHtml = '<span class="pr-inbox-stamp pr-inbox-stamp--done">✅ Review Sent to Athlete</span>';
+  } else if (st === 'rejected') {
+    actionsHtml = '<span class="pr-inbox-stamp pr-inbox-stamp--rejected">✕ Rejected</span>';
+  }
+
+  card.innerHTML =
+    '<div class="pr-inbox-card-top">' +
+      '<div class="pr-inbox-avatar">' + esc(nameInit) + '</div>' +
+      '<div class="pr-inbox-info">' +
+        '<div class="pr-inbox-name">' + esc(displayName) + '</div>' +
+        '<div class="pr-inbox-meta">' +
+          '<span>' + typeLabel + '</span>' +
+          (timeAgo ? '<span class="pr-inbox-meta-dot">·</span><span>' + esc(timeAgo) + '</span>' : '') +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="pr-inbox-actions">' + actionsHtml + '</div>';
+
+  /* Wire actions */
+  card.addEventListener('click', function(e) {
+    var acceptEl = e.target.closest('[data-pr-accept]');
+    if (acceptEl) { _prAcceptReview(acceptEl.dataset.prAccept, review, expert); return; }
+
+    var rejectEl = e.target.closest('[data-pr-reject]');
+    if (rejectEl) { _prRejectReview(rejectEl.dataset.prReject, review, expert); return; }
+
+    var editEl = e.target.closest('[data-pr-editplan]');
+    if (editEl) {
+      try { sessionStorage.setItem('zitlas_modify_expert', JSON.stringify(expert)); } catch (_) {}
+      var rtype = review.reviewType || review.planReviewType || 'diet';
+      window.location.href = rtype === 'workout'
+        ? 'modify-workout.html?reviewId=' + encodeURIComponent(review.id)
+        : 'modify-diet.html?reviewId='    + encodeURIComponent(review.id);
+      return;
+    }
+
+    var chatEl = e.target.closest('[data-pr-openchat]');
+    if (chatEl) { _prOpenReviewChat(review, expert); return; }
+  });
+
+  return card;
+}
+
+function _prAcceptReview(reviewId, review, expert) {
+  var rtype  = review.reviewType || review.planReviewType || 'diet';
+  var convId = expert.id;
+
+  savePlanReviewStatus(reviewId, 'in_progress', {
+    acceptedAt: new Date().toISOString(),
+    expertId:   expert.id,
+    chatId:     convId,
+  });
+
+  /* Persist expert object so modify page can read it without re-importing EXPERT_DB */
+  try { sessionStorage.setItem('zitlas_modify_expert', JSON.stringify(expert)); } catch (_) {}
+
+  /* Navigate straight to the modify page */
+  window.location.href = rtype === 'workout'
+    ? 'modify-workout.html?reviewId=' + encodeURIComponent(reviewId)
+    : 'modify-diet.html?reviewId='    + encodeURIComponent(reviewId);
+}
+
+function _prRejectReview(reviewId, review, expert) {
+  savePlanReviewStatus(reviewId, 'rejected');
+  edShowToast('Review rejected.');
+  renderInbox(expert);
+}
+
+function _prOpenReviewChat(review, expert) {
+  var convId      = review.chatId || expert.id;
+  var athleteName = review.athleteName || review.userName || 'Athlete';
+  _edCurrentReview = review;
+  openExpertChat(convId, athleteName);
+}
+
+/* ── Review Tools (Modify Plan + Complete Review) ── */
+
+function initReviewTools(expert) {
+  /* Modify Plan button */
+  var modifyBtn = document.getElementById('edRtModify');
+  if (modifyBtn) {
+    modifyBtn.addEventListener('click', function() {
+      if (!_edCurrentReview) return;
+      _prOpenEditSheet(_edCurrentReview, expert);
+    });
+  }
+
+  /* Complete Review button → show confirmation */
+  var completeBtn = document.getElementById('edRtComplete');
+  var backdrop    = document.getElementById('edCompleteReviewBackdrop');
+  var cancelBtn   = document.getElementById('edCompleteReviewCancel');
+  var confirmBtn  = document.getElementById('edCompleteReviewConfirm');
+
+  if (completeBtn && backdrop) {
+    completeBtn.addEventListener('click', function() {
+      if (!_edCurrentReview) return;
+      backdrop.style.display = 'flex';
+    });
+  }
+  if (cancelBtn && backdrop) {
+    cancelBtn.addEventListener('click', function() { backdrop.style.display = 'none'; });
+  }
+  if (backdrop) {
+    backdrop.addEventListener('click', function(e) {
+      if (e.target === backdrop) backdrop.style.display = 'none';
+    });
+  }
+  if (confirmBtn && backdrop) {
+    confirmBtn.addEventListener('click', function() {
+      backdrop.style.display = 'none';
+      if (!_edCurrentReview) return;
+      _prCompleteReviewFromChat(_edCurrentReview, expert);
+    });
+  }
+}
+
+function _prCompleteReviewFromChat(review, expert) {
+  /* Re-read the review fresh — it may have been updated by the edit sheet */
+  var all = [];
+  try { all = JSON.parse(localStorage.getItem('expert_plan_reviews') || '[]'); } catch (_) {}
+  var fresh = all.find(function(r) { return r.id === review.id; }) || review;
+  var idx   = all.findIndex(function(r) { return r.id === review.id; });
+  if (idx === -1) return;
+
+  var rtype = fresh.reviewType || fresh.planReviewType || '';
+  if (rtype === 'workout') {
+    /* Build workout change history from the edit card if one exists */
+    if (_prEditCard && _prEditCard._editedWorkoutPlan) {
+      var _origForDiff = fresh.planData || null;
+      if (_origForDiff && (_origForDiff.originalWorkoutPlan || _origForDiff.currentWorkoutPlan)) {
+        _origForDiff = _origForDiff.originalWorkoutPlan || _origForDiff.currentWorkoutPlan;
+      }
+      var wHistory = buildWorkoutChangeHistory(_origForDiff, _prEditCard._editedWorkoutPlan, expert.name);
+      all[idx].reviewedWorkoutPlan  = _prEditCard._editedWorkoutPlan;
+      all[idx].workoutChangeHistory = wHistory;
+      all[idx].athleteAccepted      = false;
+    }
+  } else {
+    if (_prEditCard && (_prEditCard._editedDietPlan || _prEditCard._hasEdits)) {
+      savePlanEdits(review.id, _prEditCard, expert);
+      /* savePlanEdits already writes to localStorage, re-read */
+      try { all = JSON.parse(localStorage.getItem('expert_plan_reviews') || '[]'); idx = all.findIndex(function(r) { return r.id === review.id; }); } catch (_) {}
+    }
+  }
+
+  all[idx].status      = 'completed';
+  all[idx].reviewedAt  = new Date().toISOString();
+  all[idx].expertName  = expert.name;
+  try { localStorage.setItem('expert_plan_reviews', JSON.stringify(all)); } catch (_) {}
+
+  /* Send completion message in chat */
+  var convId    = fresh.chatId || expert.id;
+  var rTypeLabel = rtype === 'workout' ? 'workout' : 'diet';
+  chatAppendMessage(convId, {
+    id:         'sys_complete_' + Date.now(),
+    senderType: 'system',
+    type:       'review_complete',
+    text:       '✅ Review Completed — ' + expert.name + ' has finished reviewing your ' + rTypeLabel + ' plan. Open your plan to accept the changes.',
+    timestamp:  new Date().toISOString(),
+  });
+
+  /* Hide review tools */
+  var tools = document.getElementById('edReviewTools');
+  if (tools) tools.style.display = 'none';
+  _edCurrentReview = null;
+  _prEditCard      = null;
+
+  edShowToast('✅ Review sent to athlete.');
+  renderInbox(expert);
+}
+
+/* ── Plan Edit Sheet (Modify Plan from chat) ── */
+
+var _prEditCard = null; /* holds _editedWorkoutPlan / _editedDietPlan after expert edits */
+
+function _prOpenEditSheet(review, expert) {
+  var overlay = document.getElementById('prEditOverlay');
+  var body    = document.getElementById('prEditBody');
+  var titleEl = document.getElementById('prEditTitle');
+  var backBtn = document.getElementById('prEditBack');
+  if (!overlay || !body) return;
+
+  var rtype = review.reviewType || review.planReviewType || 'diet';
+  if (titleEl) titleEl.textContent = rtype === 'workout' ? 'Modify Workout Plan' : 'Modify Diet Plan';
+
+  /* Build editable plan into a synthetic card object */
+  _prEditCard = {};
+  body.innerHTML = '';
+
+  var planEl;
+  if (rtype === 'workout') {
+    planEl = buildEditableWorkoutPlanEl(review, _prEditCard);
+  } else {
+    planEl = buildEditableDietPlanEl(review, _prEditCard);
+  }
+  if (planEl) body.appendChild(planEl);
+
+  overlay.style.display = 'flex';
+
+  /* Back button */
+  if (backBtn) {
+    backBtn.onclick = function() { overlay.style.display = 'none'; };
+  }
+
+  /* Wire the bottom Save Changes button (built by plan builder) to close the overlay */
+  if (_prEditCard._saveChangesBtn) {
+    var _origClick = _prEditCard._saveChangesBtn.onclick;
+    _prEditCard._saveChangesBtn.onclick = function(e) {
+      if (_origClick) _origClick.call(this, e);
+      overlay.style.display = 'none';
+      edShowToast('Changes saved. Click "Complete Review" to send to athlete.');
+    };
+  }
+}
+
+/* ── Utility: relative time ── */
+
+function _prTimeAgo(iso) {
+  var d = new Date(iso);
+  if (isNaN(d)) return '';
+  var diff = (Date.now() - d.getTime()) / 1000;
+  if (diff < 60)    return 'just now';
+  if (diff < 3600)  return Math.floor(diff / 60) + ' min ago';
+  if (diff < 86400) return Math.floor(diff / 3600) + ' hr ago';
+  return Math.floor(diff / 86400) + ' days ago';
+}
+
+/* Legacy alias — kept so any lingering references don't crash */
+function renderPlanReviews(expert) { renderInbox(expert); }
 
 /* ══════════════════════════════════════════════
    RENDER ALL — shared between Firebase and legacy paths
@@ -2540,12 +3271,39 @@ function renderAll(expert) {
   initNavigation();
   initLogout();
   initExpertChatOverlay();
-  initApproveModal();
-  initFilterTabs();
-  initPrSuggestModal();
-  renderPlanReviews(expert);
+  _initInboxTabs(expert);
+  renderInbox(expert);
   /* Live reviews + chats + stats (Firestore or localStorage fallback) */
   listenForReviews(expert);
+  /* Auto-open chat when returning from a modify page after completing review */
+  _prCheckPendingChatOpen(expert);
+}
+
+function _prCheckPendingChatOpen(expert) {
+  var pending = null;
+  try { pending = JSON.parse(sessionStorage.getItem('ed_open_chat') || 'null'); } catch (_) {}
+  if (!pending) return;
+  try { sessionStorage.removeItem('ed_open_chat'); } catch (_) {}
+  /* Switch to Chats section and open the conversation */
+  setTimeout(function() {
+    var chatsNav = document.querySelector('[data-section="chats"]');
+    if (chatsNav) chatsNav.click();
+    if (pending.convId) {
+      setTimeout(function() { openExpertChat(pending.convId, pending.athleteName || 'Athlete'); }, 120);
+    }
+  }, 200);
+}
+
+function _initInboxTabs(expert) {
+  var tabs = document.querySelectorAll('.pr-inbox-tab[data-inbox-tab]');
+  tabs.forEach(function(tab) {
+    tab.addEventListener('click', function() {
+      _prInboxActiveTab = tab.dataset.inboxTab;
+      tabs.forEach(function(t) { t.classList.remove('pr-inbox-tab--active'); });
+      tab.classList.add('pr-inbox-tab--active');
+      renderInbox(expert);
+    });
+  });
 }
 
 /* ══════════════════════════════════════════════

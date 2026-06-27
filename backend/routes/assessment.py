@@ -977,8 +977,15 @@ async def generate_plan(body: AssessmentInput) -> dict[str, Any]:
         )
 
     print(f"[ASSESS] RAG retrieval — fitness_goal={fitness_goal!r}")
-    diet_context,    diet_sources    = rag_service.retrieve_context(diet_query,    top_k=5, goal=fitness_goal)
-    workout_context, workout_sources = rag_service.retrieve_context(workout_query, top_k=5, goal=fitness_goal)
+    # Both KB lookups run in thread pool so the async event loop stays free.
+    # On first request for a goal type, this may take ~2s (disk load) or
+    # ~30-60s (PDF build) — a thread prevents blocking other requests.
+    diet_context, diet_sources = await asyncio.to_thread(
+        rag_service.retrieve_context, diet_query, 5, fitness_goal
+    )
+    workout_context, workout_sources = await asyncio.to_thread(
+        rag_service.retrieve_context, workout_query, 5, fitness_goal
+    )
 
     # Deduplicate sources by chunk_id
     seen: set[str] = set()

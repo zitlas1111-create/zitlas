@@ -3,6 +3,7 @@ ZITLAS — AI Routes
 All Groq-powered endpoints for the weight-loss and nutrition coaching platform.
 """
 
+import asyncio
 import json
 import traceback as _tb
 
@@ -134,9 +135,11 @@ async def chat(body: ChatRequest):
     - **user_context**: Optional dict with user profile data for personalised responses.
     - **module**: Which AI module to use (default: "general").
     """
-    # ── RAG: retrieve relevant chunks from weight-loss knowledge base ────────
+    # ── RAG: retrieve relevant chunks — non-blocking (KB loads lazily in thread) ─
     print(f"\n[CHAT] Query: {body.message[:120]!r}")
-    rag_context, sources = rag_service.retrieve_context(body.message)
+    rag_context, sources = await asyncio.to_thread(
+        rag_service.retrieve_context, body.message
+    )
 
     # ── Build user message (user_context + RAG context + question) ──────────
     user_message = body.message
@@ -673,8 +676,8 @@ async def swap_meal(body: SwapMealRequest) -> dict[str, Any]:
         f"high protein {(body.lifestyle_data or {}).get('diet_type', 'balanced')} meal"
     )
     rag_goal_filter = _rag_goal_map.get(fitness_goal)
-    rag_context, rag_sources = rag_service.retrieve_context(
-        swap_rag_query, top_k=3, goal=rag_goal_filter
+    rag_context, rag_sources = await asyncio.to_thread(
+        rag_service.retrieve_context, swap_rag_query, 3, rag_goal_filter
     )
     rag_pdf_names = [s["source_pdf"] for s in rag_sources]
     print(f"[SWAP RAG] using {rag_pdf_names if rag_pdf_names else 'no context'}")

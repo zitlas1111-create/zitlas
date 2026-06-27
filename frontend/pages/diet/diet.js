@@ -207,6 +207,87 @@
   }
 
   /* ══════════════════════════════════════════
+     DIET PLAN STORAGE — new schema
+     {originalDietPlan, currentDietPlan, expertModifications}
+
+     expertModifications shape:
+     { "<dayIndex>": { "<mealKey>": { modified, modifiedBy, modifiedAt, oldMeal, newMeal } } }
+
+     Legacy shape (backward-compat): {days: [...]}
+  ══════════════════════════════════════════ */
+  function _mealKey(mealName) {
+    return (mealName || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '_');
+  }
+
+  function isNewDietSchema(obj) {
+    return !!(obj && obj.originalDietPlan && obj.currentDietPlan);
+  }
+
+  function loadDietStorage() {
+    var raw = safeJSON('zitlas_diet_plan', null);
+    if (!raw) return null;
+    if (isNewDietSchema(raw)) return raw;
+    /* Auto-migrate legacy flat plan {days:[...]} into new schema and persist immediately
+       so every subsequent read (from any page) sees the correct structure. */
+    if (raw.days) {
+      var _migrated = {
+        originalDietPlan:    raw,
+        currentDietPlan:     raw,
+        expertModifications: {},
+        isExpertPlan:        false,
+        expertName:          null,
+        reviewedAt:          null,
+      };
+      saveDietStorage(_migrated);
+      return _migrated;
+    }
+    return null;
+  }
+
+  function saveDietStorage(storage) {
+    console.trace("[WRITE zitlas_diet_plan]", storage);
+    try { localStorage.setItem('zitlas_diet_plan', JSON.stringify(storage)); } catch (_) {}
+  }
+
+  /* Apply expertModifications on top of currentDietPlan, returns deep-cloned effective plan */
+  function buildEffectivePlan(storage) {
+    if (!storage) return null;
+    console.log(storage);
+    console.log(storage.expertModifications);
+    var base = storage.currentDietPlan || storage.originalDietPlan;
+    if (!base || !base.days) return base;
+    var mods      = storage.expertModifications || {};
+    var effective = JSON.parse(JSON.stringify(base));
+
+    effective.days.forEach(function (day, dayIdx) {
+      var dayMods = mods[String(dayIdx)];
+      console.log("[BUILD day]", dayIdx);
+      if (!dayMods) return;
+      console.log("[BUILD dayMods keys]", Object.keys(dayMods));
+      (day.meals || []).forEach(function (meal) {
+        var rawName = meal.meal_name || meal.name;
+        var mealKey = _mealKey(rawName);
+        var mod     = dayMods[mealKey];
+        console.log("[BUILD meal]", meal.meal_name, meal._expertModified, meal._modifiedBy);
+        console.log("[BUILD mealKey]", mealKey, "mod found:", !!mod);
+        if (!mod || !mod.modified) return;
+        if (mod.newMeal) {
+          if (mod.newMeal.foods)     meal.foods     = mod.newMeal.foods;
+          if (mod.newMeal.calories)  meal.calories  = mod.newMeal.calories;
+          if (mod.newMeal.protein_g) meal.protein_g = mod.newMeal.protein_g;
+        }
+        meal._expertModified = true;
+        meal._modifiedBy     = mod.modifiedBy || 'Expert';
+        meal._modifiedAt     = mod.modifiedAt || null;
+        console.log(meal);
+        console.log(meal._expertModified);
+        console.log(meal._modifiedBy);
+      });
+    });
+    return effective;
+  }
+
+  /* ══════════════════════════════════════════
      TOAST
   ══════════════════════════════════════════ */
   let toastTimer = null;
@@ -271,10 +352,19 @@
     const tagEl   = document.getElementById('focusTag');
     const pctEl   = document.getElementById('ringPct');
 
-    if (tagEl)   tagEl.textContent  = 'Your Weight-Loss Plan';
-    if (titleEl) titleEl.textContent = plan.plan_name || 'Personalised Weight-Loss Plan';
-    if (descEl)  descEl.innerHTML   = esc(plan.nutrition_focus || 'Designed to help you lose weight while maintaining energy, muscle mass and long-term health.');
-    if (pctEl)   pctEl.textContent  = nutritionScore ? nutritionScore + '%' : '—';
+    /* Dynamic goal tag — read from zitlas_goal, never hardcode */
+    var _goalFc   = safeJSON('zitlas_goal', null);
+    var _goalType = _goalFc ? (_goalFc.type || 'Weight Loss') : 'Weight Loss';
+    var _TAG_LABELS = {
+      'Weight Loss':     'Your Weight-Loss Plan',
+      'Muscle Gain':     'Your Muscle Gain Plan',
+      'General Fitness': 'Your General Fitness Plan',
+      'Transformation':  'Your Transformation Plan',
+    };
+    if (tagEl)   tagEl.textContent   = _TAG_LABELS[_goalType] || ('Your ' + _goalType + ' Plan');
+    if (titleEl) titleEl.textContent = plan.plan_name || (_goalType + ' Plan');
+    if (descEl)  descEl.innerHTML    = esc(plan.nutrition_focus || '');
+    if (pctEl)   pctEl.textContent   = nutritionScore ? nutritionScore + '%' : '—';
 
     /* Focus ring — animate to nutrition score */
     if (nutritionScore) {
@@ -285,7 +375,7 @@
     const hydrSection = document.getElementById('hydrationSection');
     const hydrVal     = document.getElementById('hydrationTarget');
     if (plan.hydration_daily_target && hydrSection && hydrVal) {
-      hydrVal.textContent  = plan.hydration_daily_target;
+      hydrVal.textContent       = plan.hydration_daily_target;
       hydrSection.style.display = 'block';
     }
 
@@ -293,7 +383,7 @@
     const notesSection = document.getElementById('weeklyNotesSection');
     const notesText    = document.getElementById('weeklyNotesText');
     if (plan.weekly_notes && notesSection && notesText) {
-      notesText.textContent  = plan.weekly_notes;
+      notesText.textContent       = plan.weekly_notes;
       notesSection.style.display = 'block';
     }
 
@@ -441,9 +531,24 @@
       const bg         = hexToRgba(meal.color || '#FF8A00', 0.13);
       const isModified = isExpertActive && meal._modified;
 
-      /* Build foods display (legacy old-system expert modification) */
+      /* Persistent expert modification stored in new schema (survives page reload) */
+      console.log(meal);
+      console.log(meal._expertModified);
+      console.log(meal._modifiedBy);
+      console.log("[RENDER]", meal.meal_name, meal.foods, meal._expertModified, meal._modifiedBy);
+      const isPersistMod = !!meal._expertModified || !!meal._modifiedBy;
+
+      /* Build foods display */
       let foodsHtml;
-      if (isModified) {
+      if (isPersistMod) {
+        /* New schema — expert modification persisted in zitlas_diet_plan */
+        const foods = (meal.foods || []).join(', ');
+        foodsHtml =
+          `<span class="meal-foods">${esc(foods)}</span>` +
+          `<span class="meal-expert-note">✏️ Modified by ${esc(meal._modifiedBy || 'Expert')}</span>` +
+          `<span class="meal-expert-note meal-expert-note--reviewed">✓ Reviewed by expert</span>`;
+      } else if (isModified) {
+        /* Legacy old-system expert modification */
         const origFoods = Array.isArray(meal._originalFoods) && meal._originalFoods.length
           ? meal._originalFoods.join(', ')
           : (meal._original || '');
@@ -457,8 +562,8 @@
         foodsHtml = `<span class="meal-foods">${esc(foods)}</span>`;
       }
 
-      /* Small attribution note for new-system expert-edited meals */
-      const isExpertEdited = isNewExpertPlan && meal._edited;
+      /* Small attribution note for new-system expert-edited meals (pending acceptance) */
+      const isExpertEdited = isNewExpertPlan && meal._edited && !isPersistMod;
       const expertName     = (activePlanReview && activePlanReview.expertName) || 'Expert';
       const mealLabel      = esc(translateMealName(meal.meal_name || 'meal'));
       const expertNote     = isExpertEdited
@@ -466,7 +571,7 @@
         : '';
 
       return `
-        <article class="meal-card${isLast ? ' meal-card--last' : ''}${isModified ? ' meal-card--expert' : ''}">
+        <article class="meal-card${isLast ? ' meal-card--last' : ''}${isModified || isPersistMod ? ' meal-card--expert' : ''}">
           <div class="meal-icon-circle" style="background:${bg};">
             <span class="meal-emoji">${esc(meal.emoji || '🍽️')}</span>
           </div>
@@ -707,14 +812,56 @@
       meals[idx] = Object.assign({}, meals[idx], {
         foods:   swap.foods   || meals[idx].foods,
         purpose: swap.reason  || swap.purpose || meals[idx].purpose,
+        /* Clear persistent expert modification flag since athlete chose their own replacement */
+        _expertModified: false,
+        _modifiedBy:     undefined,
+        _modifiedAt:     undefined,
       });
     }
 
-    try {
-      localStorage.setItem('zitlas_diet_plan', JSON.stringify(weeklyPlan));
-    } catch (_) {}
+    /* Persist swap in new storage schema */
+    var _swapStorage = loadDietStorage();
+    if (_swapStorage) {
+      /* Update currentDietPlan (the base without expert mods) with the athlete's swap */
+      var _basePlan = _swapStorage.currentDietPlan || _swapStorage.originalDietPlan;
+      if (_basePlan && _basePlan.days && _basePlan.days[currentDay]) {
+        var _baseMeals = _basePlan.days[currentDay].meals || [];
+        var _baseIdx   = _baseMeals.findIndex(function (m) {
+          return (m.meal_name || '').toLowerCase() === (_swapMealName || '').toLowerCase();
+        });
+        if (_baseIdx !== -1) {
+          var _s = (swappedMeal && swappedMeal.swap) || swappedMeal;
+          _baseMeals[_baseIdx] = Object.assign({}, _baseMeals[_baseIdx], {
+            foods:   _s.foods   || _baseMeals[_baseIdx].foods,
+            purpose: _s.reason  || _s.purpose || _baseMeals[_baseIdx].purpose,
+          });
+        }
+      }
+      /* Remove expert modification only for the swapped meal — leave all others intact */
+      var _dk = String(currentDay);
+      var _mk = _mealKey(_swapMealName);
+      if (_swapStorage.expertModifications && _swapStorage.expertModifications[_dk]) {
+        delete _swapStorage.expertModifications[_dk][_mk];
+        if (Object.keys(_swapStorage.expertModifications[_dk]).length === 0) {
+          delete _swapStorage.expertModifications[_dk];
+        }
+      }
+      /* Update planSource badge if all expert mods for all days are now cleared */
+      var _remainingMods = _swapStorage.expertModifications || {};
+      if (Object.keys(_remainingMods).length === 0) planSource = 'ai';
+      saveDietStorage(_swapStorage);
+    } else {
+      /* No storage existed — wrap the in-memory plan in the new schema so all future
+         reads and writes use the correct structure. */
+      saveDietStorage({
+        originalDietPlan:    weeklyPlan,
+        currentDietPlan:     weeklyPlan,
+        expertModifications: {},
+        isExpertPlan:        false,
+      });
+    }
 
-    /* A meal swap invalidates any active expert review — the plan is now athlete-modified */
+    /* Invalidate old-system expert review (if active) — the plan is now athlete-modified */
     if (expertReview) {
       clearExpertReview('meal swapped by athlete');
       renderFocusCard(weeklyPlan, null);
@@ -1238,7 +1385,6 @@
       renderExpertChangeSummary(updated);
       if (!updated.athleteAccepted) {
         showExpertReviewBanner(updated);
-        initExpertReviewBannerInteractions();
       }
       showToast('👨‍⚕️ Your nutritionist has reviewed your plan!', 4000);
     });
@@ -1260,6 +1406,51 @@
         _staleKeys.forEach(function (k) { localStorage.removeItem(k); });
         localStorage.removeItem('zitlas_diet_plan');
         localStorage.removeItem('zitlas_plan_generated_at');
+      }
+    }
+
+    /* ── New schema: zitlas_diet_plan with {originalDietPlan, currentDietPlan, expertModifications}
+          This takes priority over expert_plan_reviews so that athlete-accepted + possibly-swapped
+          plans are never overwritten by a stale review on reload.
+          (Legacy flat {days:[...]} falls through to the bottom of init.) ── */
+    var _rawDietStr = localStorage.getItem('zitlas_diet_plan');
+    if (_rawDietStr) {
+      var _isStaleNew = _STALE_MARKERS.some(function (m) { return _rawDietStr.toLowerCase().indexOf(m) !== -1; });
+      if (_isStaleNew) {
+        localStorage.removeItem('zitlas_diet_plan');
+        _rawDietStr = null;
+      }
+    }
+    if (_rawDietStr) {
+      console.log("[DIET INIT]", JSON.parse(localStorage.getItem("zitlas_diet_plan")));
+      var _parsedDiet = null;
+      try { _parsedDiet = JSON.parse(_rawDietStr); } catch (_) {}
+      if (_parsedDiet && (_parsedDiet.currentDietPlan !== undefined || _parsedDiet.originalDietPlan !== undefined)) {
+        console.log("[DIET expertModifications]", _parsedDiet.expertModifications);
+        var _effective = buildEffectivePlan(_parsedDiet);
+        if (_effective && _effective.days && _effective.days.length) {
+          var _hasMods = _parsedDiet.expertModifications && Object.keys(_parsedDiet.expertModifications).length > 0;
+          if (_hasMods || _parsedDiet.isExpertPlan) planSource = 'expert';
+          console.log(planSource);
+          console.log("[ALL REVIEWS]", JSON.parse(localStorage.getItem("expert_plan_reviews")));
+          console.log("[DIET STORAGE]", JSON.parse(localStorage.getItem("zitlas_diet_plan")));
+          weeklyPlan = normalizePlan(_effective);
+          showLoading(false);
+          renderPlanMeta();
+          renderFocusCard(weeklyPlan, null);
+          renderDay(currentDay);
+          renderVerifyNutriSection();
+          /* Check for a pending expert review even when the plan is already in new schema.
+             Without this, getCompletedPlanReview() is never reached and the accept banner
+             is never wired — so acceptExpertPlan() can never be called. */
+          var _pendingReview = getCompletedPlanReview();
+          console.log("[NEW SCHEMA] pending review", _pendingReview);
+          if (_pendingReview && !_pendingReview.athleteAccepted) {
+            activePlanReview = _pendingReview;
+            showExpertReviewBanner(_pendingReview);
+          }
+          return;
+        }
       }
     }
 
@@ -1309,7 +1500,9 @@
 
     /* ── Check expert_plan_reviews (new Verify Plan system) ── */
     var _newReview = getCompletedPlanReview();
+    console.log("[APPROVED REVIEW FOUND]", _newReview);
     if (_newReview && _newReview.reviewedDietPlan && _newReview.reviewedDietPlan.days) {
+      console.log("[USING REVIEW]", _newReview.reviewedDietPlan);
       planSource       = 'expert';
       activePlanReview = _newReview;
       weeklyPlan       = normalizePlan(_newReview.reviewedDietPlan);
@@ -1321,31 +1514,31 @@
       renderVerifyNutriSection();
       if (!_newReview.athleteAccepted) {
         showExpertReviewBanner(_newReview);
-        initExpertReviewBannerInteractions();
       }
       return;
     }
 
-    /* ── Load plan from canonical key (set by AI onboarding) ── */
-    var cached = safeJSON('zitlas_diet_plan', null);
-
-    /* Guard: ignore any plan still containing stale sport-specific keywords */
-    if (cached) {
-      var _cachedStr = JSON.stringify(cached).toLowerCase();
-      var _isStaleCache = _STALE_MARKERS.some(function (m) { return _cachedStr.indexOf(m) !== -1; });
-      if (_isStaleCache) {
-        console.log('[DIET CACHE] Stale sport-specific content in zitlas_diet_plan — discarding');
-        localStorage.removeItem('zitlas_diet_plan');
-        cached = null;
-      }
+    /* ── Load plan from canonical key — legacy flat format {days:[...]} ── */
+    /* _rawDietStr and _parsedDiet were already read and stale-checked above */
+    var _flatCached = null;
+    if (_rawDietStr) {
+      try { _flatCached = JSON.parse(_rawDietStr); } catch (_) {}
     }
 
-    /* ── Valid cached plan → normalize & render immediately ── */
-    if (cached && cached.days && cached.days.length) {
-      console.log('Active Diet', cached);
+    if (_flatCached && _flatCached.days && _flatCached.days.length) {
+      console.log('Active Diet', _flatCached);
       console.log('Current Goal', _goalData);
-      console.log('[DIET CACHE] Found saved diet — days:', cached.days.length);
-      weeklyPlan = normalizePlan(cached);
+      console.log('[DIET CACHE] Found legacy flat diet plan — days:', _flatCached.days.length);
+      /* Migrate flat plan to new schema immediately so every future read uses the correct format */
+      saveDietStorage({
+        originalDietPlan:    _flatCached,
+        currentDietPlan:     _flatCached,
+        expertModifications: {},
+        isExpertPlan:        false,
+        expertName:          null,
+        reviewedAt:          null,
+      });
+      weeklyPlan = normalizePlan(_flatCached);
       showLoading(false);
       renderPlanMeta();
       renderFocusCard(weeklyPlan, null);
@@ -1420,6 +1613,8 @@
           'nutrition_bottleneck', 'diet_rejected_foods',
           /* Expert review — zitlas_* prefix (current keys) */
           'zitlas_expert_review', 'zitlas_plan_versions', 'zitlas_review_request',
+          /* Expert review — new Verify Plan system */
+          'expert_plan_reviews',
           /* Expert review — legacy / alternate key names */
           'expert_review', 'expert_diet_override', 'reviewed_diet_plan',
           'modifiedBy', 'expertApproval', 'review_request',
@@ -1444,10 +1639,26 @@
 
     var calc = safeJSON('zitlas_calculations', {});
 
+    /* Derive goal-aware label strings so fallbacks match the user's actual goal */
+    var _gNorm = safeJSON('zitlas_goal', null);
+    var _gType = _gNorm ? (_gNorm.type || 'Weight Loss') : 'Weight Loss';
+    var _FOCUS_MAP = {
+      'Weight Loss':     'Personalised weight-loss plan designed to help you reach your goal weight.',
+      'Muscle Gain':     'Personalised muscle gain plan designed to help you build lean mass and strength.',
+      'General Fitness': 'Personalised general fitness plan designed to improve your health and endurance.',
+      'Transformation':  'Personalised transformation plan designed to recompose your body and build lean muscle.',
+    };
+    var _DAY_TYPE_MAP = {
+      'Weight Loss':     'Weight Loss Day',
+      'Muscle Gain':     'Muscle Gain Day',
+      'General Fitness': 'General Fitness Day',
+      'Transformation':  'Transformation Day',
+    };
+
     /* Top-level fields */
     plan.nutrition_focus = plan.nutrition_focus
       || plan.summary
-      || 'Personalised weight-loss plan designed to help you reach your goal weight.';
+      || (_FOCUS_MAP[_gType] || ('Personalised ' + _gType.toLowerCase() + ' plan.'));
 
     plan.hydration_daily_target = plan.hydration_daily_target
       || (calc.water_target_liters ? calc.water_target_liters + 'L per day' : null);
@@ -1460,7 +1671,7 @@
     var MEAL_EMOJIS = { breakfast:'🌅', 'mid-morning':'🥤', midmorning:'🥤', lunch:'🍽️', 'evening snack':'⚡', 'pre-training':'⚡', dinner:'🫕', recovery:'💪' };
 
     plan.days.forEach(function (day) {
-      day.day_type      = day.day_type      || 'Weight Loss Day';
+      day.day_type      = day.day_type      || (_DAY_TYPE_MAP[_gType] || (_gType + ' Day'));
       day.nutrition_tip = day.nutrition_tip || (day.meals && day.meals[0] && day.meals[0].tip ? day.meals[0].tip : '');
 
       if (day.meals) {
@@ -1605,11 +1816,23 @@
     } catch (_) {}
     if (!uid) uid = localStorage.getItem('zitlas_athlete_id');
 
+    /* Only match reviews whose planId aligns with the currently active plan.
+       If the active plan has an ID and the review carries a different (or absent)
+       ID, the review is stale and must not be shown. */
+    var activePlanId = localStorage.getItem('zitlas_plan_id') || null;
+
     return all.slice().reverse().find(function (r) {
-      return r.reviewType === 'diet' &&
-             r.status === 'review_completed' &&
+      var isCompleted    = r.status === 'review_completed' || r.status === 'completed';
+      var planIdMismatch = activePlanId && r.planId && r.planId !== activePlanId;
+      console.log("[PLAN CHECK]", "activePlanId:", activePlanId, "review.planId:", r.planId, "mismatch:", planIdMismatch);
+      console.log("[REVIEW]", r.id, r.status);
+      var _rtype = r.reviewType || r.planReviewType || 'diet';
+      console.log("[MATCH]", _rtype === 'diet', isCompleted, !!r.reviewedDietPlan, !planIdMismatch);
+      return _rtype === 'diet' &&
+             isCompleted &&
              r.reviewedDietPlan &&
-             (!uid || r.userId === uid);
+             (!uid || r.userId === uid) &&
+             !planIdMismatch;
     }) || null;
   }
 
@@ -1617,8 +1840,12 @@
      EXPERT REVIEW BANNER
   ══════════════════════════════════════════ */
   function showExpertReviewBanner(review) {
+    console.log("showExpertReviewBanner called", review);
     var banner = document.getElementById('expertReviewBanner');
-    if (!banner) return;
+    if (!banner) {
+      console.warn("showExpertReviewBanner: #expertReviewBanner not found in DOM");
+      return;
+    }
     var sub = document.getElementById('erBannerSub');
     if (sub) {
       sub.textContent = 'By ' + (review.expertName || 'Expert') +
@@ -1627,6 +1854,9 @@
           : '');
     }
     banner.style.display = 'flex';
+    /* Wire interactions here so the button is always ready immediately after the banner appears,
+       regardless of which code path called showExpertReviewBanner. */
+    initExpertReviewBannerInteractions();
   }
 
   function hideExpertReviewBanner() {
@@ -1635,8 +1865,11 @@
   }
 
   function initExpertReviewBannerInteractions() {
+    console.log("initExpertReviewBannerInteractions called");
     var viewBtn   = document.getElementById('erViewBtn');
     var acceptBtn = document.getElementById('erAcceptBtn');
+    console.log("acceptBtn", acceptBtn);
+    console.log("acceptBtn.onclick", acceptBtn ? acceptBtn.onclick : 'N/A (null element)');
     if (viewBtn) {
       viewBtn.onclick = function () {
         if (activePlanReview) openDietCompSheet(activePlanReview);
@@ -1644,13 +1877,129 @@
     }
     if (acceptBtn) {
       acceptBtn.onclick = function () {
+        console.log("ACCEPT BUTTON CLICKED");
         if (activePlanReview) acceptExpertPlan(activePlanReview);
       };
     }
   }
 
   function acceptExpertPlan(review) {
-    try { localStorage.setItem('zitlas_diet_plan', JSON.stringify(review.reviewedDietPlan)); } catch (_) {}
+    console.log("ACCEPT EXPERT PLAN CALLED");
+    console.log(review);
+
+    /* Build expertModifications — support multiple field name conventions from expert dashboard */
+    var _mods    = {};
+    var _history = review.mealChangeHistory || review.meal_change_history || review.changeHistory || review.changes || [];
+    var _expName = review.expertName || review.expert_name || 'Expert';
+
+    console.log("[REVIEW HISTORY]", review.mealChangeHistory);
+    console.log("[REVIEWED PLAN]", review.reviewedDietPlan);
+    console.log("_history", _history);
+
+    _history.forEach(function (change) {
+      /* Support both camelCase and snake_case field names */
+      var _rawDayIdx = change.dayIndex != null ? change.dayIndex : (change.day_index != null ? change.day_index : 0);
+      var _dk        = String(_rawDayIdx);
+      var _rawName   = change.mealName || change.meal_name || change.name || '';
+      var _mk        = _mealKey(_rawName);
+      if (!_mods[_dk]) _mods[_dk] = {};
+      _mods[_dk][_mk] = {
+        modified:   true,
+        modifiedBy: change.modifiedBy || change.modified_by || _expName,
+        modifiedAt: change.modifiedAt || change.modified_at || review.reviewedAt || new Date().toISOString(),
+        oldMeal: {
+          foods:     change.oldFoods  || change.old_foods  || [],
+          calories:  change.oldCalories  || change.old_calories  || null,
+          protein_g: change.oldProtein   || change.old_protein   || null,
+        },
+        newMeal: {
+          foods:     change.newFoods  || change.new_foods  || [],
+          calories:  change.newCalories || change.new_calories || null,
+          protein_g: change.newProtein  || change.new_protein  || null,
+        },
+      };
+    });
+
+    console.log("[MODS GENERATED]", _mods);
+
+    /* originalDietPlan = plan before expert touched it.
+       Prefer: existing stored original → review.planData → review.context.diet_plan (unwrap if new schema) */
+    var _existingStorage = loadDietStorage();
+    /* review.context.diet_plan may be in new-schema format — unwrap it */
+    var _contextRaw  = review.planData || (review.context && review.context.diet_plan) || null;
+    var _contextPlan = _contextRaw;
+    if (_contextRaw && (_contextRaw.originalDietPlan || _contextRaw.currentDietPlan)) {
+      _contextPlan = _contextRaw.originalDietPlan || _contextRaw.currentDietPlan;
+    }
+    var _originalPlan = (_existingStorage && _existingStorage.originalDietPlan)
+                     || (_existingStorage && _existingStorage.currentDietPlan)
+                     || _contextPlan
+                     || null;
+
+    /* Always scan reviewedDietPlan for _edited meals.
+       - Creates entries for meals missed by mealChangeHistory (history empty or key mismatch)
+       - Fixes entries where newFoods arrived empty from history (reviewedDietPlan is authoritative for foods) */
+    if (review.reviewedDietPlan) {
+      var _revDays  = review.reviewedDietPlan.days || [];
+      var _origDays = _originalPlan ? (_originalPlan.days || []) : [];
+      _revDays.forEach(function (revDay, dayIdx) {
+        (revDay.meals || []).forEach(function (revMeal, mealIdx) {
+          if (!revMeal._edited) return;
+          var _mealName = revMeal.meal_name || revMeal.name || '';
+          var _dk       = String(dayIdx);
+          var _mk       = _mealKey(_mealName);
+          var _origDay  = _origDays[dayIdx];
+          var _origMeal = _origDay ? (_origDay.meals || [])[mealIdx] : null;
+          if (!_mods[_dk]) _mods[_dk] = {};
+          if (!_mods[_dk][_mk]) {
+            /* Entry not built from history — create it from _edited flag */
+            _mods[_dk][_mk] = {
+              modified:   true,
+              modifiedBy: _expName,
+              modifiedAt: review.reviewedAt || new Date().toISOString(),
+              oldMeal: _origMeal
+                ? { foods: _origMeal.foods || [], calories: _origMeal.calories || null, protein_g: _origMeal.protein_g || null }
+                : { foods: [] },
+              newMeal: { foods: revMeal.foods || [], calories: revMeal.calories || null, protein_g: revMeal.protein_g || null },
+            };
+          } else {
+            /* Entry exists from history — fix foods if history had empty newFoods */
+            if (!_mods[_dk][_mk].newMeal) _mods[_dk][_mk].newMeal = {};
+            if (!_mods[_dk][_mk].newMeal.foods || !_mods[_dk][_mk].newMeal.foods.length) {
+              _mods[_dk][_mk].newMeal.foods = revMeal.foods || [];
+            }
+            if (!_mods[_dk][_mk].newMeal.calories && revMeal.calories) {
+              _mods[_dk][_mk].newMeal.calories = revMeal.calories;
+            }
+            if (!_mods[_dk][_mk].newMeal.protein_g && revMeal.protein_g) {
+              _mods[_dk][_mk].newMeal.protein_g = revMeal.protein_g;
+            }
+          }
+        });
+      });
+    }
+
+    console.log("_mods before save", _mods);
+    console.log("[FINAL MODS]", _mods);
+
+    saveDietStorage({
+      originalDietPlan:    _originalPlan || review.reviewedDietPlan,
+      currentDietPlan:     _originalPlan || review.reviewedDietPlan,
+      expertModifications: _mods,
+      isExpertPlan:        true,
+      expertName:          _expName,
+      reviewedAt:          review.reviewedAt || new Date().toISOString(),
+    });
+    console.log("AFTER SAVE", JSON.parse(localStorage.getItem("zitlas_diet_plan")));
+
+    /* Immediately rebuild in-memory plan so the UI reflects expert changes without a refresh */
+    var _acceptedStorage = loadDietStorage();
+    console.log("[ACCEPT] Storage", _acceptedStorage);
+    weeklyPlan = normalizePlan(buildEffectivePlan(_acceptedStorage));
+    planSource = 'expert';
+    console.log("[ACCEPT] WeeklyPlan", weeklyPlan);
+    console.log("[ACCEPT] Day", weeklyPlan && weeklyPlan.days && weeklyPlan.days[currentDay]);
+
     /* Mark accepted in expert_plan_reviews */
     var all = safeJSON('expert_plan_reviews', []);
     var idx = all.findIndex(function (r) { return r.id === review.id; });
@@ -1661,6 +2010,8 @@
     activePlanReview = Object.assign({}, review, { athleteAccepted: true });
     hideExpertReviewBanner();
     closeDietCompSheet();
+    renderFocusCard(weeklyPlan, null);
+    renderDay(currentDay);
     showToast("✅ Expert's plan saved to your diet!");
   }
 

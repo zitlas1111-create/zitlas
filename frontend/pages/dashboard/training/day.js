@@ -32,9 +32,23 @@
     } else {
       const weekly = normalizeWeeklyPlan(loaded.plan);
       console.log('[TRAINING] weekly days count:', weekly.length, '| dayIdx requested:', dayIdx);
-      const day = weekly[dayIdx];
+      let day = weekly[dayIdx];
       console.log('[DAY DATA]', day);
       if (!day) { showError(); return; }
+
+      /* Apply workoutModifications directly — belt-and-suspenders in case buildEffectiveWorkoutPlan
+         ran before the normalization rebuild (e.g. cold load with empty mods). */
+      const _wpStorage = JSON.parse(localStorage.getItem('zitlas_workout_plan') || 'null');
+      console.log('WORKOUT MODIFICATIONS', _wpStorage ? _wpStorage.workoutModifications : null);
+      const modification = _wpStorage &&
+        _wpStorage.workoutModifications &&
+        _wpStorage.workoutModifications[String(dayIdx)];
+      console.log('DAY MODIFICATION', modification || null);
+      if (modification && modification.modified && modification.newWorkout) {
+        day = Object.assign({}, day, modification.newWorkout);
+      }
+      console.log('FINAL DAY', day);
+
       renderFitnessDay(day, dayIdx, loaded.expertReview || null);
     }
   }
@@ -55,6 +69,41 @@
     try {
       return JSON.parse(localStorage.getItem('zitlas_roadmap')) || null;
     } catch { return null; }
+  }
+
+  /* Returns the newest workout review with workoutChangeHistory.
+     NEVER relies on array order — reviews are unshifted so newest is at index 0.
+     No status/accept filter: normalization syncs to latest expert edit regardless. */
+  function getLatestWorkoutReview(reviews) {
+    return (reviews || [])
+      .filter(function(r) {
+        return r.reviewType === 'workout' &&
+          r.workoutChangeHistory && r.workoutChangeHistory.length;
+      })
+      .sort(function(a, b) {
+        var aDate = new Date(a.reviewedAt || a.completedAt || a.createdAt || 0);
+        var bDate = new Date(b.reviewedAt || b.completedAt || b.createdAt || 0);
+        return bDate - aDate;
+      })[0] || null;
+  }
+
+  /* Used only for CASE 1 flat-schema migration — requires completion + athlete acceptance. */
+  function _getCompletedWorkoutReview() {
+    try {
+      var revs = JSON.parse(localStorage.getItem('expert_plan_reviews') || '[]');
+      var wRevs = revs
+        .filter(function(r) {
+          return r.reviewType === 'workout' &&
+            (r.status === 'completed' || r.status === 'review_completed') &&
+            (r.athleteAccepted === true || !!r.acceptedAt) &&
+            r.workoutChangeHistory && r.workoutChangeHistory.length > 0;
+        })
+        .sort(function(a, b) {
+          return new Date(b.reviewedAt || b.completedAt || b.acceptedAt || 0) -
+                 new Date(a.reviewedAt || a.completedAt || a.acceptedAt || 0);
+        });
+      return wRevs[0] || null;
+    } catch (_) { return null; }
   }
 
   /* ══════════════════════════════════════════
@@ -107,11 +156,117 @@
     /* 2. Fitness workout plan format */
     try {
       const wp = JSON.parse(localStorage.getItem('zitlas_workout_plan') || 'null');
-      if (wp && normalizeWeeklyPlan(wp).length) {
-        console.log('[TRAINING] zitlas_workout_plan:', normalizeWeeklyPlan(wp).length, 'days');
-        const result = { source: 'workout', plan: wp };
-        console.log('TRAINING PLAN LOADED', result.plan);
-        return result;
+      console.log('[TRAINING] zitlas_workout_plan raw', wp);
+      if (wp) {
+        /* New schema: {originalWorkoutPlan, currentWorkoutPlan, workoutModifications} */
+        if (wp.originalWorkoutPlan || wp.currentWorkoutPlan) {
+          /* Ensure currentWorkoutPlan is never null */
+          if (!wp.currentWorkoutPlan && wp.originalWorkoutPlan) wp.currentWorkoutPlan = wp.originalWorkoutPlan;
+
+          /* Sync workoutModifications to the NEWEST expert review.
+             Runs when storage has no mods (first time) OR when a newer review exists (re-edit).
+             Uses timestamp comparison so array insertion order is irrelevant. */
+          var _dayRevs = [];
+          try { _dayRevs = JSON.parse(localStorage.getItem('expert_plan_reviews') || '[]'); } catch (_) {}
+          var _dayLatestRev = getLatestWorkoutReview(_dayRevs);
+
+          console.log('ALL WORKOUT REVIEWS', (_dayRevs || [])
+            .filter(function(r) { return r.reviewType === 'workout' && r.workoutChangeHistory && r.workoutChangeHistory.length; })
+            .map(function(r) {
+              var ch = r.workoutChangeHistory;
+              return {
+                id: r.id, reviewedAt: r.reviewedAt, completedAt: r.completedAt, createdAt: r.createdAt,
+                modified: ch && ch[0] && ch[0].newWorkout && ch[0].newWorkout.exercises &&
+                          ch[0].newWorkout.exercises[0] && ch[0].newWorkout.exercises[0].name,
+              };
+            }));
+          var _daySelCh = _dayLatestRev && _dayLatestRev.workoutChangeHistory;
+          console.log('SELECTED REVIEW', _dayLatestRev && _dayLatestRev.id,
+            _daySelCh && _daySelCh[0] && _daySelCh[0].newWorkout && _daySelCh[0].newWorkout.exercises &&
+            _daySelCh[0].newWorkout.exercises[0] && _daySelCh[0].newWorkout.exercises[0].name);
+
+          if (_dayLatestRev) {
+            var _dayStoredTs = new Date(wp.reviewedAt || 0).getTime();
+            var _dayRevTs    = new Date(_dayLatestRev.reviewedAt || _dayLatestRev.completedAt || _dayLatestRev.createdAt || 0).getTime();
+            var _dayNoMods   = !wp.workoutModifications || !Object.keys(wp.workoutModifications).length;
+            if (_dayNoMods || _dayRevTs > _dayStoredTs) {
+              var _dayMods = {};
+              _dayLatestRev.workoutChangeHistory.forEach(function(change) {
+                if (change.dayIndex == null) return;
+                _dayMods[String(change.dayIndex)] = {
+                  modified:   true,
+                  modifiedBy: change.modifiedBy || _dayLatestRev.expertName || 'Expert',
+                  modifiedAt: change.modifiedAt || _dayLatestRev.reviewedAt || new Date().toISOString(),
+                  oldWorkout: change.oldWorkout || null,
+                  newWorkout: change.newWorkout || null,
+                };
+              });
+              wp.workoutModifications = _dayMods;
+              wp.isExpertPlan = true;
+              wp.expertName   = _dayLatestRev.expertName || 'Expert';
+              wp.reviewedAt   = _dayLatestRev.reviewedAt || new Date().toISOString();
+              try { localStorage.setItem('zitlas_workout_plan', JSON.stringify(wp)); } catch (_) {}
+            }
+          }
+
+          const hasMods = !!(wp.workoutModifications && Object.keys(wp.workoutModifications).length > 0);
+          console.log('[TRAINING] New workout schema detected | isExpertPlan:', wp.isExpertPlan, '| hasMods:', hasMods, '| by:', wp.expertName);
+          console.log('[BUILD EFFECTIVE WORKOUT] workoutModifications', wp.workoutModifications);
+          const effectivePlan = hasMods
+            ? buildEffectiveWorkoutPlan(wp)
+            : (wp.currentWorkoutPlan || wp.originalWorkoutPlan);
+          const days = normalizeWeeklyPlan(effectivePlan);
+          console.log('[TRAINING] Effective plan days:', days.length);
+          days.forEach(function(day, i) {
+            console.log('[RENDER WORKOUT DAY]', i, day);
+          });
+          return {
+            source: 'workout',
+            plan: effectivePlan,
+            expertReview: hasMods ? {
+              status:                  'APPROVED',
+              reviewedBy:              wp.expertName || 'Expert',
+              reviewedAt:              wp.reviewedAt || null,
+              isNewModificationSystem: true,
+            } : null,
+          };
+        }
+        /* Old flat schema — check for accepted workout review (CASE 1 recovery) */
+        if (normalizeWeeklyPlan(wp).length) {
+          const _acceptedRev = _getCompletedWorkoutReview();
+          if (_acceptedRev) {
+            console.log('[TRAINING] CASE 1 recovery: flat schema + accepted review. Migrating...');
+            const _mods = {};
+            (_acceptedRev.workoutChangeHistory || []).forEach(function(c) {
+              if (c.dayIndex == null) return;
+              _mods[String(c.dayIndex)] = {
+                modified: true, modifiedBy: c.modifiedBy || _acceptedRev.expertName || 'Expert',
+                modifiedAt: c.modifiedAt || _acceptedRev.reviewedAt || new Date().toISOString(),
+                oldWorkout: c.oldWorkout || null, newWorkout: c.newWorkout || null,
+              };
+            });
+            const _migrated = {
+              originalWorkoutPlan: wp, currentWorkoutPlan: JSON.parse(JSON.stringify(wp)),
+              workoutModifications: _mods, isExpertPlan: true,
+              expertName: _acceptedRev.expertName || 'Expert',
+              reviewedAt: _acceptedRev.reviewedAt || new Date().toISOString(),
+            };
+            try { localStorage.setItem('zitlas_workout_plan', JSON.stringify(_migrated)); } catch (_) {}
+            const _hasMods = Object.keys(_mods).length > 0;
+            const _eff = _hasMods ? buildEffectiveWorkoutPlan(_migrated) : (_migrated.currentWorkoutPlan);
+            return {
+              source: 'workout', plan: _eff,
+              expertReview: _hasMods ? {
+                status: 'APPROVED', reviewedBy: _migrated.expertName,
+                reviewedAt: _migrated.reviewedAt, isNewModificationSystem: true,
+              } : null,
+            };
+          }
+          console.log('[TRAINING] zitlas_workout_plan flat schema:', normalizeWeeklyPlan(wp).length, 'days');
+          const result = { source: 'workout', plan: wp };
+          console.log('TRAINING PLAN LOADED', result.plan);
+          return result;
+        }
       }
     } catch (_) {}
 
@@ -128,6 +283,26 @@
            wp.weekly_schedule ||
            wp.workout_days    ||
            [];
+  }
+
+  /* Apply workoutModifications on top of currentWorkoutPlan */
+  function buildEffectiveWorkoutPlan(storage) {
+    console.log('[BUILD EFFECTIVE WORKOUT] workoutModifications', storage.workoutModifications);
+    var plan = JSON.parse(JSON.stringify(storage.currentWorkoutPlan));
+    var mods = storage.workoutModifications || {};
+    var days = normalizeWeeklyPlan(plan);
+    days.forEach(function(day, idx) {
+      var mod = mods[String(idx)];
+      if (!mod) return;
+      var nw = mod.newWorkout || {};
+      if (nw.focus)            { day.focus = nw.focus; day.type = nw.focus; }
+      if (nw.duration_minutes) day.duration_minutes = nw.duration_minutes;
+      if (nw.exercises)        day.exercises = nw.exercises;
+      day._modified   = true;
+      day._modifiedBy = mod.modifiedBy;
+      day._modifiedAt = mod.modifiedAt;
+    });
+    return plan;
   }
 
   /* ══════════════════════════════════════════
@@ -544,14 +719,23 @@
     const existingBanner = el('tpExpertBanner');
     if (existingBanner) existingBanner.remove();
 
-    if (expertReview && expertReview.status === 'APPROVED') {
+    /* For new modification system, only show banner on days that were actually modified */
+    const showExpertBanner = expertReview && expertReview.status === 'APPROVED' &&
+      (!expertReview.isNewModificationSystem || !!day._modified);
+
+    if (showExpertBanner) {
+      /* Use per-day _modifiedBy (set by buildEffectiveWorkoutPlan) when available */
+      const _dayModifier = day._modifiedBy || reviewedBy;
+      const bannerLabel = day._modified
+        ? ('✏️ Modified by ' + escHtml(_dayModifier))
+        : ('✓ Reviewed by ' + escHtml(reviewedBy));
       const banner = document.createElement('div');
       banner.id        = 'tpExpertBanner';
       banner.className = 'tp-expert-banner';
       banner.innerHTML =
         '<span class="tp-expert-banner-icon">✓</span>' +
         '<div class="tp-expert-banner-text">' +
-          '<span class="tp-expert-banner-name">✓ Modified by ' + escHtml(reviewedBy) +
+          '<span class="tp-expert-banner-name">' + bannerLabel +
             (reviewedAt ? ' · ' + reviewedAt : '') + '</span>' +
           (expertNote ? '<span class="tp-expert-banner-note">' + escHtml(expertNote) + '</span>' : '') +
         '</div>';
