@@ -421,3 +421,12 @@ function showToast(msg) {
 
   if (window.ZitlasLang) window.ZitlasLang.applyTranslations();
 })();
+
+// Set --nav-h after navbar.js injects the element (DOMContentLoaded fires after all scripts run)
+document.addEventListener('DOMContentLoaded', function () {
+  var _nb = document.getElementById('zitlas-navbar');
+  if (_nb) {
+    var _h = window.innerHeight - _nb.getBoundingClientRect().top;
+    document.documentElement.style.setProperty('--nav-h', _h + 'px');
+  }
+});

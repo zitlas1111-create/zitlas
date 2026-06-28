@@ -1573,6 +1573,9 @@
       return;
     }
 
+    var _nb = document.getElementById('zitlas-navbar');
+    if (_nb) document.documentElement.style.setProperty('--nav-height', (window.innerHeight - _nb.getBoundingClientRect().top) + 'px');
+
     safeRun('loadFirebaseUserProfile', loadFirebaseUserProfile);
     safeRun('loadTheme',        loadTheme);
     safeRun('initGreeting',     initGreeting);

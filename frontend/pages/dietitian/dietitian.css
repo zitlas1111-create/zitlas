@@ -72,7 +72,8 @@ body {
   background-color: var(--bg);
   color: var(--text);
   min-height: 100vh;
-  padding-bottom: var(--nav-height);
+  min-height: 100dvh;
+  padding-bottom: calc(var(--nav-height) + env(safe-area-inset-bottom, 0px) + 30px);
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
   transition: background-color var(--transition), color var(--transition);
@@ -954,7 +955,7 @@ img { display: block; max-width: 100%; }
    ============================================= */
 .toast {
   position: fixed;
-  bottom: calc(var(--nav-height) + 8px);
+  bottom: calc(var(--nav-height) + env(safe-area-inset-bottom, 0px) + 8px);
   left: 50%;
   transform: translateX(-50%) translateY(14px);
   background: var(--card);

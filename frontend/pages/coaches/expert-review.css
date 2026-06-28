@@ -47,7 +47,8 @@ body {
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   min-height: 100vh;
-  padding-bottom: 100px;
+  min-height: 100dvh;
+  padding-bottom: calc(100px + env(safe-area-inset-bottom, 0px));
   -webkit-font-smoothing: antialiased;
   transition: background var(--transition), color var(--transition);
 }

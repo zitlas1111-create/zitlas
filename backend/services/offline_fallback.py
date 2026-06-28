@@ -722,18 +722,18 @@ def meal_swap(
         chosen = ["Roti", "Dal", "Sabzi"]
 
     print(f"[Offline] meal_swap: {meal_name} → {chosen} (source: {pool_source}, reason: {reason})")
+    reason_text = f"A practical replacement that fits your situation ({reason})."
     return {
-        "meal_name": meal_name,
-        "time":      meal_time or "—",
-        "emoji":     "🍽️",
-        "color":     "#22C55E",
-        "foods":     chosen,
-        "purpose":   f"A practical replacement that fits your situation ({reason}).",
-        "swap_note": (
-            "Selected from ZITLAS nutrition database — optimised for high protein and low calories."
-            if pool_source == "nutri_db"
-            else "Simple, accessible foods to keep you full while staying within your calorie target."
-        ),
+        "swap": {
+            "name":      f"{meal_name} Alternative",
+            "foods":     chosen,
+            "calories":  0,
+            "protein_g": 0,
+            "reason":    reason_text,
+        },
+        "alternative": None,
+        "tips":          [],
+        "calories_saved": 0,
     }
 
 

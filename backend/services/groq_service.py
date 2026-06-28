@@ -1973,12 +1973,7 @@ Avoid ALL previously suggested meals listed above. Keep it practical and filling
         provider="groq",
     )
 
-    try:
-        parsed = json.loads(result["reply"])
-        result["structured"] = parsed
-    except json.JSONDecodeError:
-        result["structured"] = None
-
+    result["structured"] = _extract_json(result["reply"])
     return result
 
 

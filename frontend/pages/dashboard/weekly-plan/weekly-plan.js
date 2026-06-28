@@ -34,6 +34,9 @@
      BOOT
   ══════════════════════════════════════════ */
   function init() {
+    var _nb = document.getElementById('zitlas-navbar');
+    if (_nb) document.documentElement.style.setProperty('--nav-height', (window.innerHeight - _nb.getBoundingClientRect().top) + 'px');
+
     const plan = loadPlan();
     if (!plan || !plan.days || !plan.days.length) {
       showError();

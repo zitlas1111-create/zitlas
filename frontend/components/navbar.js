@@ -95,7 +95,7 @@
   var NAV_CSS = [
     /* Container */
     '#zitlas-navbar{',
-      'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);',
+      'position:fixed;bottom:max(20px,env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);',
       'width:calc(100% - 40px);max-width:400px;height:64px;',
       'border-radius:24px;display:flex;align-items:center;justify-content:space-around;',
       'z-index:500;padding:0 6px;',

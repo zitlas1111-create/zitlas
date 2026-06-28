@@ -123,6 +123,9 @@ function goToProfile(id) {
    INIT
    ──────────────────────────────────────────── */
 function init() {
+  var _nb = document.getElementById('zitlas-navbar');
+  if (_nb) document.documentElement.style.setProperty('--nav-height', (window.innerHeight - _nb.getBoundingClientRect().top) + 'px');
+
   detectElite();
   renderCards(EXPERTS);
   bindFilters();

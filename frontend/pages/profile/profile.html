@@ -2,7 +2,7 @@
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>ZITLAS — Profile</title>
   <link rel="stylesheet" href="profile.css" />
   <script src="../../assets/js/i18n.js"></script>
@@ -17,6 +17,15 @@
   <header class="app-bar">
     <span class="logo-text">ZITLAS</span>
   </header>
+
+  <!-- EXPERT APPLICATION BANNER (shown when application is pending) -->
+  <div class="expert-applied-banner" id="expertAppliedBanner" style="display:none" role="status">
+    <span class="eab-icon">⏳</span>
+    <div class="eab-text">
+      <strong>Application Under Review</strong>
+      <p>Your application has already been submitted and is under review. We will notify you via email.</p>
+    </div>
+  </div>
 
   <!-- MAIN CONTENT -->
   <main class="main-content">

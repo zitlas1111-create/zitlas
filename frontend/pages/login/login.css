@@ -46,6 +46,7 @@ body {
   background-color: var(--bg);
   color: var(--text);
   min-height: 100vh;
+  min-height: 100dvh;
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
 }
@@ -743,11 +744,13 @@ img    { display: block; max-width: 100%; }
     display: flex;
     align-items: stretch;
     min-height: 100vh;
+    min-height: 100dvh;
   }
 
   .hero {
     flex: 1;
     min-height: 100vh;
+    min-height: 100dvh;
     padding: 0 48px;
     justify-content: center;
     position: sticky;
@@ -757,6 +760,7 @@ img    { display: block; max-width: 100%; }
   .login-card-section {
     flex: 0 0 480px;
     min-height: 100vh;
+    min-height: 100dvh;
     padding: 0 40px;
     display: flex;
     align-items: center;
@@ -1023,3 +1027,61 @@ img    { display: block; max-width: 100%; }
 }
 
 .grm-confirm-spinner { display: none; align-items: center; }
+
+/* ── Application Under Review panel ──────────────────────────────────────── */
+.grm-under-review {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 8px 0 4px;
+  gap: 10px;
+}
+
+.grm-review-icon {
+  font-size: 48px;
+  animation: grm-pulse 2s ease-in-out infinite;
+}
+
+@keyframes grm-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50%       { transform: scale(1.08); opacity: 0.8; }
+}
+
+.grm-review-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0;
+}
+
+.grm-review-sub {
+  font-size: 13px;
+  color: #FF8A00;
+  font-weight: 600;
+  margin: 0;
+}
+
+.grm-review-note {
+  font-size: 12px;
+  color: rgba(255,255,255,0.55);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.grm-review-home-btn {
+  margin-top: 8px;
+  width: 100%;
+  padding: 14px;
+  border-radius: 14px;
+  border: none;
+  background: linear-gradient(135deg, #FF8A00, #FFB347);
+  color: #000;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity .18s, transform .18s;
+}
+
+.grm-review-home-btn:hover  { opacity: .88; transform: translateY(-1px); }
+.grm-review-home-btn:active { transform: scale(.97); }

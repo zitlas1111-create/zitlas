@@ -3,14 +3,31 @@
 <head>
   <meta charset="UTF-8">
   <title>ZITLAS</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 </head>
 <body>
   <script>
-    if (localStorage.getItem("loggedIn")) {
-      window.location.href = "pages/dashboard/dashboard.html";
+    console.log("Current URL:", window.location.href);
+    console.trace("Redirect executed");
+    var isLoggedIn = !!(
+      localStorage.getItem("zitlas_token") ||
+      localStorage.getItem("zitlas_user")  ||
+      localStorage.getItem("user")          ||
+      sessionStorage.getItem("zitlas_guest")
+    );
+    console.log("[ZITLAS] index.html — isLoggedIn:", isLoggedIn,
+                "| token:", localStorage.getItem("zitlas_token"),
+                "| role:", localStorage.getItem("zitlas_user_role"));
+    if (isLoggedIn) {
+      var role = localStorage.getItem("zitlas_user_role");
+      var dest = (role === "expert")
+        ? "pages/experts/expert-dashboard.html"
+        : "pages/dashboard/dashboard.html";
+      console.log("[ZITLAS] index.html → redirecting to:", dest);
+      window.location.replace(dest);
     } else {
-      window.location.href = "pages/login/login.html";
+      console.log("[ZITLAS] index.html → redirecting to: pages/login/login.html");
+      window.location.replace("pages/login/login.html");
     }
   </script>
 </body>

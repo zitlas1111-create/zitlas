@@ -7,6 +7,7 @@ GET  /api/assessment/health        → service health check
 """
 
 import asyncio
+import gc
 import json
 import re
 import time
@@ -19,6 +20,15 @@ from services import groq_service, rag_service
 from services.assessment_service import AssessmentInput, run_assessment
 
 router = APIRouter()
+
+
+def _ram() -> str:
+    """Return current process RSS in MB as a log-friendly string."""
+    try:
+        import psutil as _psutil
+        return f"{_psutil.Process().memory_info().rss / 1024 / 1024:.1f} MB"
+    except Exception:
+        return "N/A"
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -690,7 +700,7 @@ Output valid JSON only — no extra text."""
         user_message=prompt,
         system_override=diet_system,
         temperature=0.5,
-        max_tokens=4000,
+        max_tokens=2500,
         json_mode=True,
         groq_key_env="GROQ_API_KEY_DIET",
         provider="groq_first",
@@ -866,7 +876,7 @@ Output valid JSON only — no extra text."""
         user_message=prompt,
         system_override=workout_system,
         temperature=0.5,
-        max_tokens=3500,
+        max_tokens=2500,
         json_mode=True,
         provider="groq_first",
     )
@@ -938,7 +948,9 @@ async def generate_plan(body: AssessmentInput) -> dict[str, Any]:
           f"target={calc['weight_loss_calories_kcal']} kcal  "
           f"protein={calc['protein_target_g']}g")
 
-    # ── Step 2: RAG retrieval (diet + workout in parallel) ───────────────────
+    print(f"[ASSESS] After assessment — RAM: {_ram()}")
+
+    # ── Step 2: RAG retrieval (sequential to keep only one KB in RAM at a time) ──
     if fitness_goal == "muscle_gain":
         diet_query = (
             f"muscle gain diet high protein calorie surplus {body.diet_preference} "
@@ -978,64 +990,82 @@ async def generate_plan(body: AssessmentInput) -> dict[str, Any]:
         )
 
     _t_rag = time.time()
-    print(f"[ASSESS] RAG start ({time.time()-_t0:.1f}s) — goal={fitness_goal!r}")
-    # Both KB lookups run in thread-pool workers so the async event loop stays free.
-    # Running them via asyncio.gather fires both concurrently; the per-goal lock in
-    # kb_manager serialises the actual KB load if both need the same goal (one loads,
-    # the other hits cache), but the FAISS searches overlap.
+    print(f"[ASSESS] RAG start ({time.time()-_t0:.1f}s) — goal={fitness_goal!r} (sequential)")
     diet_sources: list[dict] = []
     workout_sources: list[dict] = []
     diet_context = ""
     workout_context = ""
+
+    # Diet RAG — top_k=3 to reduce context size and memory pressure
     try:
-        (diet_context, diet_sources), (workout_context, workout_sources) = \
-            await asyncio.gather(
-                asyncio.to_thread(rag_service.retrieve_context, diet_query, 5, fitness_goal),
-                asyncio.to_thread(rag_service.retrieve_context, workout_query, 5, fitness_goal),
-            )
+        diet_context, diet_sources = await asyncio.to_thread(
+            rag_service.retrieve_context, diet_query, 3, fitness_goal
+        )
     except Exception as _rag_exc:
         _tb.print_exc()
-        print(f"[ASSESS] RAG FAILED ({time.time()-_t_rag:.1f}s): "
-              f"{type(_rag_exc).__name__}: {_rag_exc} — continuing with empty context")
+        print(f"[ASSESS] Diet RAG FAILED: {type(_rag_exc).__name__}: {_rag_exc}")
+    print(f"[ASSESS] After diet RAG — RAM: {_ram()}")
+
+    # Workout RAG — same KB is already cached, so second load is fast
+    try:
+        workout_context, workout_sources = await asyncio.to_thread(
+            rag_service.retrieve_context, workout_query, 3, fitness_goal
+        )
+    except Exception as _rag_exc:
+        _tb.print_exc()
+        print(f"[ASSESS] Workout RAG FAILED: {type(_rag_exc).__name__}: {_rag_exc}")
+    print(f"[ASSESS] After workout RAG ({time.time()-_t_rag:.1f}s) — RAM: {_ram()}")
 
     # Deduplicate sources by chunk_id
+    _n_diet_chunks    = len(diet_sources)
+    _n_workout_chunks = len(workout_sources)
     seen: set[str] = set()
     all_sources: list[dict] = []
     for src in diet_sources + workout_sources:
         if src["chunk_id"] not in seen:
             seen.add(src["chunk_id"])
             all_sources.append(src)
+    del seen, diet_sources, workout_sources
 
     print(f"[ASSESS] RAG done ({time.time()-_t_rag:.1f}s) — "
-          f"diet_chunks={len(diet_sources)}  "
-          f"workout_chunks={len(workout_sources)}  total_unique={len(all_sources)}")
+          f"total_unique={len(all_sources)}")
 
-    # ── Step 3 + 4: Generate plans in parallel ───────────────────────────────
+    # ── Step 3: Generate diet plan ───────────────────────────────────────────
     _t_llm = time.time()
-    print(f"[ASSESS] LLM generation start ({time.time()-_t0:.1f}s) — diet + workout in parallel")
-    _plan_results = await asyncio.gather(
-        _generate_diet_plan(body, calc, diet_context, fitness_goal),
-        _generate_workout_plan(body, calc, workout_context, fitness_goal),
-        return_exceptions=True,
-    )
-    print(f"[ASSESS] LLM done ({time.time()-_t_llm:.1f}s)")
-
-    _diet_raw, _workout_raw = _plan_results[0], _plan_results[1]
+    print(f"[ASSESS] Diet LLM start ({time.time()-_t0:.1f}s)")
     _empty_llm: dict = {"tokens_used": 0, "model": None, "reply": ""}
 
-    if isinstance(_diet_raw, Exception):
-        _tb.print_exception(type(_diet_raw), _diet_raw, _diet_raw.__traceback__)
-        print(f"[ASSESS] Diet LLM FAILED: {type(_diet_raw).__name__}: {_diet_raw}")
-        diet_structured, diet_llm_result = None, _empty_llm
-    else:
-        diet_structured, diet_llm_result = _diet_raw
+    diet_structured = None
+    diet_llm_result = _empty_llm
+    try:
+        diet_structured, diet_llm_result = await _generate_diet_plan(
+            body, calc, diet_context, fitness_goal
+        )
+    except Exception as _diet_exc:
+        _tb.print_exception(type(_diet_exc), _diet_exc, _diet_exc.__traceback__)
+        print(f"[ASSESS] Diet LLM FAILED: {type(_diet_exc).__name__}: {_diet_exc}")
 
-    if isinstance(_workout_raw, Exception):
-        _tb.print_exception(type(_workout_raw), _workout_raw, _workout_raw.__traceback__)
-        print(f"[ASSESS] Workout LLM FAILED: {type(_workout_raw).__name__}: {_workout_raw}")
-        workout_structured, workout_llm_result = None, _empty_llm
-    else:
-        workout_structured, workout_llm_result = _workout_raw
+    del diet_context
+    gc.collect()
+    print(f"[ASSESS] After diet LLM ({time.time()-_t_llm:.1f}s) — RAM: {_ram()}")
+
+    # ── Step 4: Generate workout plan ────────────────────────────────────────
+    _t_workout = time.time()
+    print(f"[ASSESS] Workout LLM start ({time.time()-_t0:.1f}s)")
+
+    workout_structured = None
+    workout_llm_result = _empty_llm
+    try:
+        workout_structured, workout_llm_result = await _generate_workout_plan(
+            body, calc, workout_context, fitness_goal
+        )
+    except Exception as _wo_exc:
+        _tb.print_exception(type(_wo_exc), _wo_exc, _wo_exc.__traceback__)
+        print(f"[ASSESS] Workout LLM FAILED: {type(_wo_exc).__name__}: {_wo_exc}")
+
+    del workout_context
+    gc.collect()
+    print(f"[ASSESS] After workout LLM ({time.time()-_t_workout:.1f}s) — RAM: {_ram()}")
 
     # ── Build response ───────────────────────────────────────────────────────
     diet_tokens    = diet_llm_result.get("tokens_used", 0)
@@ -1051,7 +1081,7 @@ async def generate_plan(body: AssessmentInput) -> dict[str, Any]:
     print(f"[ASSESS] Plans done ({time.time()-_t0:.1f}s total) — "
           f"diet_ok={diet_structured is not None}  "
           f"workout_ok={workout_structured is not None}  "
-          f"total_tokens={diet_tokens + workout_tokens}")
+          f"total_tokens={diet_tokens + workout_tokens}  RAM: {_ram()}")
 
     return {
         "assessment":   assessment_result["assessment"],
@@ -1061,10 +1091,10 @@ async def generate_plan(body: AssessmentInput) -> dict[str, Any]:
         "workout_plan": workout_structured,
         "sources":      all_sources,
         "meta": {
-            "diet_model":       diet_llm_result.get("model"),
-            "workout_model":    workout_llm_result.get("model"),
-            "total_tokens":     diet_tokens + workout_tokens,
-            "rag_diet_chunks":  len(diet_sources),
-            "rag_workout_chunks": len(workout_sources),
+            "diet_model":         diet_llm_result.get("model"),
+            "workout_model":      workout_llm_result.get("model"),
+            "total_tokens":       diet_tokens + workout_tokens,
+            "rag_diet_chunks":    _n_diet_chunks,
+            "rag_workout_chunks": _n_workout_chunks,
         },
     }

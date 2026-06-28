@@ -260,8 +260,19 @@
     });
   }
 
+  /* ---- Expert Application Pending Banner ---- */
+  function initExpertAppliedBanner() {
+    var applied = localStorage.getItem('zitlas_expert_applied');
+    if (!applied) return;
+    var banner = document.getElementById('expertAppliedBanner');
+    if (banner) banner.style.display = 'flex';
+  }
+
   /* ---- INIT ---- */
   function init() {
+    var _nb = document.getElementById('zitlas-navbar');
+    if (_nb) document.documentElement.style.setProperty('--nav-height', (window.innerHeight - _nb.getBoundingClientRect().top) + 'px');
+
     loadTheme();
     initSystemThemeWatcher();
     initAppearanceModal();
@@ -272,6 +283,7 @@
     initEditProfile();
     initNavItems();
     initAvatarFallback();
+    initExpertAppliedBanner();
   }
 
   if (document.readyState === 'loading') {

@@ -10,13 +10,13 @@ App opens at:
 """
 
 import asyncio
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 # Load environment variables from .env before anything else
@@ -53,9 +53,21 @@ async def lifespan(app: FastAPI):
     # Startup: initialize logger + environment only.
     # rag_service.initialize() is now a lightweight no-op that sets _is_ready=True.
     await asyncio.to_thread(rag_service.initialize)
-    # Pre-warm the most-used goal KB in the background so the first real
-    # request is fast instead of waiting 2-30s for a cold disk load.
-    asyncio.create_task(_prewarm_kb("weight_loss"))
+
+    try:
+        import psutil as _psutil
+        _rss = _psutil.Process().memory_info().rss / 1024 / 1024
+        print(f"[STARTUP] RAM at startup: {_rss:.1f} MB")
+    except Exception:
+        pass
+
+    # Skip KB pre-warm on memory-constrained deployments (e.g. Render free tier).
+    # Set DISABLE_KB_PREWARM=true in the environment to disable.
+    if os.getenv("DISABLE_KB_PREWARM", "false").lower() != "true":
+        asyncio.create_task(_prewarm_kb("weight_loss"))
+    else:
+        print("[STARTUP] KB pre-warm disabled (DISABLE_KB_PREWARM=true) — KBs load on first request")
+
     yield
 
 
@@ -90,12 +102,6 @@ app.include_router(support.router,    prefix="/api/support",    tags=["Support"]
 app.include_router(review.router,     prefix="/api/review",     tags=["Review"])
 app.include_router(system.router,     prefix="/api/system",     tags=["System"])
 app.include_router(chat.router,       prefix="/api/chat",       tags=["Chat"])
-
-# ── Root → dashboard ─────────────────────────────────────────────────────────
-@app.get("/", include_in_schema=False)
-async def root():
-    """Redirect bare domain to the dashboard page."""
-    return RedirectResponse(url="/pages/dashboard/dashboard.html")
 
 # ── Serve uploaded chat images ────────────────────────────────────────────────
 _UPLOADS_DIR = BASE_DIR / "uploads"

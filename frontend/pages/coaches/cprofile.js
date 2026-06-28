@@ -2436,11 +2436,17 @@
       _selectedType = null;
       [optDiet, optWorkout].forEach(function(b) { if (b) b.classList.remove('selected'); });
       if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Send for Review →'; }
+      var navbar = document.getElementById('zitlas-navbar');
+      if (navbar) {
+        var navOffset = window.innerHeight - navbar.getBoundingClientRect().top;
+        sheet.style.setProperty('--sheet-nav-offset', navOffset + 'px');
+      }
       sheet.classList.add('open');
       document.body.style.overflow = 'hidden';
     }
     function closeSheet() {
       sheet.classList.remove('open');
+      sheet.style.removeProperty('--sheet-nav-offset');
       document.body.style.overflow = '';
     }
 
@@ -2908,8 +2914,20 @@
     var sheetGallery = document.getElementById('chatSheetGallery');
     var sheetCancel  = document.getElementById('chatSheetCancel');
 
-    function openSheet()  { if (sheet) sheet.classList.add('open'); }
-    function closeSheet() { if (sheet) sheet.classList.remove('open'); }
+    function openSheet() {
+      if (!sheet) return;
+      var navbar = document.getElementById('zitlas-navbar');
+      if (navbar) {
+        var navOffset = window.innerHeight - navbar.getBoundingClientRect().top;
+        sheet.style.setProperty('--sheet-nav-offset', navOffset + 'px');
+      }
+      sheet.classList.add('open');
+    }
+    function closeSheet() {
+      if (!sheet) return;
+      sheet.classList.remove('open');
+      sheet.style.removeProperty('--sheet-nav-offset');
+    }
 
     if (attachBtn)    attachBtn.addEventListener('click', openSheet);
     if (sheetCancel)  sheetCancel.addEventListener('click', closeSheet);
@@ -3111,6 +3129,9 @@
   ══════════════════════════════════════════ */
   function init() {
     loadTheme();
+
+    var _nb = document.getElementById('zitlas-navbar');
+    if (_nb) document.documentElement.style.setProperty('--nav-height', (window.innerHeight - _nb.getBoundingClientRect().top) + 'px');
 
     var id    = getCoachId();
     var coach = COACH_DB[id];

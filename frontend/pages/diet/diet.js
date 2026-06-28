@@ -181,8 +181,9 @@
   ══════════════════════════════════════════ */
   let weeklyPlan        = null;   /* { days: [...], nutrition_focus, hydration_daily_target, weekly_notes } */
   let currentDay        = 0;      /* 0 = Monday */
-  let dietRejectedFoods = [];     /* persisted in localStorage — foods the player never wants to see again */
-  let expertReview      = null;   /* zitlas_expert_review — set when APPROVED plan exists */
+  let dietRejectedFoods    = [];   /* kept for backward-compat; no longer used in rejected_foods */
+  let _mealSwapHistories   = {};   /* per-meal accepted swap history { mealKey: [[foods], …] } */
+  let expertReview         = null; /* zitlas_expert_review — set when APPROVED plan exists */
   let planSource        = 'ai';   /* 'ai' | 'expert' — source of the currently displayed plan */
   let activePlanReview  = null;   /* expert_plan_reviews entry when planSource === 'expert' */
 
@@ -700,6 +701,12 @@
     showSwapPhase('swapPhaseA');
     const modal = document.getElementById('swapModal');
     if (modal) {
+      // Calculate navbar clearance so the sheet stops above the navbar
+      const navbar = document.getElementById('zitlas-navbar');
+      if (navbar) {
+        const navOffset = window.innerHeight - navbar.getBoundingClientRect().top;
+        modal.style.setProperty('--modal-nav-offset', navOffset + 'px');
+      }
       modal.classList.add('open');
       document.body.style.overflow = 'hidden';
     }
@@ -707,7 +714,10 @@
 
   function closeSwapModal() {
     const modal = document.getElementById('swapModal');
-    if (modal) modal.classList.remove('open');
+    if (modal) {
+      modal.classList.remove('open');
+      modal.style.removeProperty('--modal-nav-offset');
+    }
     document.body.style.overflow = '';
     showSwapPhase('swapPhaseA');
   }
@@ -716,11 +726,23 @@
     const athleteProfile = safeJSON('athlete_profile', {});
     const lifestyleData  = safeJSON('lifestyle_data', {});
 
-    /* Current meal foods are forbidden immediately — they're the reason for the swap */
-    const effectiveRejected = [...new Set([...dietRejectedFoods, ..._swapMealFoods])];
+    /* rejected_foods = ONLY the current meal's foods + this specific meal's prior swap
+       suggestions (max 15). Never includes foods from other meals, other days, or the
+       full weekly plan — that's what was causing the list to grow until nothing was valid. */
+    const _swapMealKey      = _mealKey(_swapMealName);
+    const _persistedHistory = _mealSwapHistories[_swapMealKey] || [];
+    const _historyFoods     = [...new Set(_persistedHistory.flat())];
+    const effectiveRejected = [...new Set([..._swapMealFoods, ..._historyFoods])].slice(0, 15);
 
-    console.log('[SWAP] Current Meal:', _swapMealFoods);
-    console.log('[SWAP] Rejected Foods:', effectiveRejected);
+    const fitnessGoal = athleteProfile.fitness_goal || 'general_fitness';
+
+    console.log('Current meal:', _swapMealFoods);
+    console.log('Meal swap history:', _persistedHistory);
+    console.log('Rejected foods sent to API:', effectiveRejected);
+    console.log('[SWAP] Fitness Goal:', fitnessGoal);
+
+    /* Substrings that indicate the LLM leaked prompt instructions into a food string */
+    const _MALFORMED = ['is forbidden', 'previously suggested', 'using'];
 
     const MAX_RETRIES = 2;
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -736,20 +758,35 @@
           lifestyle_data:       lifestyleData,
           rejected_foods:       effectiveRejected,
           previous_suggestions: _swapHistory,
+          fitness_goal:         fitnessGoal,
         }),
       });
 
       if (!resp.ok) throw new Error('API error ' + resp.status);
       const data = await resp.json();
-      if (!data.structured) throw new Error('No result');
+      console.log('[SWAP API]', data);
 
-      console.log('Swap API Response:', data);
-      console.log('Rendered Swap:', data.structured && data.structured.swap);
+      /* Accept both {structured:{swap:…}} and direct {swap:…} response shapes */
+      const meal = data.structured || (data.swap ? data : null);
+      if (!meal) throw new Error('No result');
+      console.log('[SWAP PARSED]', meal);
 
-      const meal = data.structured;
       if (!meal.swap) throw new Error('No swap in result');
 
-      const swapFoods      = meal.swap.foods || [];
+      /* Remove food strings where the LLM leaked forbidden-food instructions into the name */
+      const rawFoods   = meal.swap.foods || [];
+      const cleanFoods = rawFoods.filter(f => !_MALFORMED.some(p => f.toLowerCase().includes(p)));
+
+      if (cleanFoods.length === 0 && rawFoods.length > 0) {
+        /* Every food item was malformed — force a retry without counting as a valid suggestion */
+        console.warn('[SWAP] All foods malformed (attempt ' + (attempt + 1) + '/' + (MAX_RETRIES + 1) + ') — retrying');
+        _swapHistory.push(rawFoods);
+        continue;
+      }
+
+      meal.swap.foods = cleanFoods;
+
+      const swapFoods      = cleanFoods;
       const mealFoodsLower = swapFoods.map(f => f.toLowerCase());
       const rejectedLower  = effectiveRejected.map(f => f.toLowerCase());
 
@@ -913,6 +950,8 @@
           renderSwapResult(_swapResult);
           showSwapPhase('swapPhaseC');
         } catch (_e) {
+          console.error('[SWAP ERROR]', _e);
+          console.error(_e.stack);
           closeSwapModal();
           showToast("Couldn't find a swap right now — try again");
         }
@@ -924,14 +963,17 @@
     if (acceptBtn) {
       acceptBtn.addEventListener('click', () => {
         if (_swapResult) {
-          if (_swapMealFoods.length > 0) {
-            const newRejections = _swapMealFoods.filter(f => !dietRejectedFoods.includes(f));
-            if (newRejections.length > 0) {
-              dietRejectedFoods = [...dietRejectedFoods, ...newRejections];
-              try {
-                localStorage.setItem('diet_rejected_foods', JSON.stringify(dietRejectedFoods));
-              } catch (_) {}
+          /* Persist the accepted swap's foods to per-meal history so future swaps for THIS
+             meal avoid them. Capped at 5 entries per meal (≈ 15 foods max). */
+          const _mk       = _mealKey(_swapMealName);
+          const _newFoods = (_swapResult.swap && _swapResult.swap.foods) || [];
+          if (_newFoods.length) {
+            if (!_mealSwapHistories[_mk]) _mealSwapHistories[_mk] = [];
+            _mealSwapHistories[_mk].push(_newFoods);
+            if (_mealSwapHistories[_mk].length > 5) {
+              _mealSwapHistories[_mk] = _mealSwapHistories[_mk].slice(-5);
             }
+            try { localStorage.setItem('zitlas_meal_swap_history', JSON.stringify(_mealSwapHistories)); } catch (_) {}
           }
           applySwappedMeal(_swapResult);
           showToast('✅ Meal swapped! Those foods won\'t appear again.');
@@ -954,6 +996,8 @@
           renderSwapResult(_swapResult);
           showSwapPhase('swapPhaseC');
         } catch (_e) {
+          console.error('[SWAP ERROR]', _e);
+          console.error(_e.stack);
           closeSwapModal();
           showToast("Couldn't find a swap right now — try again");
         }
@@ -1361,6 +1405,13 @@
      MAIN INIT
   ══════════════════════════════════════════ */
   async function init() {
+    // Set --nav-height to actual navbar dimensions so body padding-bottom is correct
+    const _navbar = document.getElementById('zitlas-navbar');
+    if (_navbar) {
+      const _navHeight = window.innerHeight - _navbar.getBoundingClientRect().top;
+      document.documentElement.style.setProperty('--nav-height', _navHeight + 'px');
+    }
+
     loadTheme();
 
     initDaySelector();
@@ -1390,7 +1441,8 @@
     });
 
     /* Load persisted food restrictions */
-    dietRejectedFoods = safeJSON('diet_rejected_foods', []);
+    dietRejectedFoods  = safeJSON('diet_rejected_foods', []);
+    _mealSwapHistories = safeJSON('zitlas_meal_swap_history', {});
 
     /* ── Purge stale sport-specific meal plan data ── */
     var _staleKeys = ['nutrition_weekly_plan', 'athlete_profile',
@@ -1610,7 +1662,7 @@
           'zitlas_plan_generated_at', 'zitlas_plan_id', 'zitlas_roadmap', 'zitlas_goal', 'zitlas_survey',
           'nutrition_weekly_plan', 'athlete_profile', 'nutrition_assessment',
           'nutrition_scores', 'nutrition_swot', 'nutrition_recommendations',
-          'nutrition_bottleneck', 'diet_rejected_foods',
+          'nutrition_bottleneck', 'diet_rejected_foods', 'zitlas_meal_swap_history',
           /* Expert review — zitlas_* prefix (current keys) */
           'zitlas_expert_review', 'zitlas_plan_versions', 'zitlas_review_request',
           /* Expert review — new Verify Plan system */

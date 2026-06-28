@@ -438,19 +438,30 @@ function hideRoleModal() {
     if (confirmSpin) confirmSpin.style.display = 'flex';
 
     try {
+      /* Expert applicants are saved as 'expert_pending' until manually approved.
+         Athlete sign-ups proceed immediately. */
+      const firestoreRole = chosenRole === 'expert' ? 'expert_pending' : chosenRole;
+
       await ZitlasDB.collection('users').doc(user.uid).set({
         uid:        user.uid,
         name:       user.displayName  || '',
         email:      user.email        || '',
         photo_url:  user.photoURL     || null,
-        role:       chosenRole,
+        role:       firestoreRole,
         created_at: firebase.firestore.FieldValue.serverTimestamp(),
       });
 
-      syncFirebaseUser(user, chosenRole);
-      selectedRole = chosenRole;
-      hideRoleModal();
-      showLoginOverlay();
+      if (chosenRole === 'expert') {
+        /* Mark application pending in localStorage so profile.html can show the banner */
+        localStorage.setItem('zitlas_expert_applied', user.email || 'true');
+        /* Show "Application Under Review" panel — do NOT redirect to expert-dashboard */
+        showExpertApplicationReview(user.email);
+      } else {
+        syncFirebaseUser(user, chosenRole);
+        selectedRole = chosenRole;
+        hideRoleModal();
+        showLoginOverlay();
+      }
 
     } catch (err) {
       console.error('[ZITLAS] saveUserRole error:', err);
@@ -460,7 +471,38 @@ function hideRoleModal() {
       showToast('Failed to save account. Please try again.');
     }
   });
+
+  /* Wire "Continue as Athlete" button on the under-review panel */
+  const reviewHomeBtn = document.getElementById('grmReviewHomeBtn');
+  if (reviewHomeBtn) {
+    reviewHomeBtn.addEventListener('click', function () {
+      console.log('[ZITLAS] Under-review → continuing as athlete guest');
+      console.trace('Redirect executed');
+      sessionStorage.setItem('zitlas_guest', '1');
+      /* replace() so the back button does NOT return to the application form */
+      window.location.replace('../dashboard/dashboard.html');
+    });
+  }
 }());
+
+function showExpertApplicationReview(email) {
+  /* Hide the role-selection form elements */
+  ['grmUserStrip', 'grmTitle'].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+  document.querySelectorAll('.grm-sub, .grm-options, .grm-confirm-btn').forEach(function (el) {
+    el.style.display = 'none';
+  });
+
+  /* Update email line and show the under-review panel */
+  var emailEl = document.getElementById('grmReviewEmail');
+  if (emailEl && email) {
+    emailEl.textContent = 'Application submitted for ' + email;
+  }
+  var panel = document.getElementById('grmUnderReview');
+  if (panel) panel.style.display = 'flex';
+}
 
 /* ══════════════════════════════════════════════
    CREATE ACCOUNT / FORGOT PASSWORD

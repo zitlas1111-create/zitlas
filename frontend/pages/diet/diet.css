@@ -68,7 +68,9 @@ body {
   background-color: var(--bg);
   color: var(--text);
   min-height: 100vh;
-  padding-bottom: var(--nav-height);
+  min-height: 100dvh;
+  /* Clears the fixed navbar + iOS safe area + breathing room */
+  padding-bottom: calc(var(--nav-height) + env(safe-area-inset-bottom, 0px) + 30px);
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
   transition: background-color var(--transition), color var(--transition);
@@ -732,7 +734,7 @@ img { display: block; max-width: 100%; }
    DIET LOADING STATE
    ============================================= */
 .diet-loading {
-  min-height: calc(100vh - 80px);
+  min-height: calc(100dvh - 80px);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -937,7 +939,11 @@ img { display: block; max-width: 100%; }
    ============================================= */
 .modal-overlay {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  /* Stops at navbar top, never covers the navbar */
+  bottom: var(--modal-nav-offset, 0px);
   z-index: 200;
   background: rgba(0, 0, 0, 0.72);
   backdrop-filter: blur(8px);
@@ -961,9 +967,12 @@ img { display: block; max-width: 100%; }
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius) var(--radius) 0 0;
-  padding: 24px 20px 40px;
+  padding: 24px 20px 20px;
   width: 100%;
   max-width: 600px;
+  /* Limit height to available space above the navbar and allow scroll */
+  max-height: calc(100dvh - var(--modal-nav-offset, 84px) - 60px);
+  overflow-y: auto;
   transform: translateY(100%);
   transition: transform 0.36s cubic-bezier(0.34, 1.1, 0.64, 1), background 0.22s ease, border-color 0.22s ease;
   box-shadow: 0 -8px 40px rgba(0,0,0,0.45);
@@ -1552,7 +1561,7 @@ img { display: block; max-width: 100%; }
    ============================================= */
 .toast {
   position: fixed;
-  bottom: calc(var(--nav-height) + 8px);
+  bottom: calc(var(--nav-height) + env(safe-area-inset-bottom, 0px) + 8px);
   left: 50%;
   transform: translateX(-50%) translateY(14px);
   background: var(--card);
