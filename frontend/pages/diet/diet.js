@@ -37,7 +37,7 @@
       rating: 4.9,
       reviews: 142,
       available: true,
-      color: '#FF8A00',
+      color: 'var(--primary)',
       fee: '₹299',
       duration: '30 min',
     },
@@ -51,7 +51,7 @@
       rating: 4.7,
       reviews: 89,
       available: true,
-      color: '#22C55E',
+      color: 'var(--success)',
       fee: '₹199',
       duration: '20 min',
     },
@@ -65,7 +65,7 @@
       rating: 4.8,
       reviews: 115,
       available: false,
-      color: '#818CF8',
+      color: 'var(--ai-accent)',
       fee: '₹249',
       duration: '25 min',
     },
@@ -150,7 +150,8 @@
     if (nutriView) nutriView.style.display = '';
 
     var data = safeJSON('zitlas_nutritionists', null);
-    renderNutritionistCards(Array.isArray(data) && data.length ? data : MOCK_NUTRITIONISTS);
+    var fallback = (typeof IS_DEMO_MODE !== 'undefined' && IS_DEMO_MODE) ? MOCK_NUTRITIONISTS : [];
+    renderNutritionistCards(Array.isArray(data) && data.length ? data : fallback);
   }
 
   /* ── Nutritionist-only view ── */
@@ -171,9 +172,10 @@
     var nutriView = document.getElementById('nutriView');
     if (nutriView) nutriView.style.display = '';
 
-    /* Load from localStorage or fall back to mock */
+    /* Load from localStorage; no mock fallback in production */
     var data = safeJSON('zitlas_nutritionists', null);
-    renderNutritionistCards(Array.isArray(data) && data.length ? data : MOCK_NUTRITIONISTS);
+    var fallback = (typeof IS_DEMO_MODE !== 'undefined' && IS_DEMO_MODE) ? MOCK_NUTRITIONISTS : [];
+    renderNutritionistCards(Array.isArray(data) && data.length ? data : fallback);
   }
 
   /* ══════════════════════════════════════════
@@ -246,7 +248,6 @@
   }
 
   function saveDietStorage(storage) {
-    console.trace("[WRITE zitlas_diet_plan]", storage);
     try { localStorage.setItem('zitlas_diet_plan', JSON.stringify(storage)); } catch (_) {}
   }
 
@@ -515,7 +516,7 @@
     const meals = dayData.meals || [];
 
     const swapSvg = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none"
-      stroke="#FF8A00" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      stroke="var(--primary)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
       <polyline points="17 1 21 5 17 9"/>
       <path d="M3 11V9a4 4 0 0 1 4-4h14"/>
       <polyline points="7 23 3 19 7 15"/>
@@ -528,8 +529,8 @@
 
     mealList.innerHTML = meals.map((meal, i) => {
       const isLast     = i === meals.length - 1;
-      const color      = esc(meal.color || '#FF8A00');
-      const bg         = hexToRgba(meal.color || '#FF8A00', 0.13);
+      const color      = esc(meal.color || 'var(--primary)');
+      const bg         = hexToRgba(meal.color || 'var(--primary)', 0.13);
       const isModified = isExpertActive && meal._modified;
 
       /* Persistent expert modification stored in new schema (survives page reload) */
@@ -610,7 +611,7 @@
   /* Convert a hex colour to rgba string */
   function hexToRgba(hex, alpha) {
     const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-    if (!result) return `rgba(255,138,0,${alpha})`;
+    if (!result) return `rgba(var(--primary-rgb),${alpha})`;
     return `rgba(${parseInt(result[1],16)},${parseInt(result[2],16)},${parseInt(result[3],16)},${alpha})`;
   }
 
@@ -1064,7 +1065,16 @@
     var list = document.getElementById('nutriSelectList');
     if (!list) return;
 
-    list.innerHTML = MOCK_NUTRITIONISTS.map(function (n) {
+    var nutriSource = (typeof IS_DEMO_MODE !== 'undefined' && IS_DEMO_MODE) ? MOCK_NUTRITIONISTS : [];
+    var realData = safeJSON('zitlas_nutritionists', null);
+    if (Array.isArray(realData) && realData.length) nutriSource = realData;
+
+    if (!nutriSource.length) {
+      list.innerHTML = '<div style="text-align:center;padding:32px 16px;color:var(--text-secondary);font-size:14px;">No nutritionists available yet.<br>Check back soon.</div>';
+      return;
+    }
+
+    list.innerHTML = nutriSource.map(function (n) {
       var initials = n.name.split(' ').map(function (w) { return w[0]; }).join('').slice(0, 2).toUpperCase();
 
       /* Star rating */
@@ -1117,7 +1127,8 @@
       btn.addEventListener('click', function () {
         var action   = btn.dataset.action;
         var nutriId  = btn.dataset.nutriId;
-        var nutri    = MOCK_NUTRITIONISTS.find(function (n) { return n.id === nutriId; });
+        var _nutriPool = safeJSON('zitlas_nutritionists', null) || ((typeof IS_DEMO_MODE !== 'undefined' && IS_DEMO_MODE) ? MOCK_NUTRITIONISTS : []);
+        var nutri    = _nutriPool.find(function (n) { return n.id === nutriId; });
         if (!nutri) return;
 
         if (action === 'book') {
@@ -1197,53 +1208,19 @@
      VERIFY BY NUTRITIONIST
   ══════════════════════════════════════════ */
 
-  var SPONSORED_NUTRITIONISTS = [
-    {
-      id:         'rahul',
-      name:       'Rahul Sharma',
-      role:       'Weight Loss Nutritionist',
-      initials:   'RS',
-      colorAccent:'#FF8A00',
-      rating:     4.9,
-      reviews:    128,
-      fee:        149,
-      duration:   '15 Min',
-      experience: '8+ Yrs',
-      expertise:  ['Meal Planning', 'Calorie Targeting', 'Metabolism'],
-    },
-    {
-      id:         'arjun',
-      name:       'Arjun Nair',
-      role:       'Sports Dietitian',
-      initials:   'AN',
-      colorAccent:'#3B82F6',
-      rating:     4.8,
-      reviews:    96,
-      fee:        229,
-      duration:   '20 Min',
-      experience: '8+ Yrs',
-      expertise:  ['Performance Analysis', 'Precision Nutrition', 'Diet Strategy'],
-    },
-    {
-      id:         'prakash',
-      name:       'Prakash Sir',
-      role:       'Head Nutritionist',
-      initials:   'PS',
-      colorAccent:'#FF8A00',
-      rating:     4.9,
-      reviews:    210,
-      fee:        299,
-      duration:   '30 Min',
-      experience: '12+ Yrs',
-      expertise:  ['Holistic Nutrition', 'Sports Diets', 'Performance Planning'],
-    },
-  ];
+  function _getSponsoredExperts() {
+    try {
+      var data = JSON.parse(localStorage.getItem('zitlas_nutritionists') || 'null');
+      if (Array.isArray(data) && data.length) return data;
+    } catch (_) {}
+    return [];
+  }
 
   function _vnStars(rating) {
     var full = Math.floor(rating);
     var html = '';
     for (var i = 0; i < 5; i++) {
-      var c = i < full ? '#FF8A00' : '#333';
+      var c = i < full ? 'var(--primary)' : 'var(--border)';
       html += '<svg width="11" height="11" viewBox="0 0 24 24" fill="' + c + '" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>';
     }
     return html;
@@ -1260,7 +1237,14 @@
     var review = safeJSON('zitlas_expert_review', null);
     if (review && review.status === 'APPROVED') showVerifiedBanner(review);
 
-    rail.innerHTML = SPONSORED_NUTRITIONISTS.map(function(n) {
+    var _vnExperts = _getSponsoredExperts();
+    if (_vnExperts.length === 0) {
+      rail.innerHTML = '<div style="padding:1.25rem;text-align:center;color:var(--text-muted);font-size:.85rem;">No experts available for plan verification yet. <a href="../coaches/coaches.html" style="color:var(--primary);">Browse Experts</a></div>';
+      section.style.display = '';
+      return;
+    }
+
+    rail.innerHTML = _vnExperts.map(function(n) {
       var profileUrl = '../coaches/cprofile.html?id=' + n.id;
       var isRequested = !!(existing && existing.expertId === n.id);
       return (
@@ -1299,7 +1283,7 @@
           '</div>' +
         '</div>'
       );
-    }).join('');
+    }).join('');  /* end _vnExperts.map */
 
     rail.querySelectorAll('.vn-btn--primary[data-vn-expert]').forEach(function(btn) {
       btn.addEventListener('click', function() {
@@ -1312,7 +1296,7 @@
   }
 
   function submitVerifyRequest(expertId) {
-    var expert     = SPONSORED_NUTRITIONISTS.find(function(n) { return n.id === expertId; });
+    var expert     = _getSponsoredExperts().find(function(n) { return n.id === expertId; });
     var athleteId  = localStorage.getItem('zitlas_athlete_id') || ('athlete_' + Date.now());
     var fbUser     = safeJSON('zitlas_firebase_user', {});
     var athleteName = (fbUser && (fbUser.name || fbUser.displayName)) || 'Athlete';
@@ -1385,7 +1369,7 @@
     banner.style.display = 'flex';
 
     if (req.status === 'approved' || req.status === 'revised_plan_published') {
-      var expert = SPONSORED_NUTRITIONISTS.find(function(n) { return n.id === req.expertId; });
+      var expert = _getSponsoredExperts().find(function(n) { return n.id === req.expertId; });
       showVerifiedBanner({ status: 'APPROVED', reviewedBy: expert ? expert.name : 'Expert', expertId: req.expertId });
     }
   }
@@ -1719,7 +1703,7 @@
       || (plan.key_rules && plan.key_rules.length ? plan.key_rules.join(' · ') : null);
 
     /* Per-day fields */
-    var MEAL_COLORS = ['#FF8A00','#22C55E','#F97316','#A855F7','#3B82F6','#EF4444'];
+    var MEAL_COLORS = ['var(--primary)','var(--success)','var(--primary)','var(--ai-accent)','var(--ai-accent)','var(--primary-dark)'];
     var MEAL_EMOJIS = { breakfast:'🌅', 'mid-morning':'🥤', midmorning:'🥤', lunch:'🍽️', 'evening snack':'⚡', 'pre-training':'⚡', dinner:'🫕', recovery:'💪' };
 
     plan.days.forEach(function (day) {
@@ -1774,14 +1758,14 @@
     mealList.innerHTML =
       '<div style="text-align:center;padding:40px 20px;">' +
         '<div style="font-size:48px;margin-bottom:16px;">🤖</div>' +
-        '<h3 style="font-size:18px;font-weight:700;margin-bottom:10px;color:var(--text-primary,#FAFAFA)">Get Your Personalised Diet Plan</h3>' +
-        '<p style="font-size:14px;color:var(--text-secondary,#9CA3AF);line-height:1.6;margin-bottom:24px;max-width:280px;margin-left:auto;margin-right:auto">' +
+        '<h3 style="font-size:18px;font-weight:700;margin-bottom:10px;color:var(--text-primary,var(--text-primary))">Get Your Personalised Diet Plan</h3>' +
+        '<p style="font-size:14px;color:var(--text-secondary,var(--text-secondary));line-height:1.6;margin-bottom:24px;max-width:280px;margin-left:auto;margin-right:auto">' +
           'Complete a 4-minute assessment and Zino will build a 7-day weight-loss meal plan tailored to your goals, food preferences, and lifestyle.' +
         '</p>' +
         '<a href="../dashboard/ai-coach/ai-coach.html" ' +
-           'style="display:inline-block;padding:16px 32px;background:linear-gradient(135deg,#E07000,#FF8A00);' +
-           'color:#fff;font-weight:700;font-size:15px;border-radius:14px;text-decoration:none;' +
-           'box-shadow:0 4px 20px rgba(255,138,0,0.35);">' +
+           'style="display:inline-block;padding:16px 32px;background:linear-gradient(135deg,#E07000,var(--primary));' +
+           'color:var(--text-primary);font-weight:700;font-size:15px;border-radius:14px;text-decoration:none;' +
+           'box-shadow:0 4px 20px rgba(var(--primary-rgb),0.35);">' +
           'Start AI Assessment →' +
         '</a>' +
       '</div>';
@@ -1802,7 +1786,7 @@
     if (!mealList) return;
 
     const swapSvg = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none"
-      stroke="#FF8A00" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      stroke="var(--primary)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
       <polyline points="17 1 21 5 17 9"/>
       <path d="M3 11V9a4 4 0 0 1 4-4h14"/>
       <polyline points="7 23 3 19 7 15"/>
@@ -1810,12 +1794,12 @@
     </svg>`;
 
     const staticMeals = [
-      { emoji:'🌅', color:'#FF8A00', bg:'rgba(255,138,0,0.15)', name:'Breakfast',      time:'7:30 AM', foods:'Oats, Banana, Almonds, Milk'               },
-      { emoji:'🥤', color:'#22C55E', bg:'rgba(34,197,94,0.15)', name:'Mid-Morning',    time:'10:30 AM',foods:'Greek Yogurt, Honey, Walnuts'              },
-      { emoji:'🍽️', color:'#F97316', bg:'rgba(249,115,22,0.15)',name:'Lunch',          time:'1:00 PM', foods:'Rice, Dal, Chicken, Salad'                 },
-      { emoji:'⚡',  color:'#EF4444', bg:'rgba(239,68,68,0.15)', name:'Pre-Training',  time:'4:30 PM', foods:'Banana, Peanut Butter Toast'               },
-      { emoji:'💪', color:'#A855F7', bg:'rgba(168,85,247,0.15)',name:'Recovery',       time:'7:00 PM', foods:'Paneer, Roti, Curd, Vegetables'            },
-      { emoji:'🫕', color:'#3B82F6', bg:'rgba(59,130,246,0.15)',name:'Dinner',         time:'8:30 PM', foods:'Khichdi / Sabzi, Roti, Salad'              },
+      { emoji:'🌅', color:'var(--primary)', bg:'rgba(var(--primary-rgb),0.15)', name:'Breakfast',      time:'7:30 AM', foods:'Oats, Banana, Almonds, Milk'               },
+      { emoji:'🥤', color:'var(--success)', bg:'rgba(var(--success-rgb),0.15)', name:'Mid-Morning',    time:'10:30 AM',foods:'Greek Yogurt, Honey, Walnuts'              },
+      { emoji:'🍽️', color:'var(--primary)', bg:'rgba(249,115,22,0.15)',name:'Lunch',          time:'1:00 PM', foods:'Rice, Dal, Chicken, Salad'                 },
+      { emoji:'⚡',  color:'var(--primary-dark)', bg:'rgba(239,68,68,0.15)', name:'Pre-Training',  time:'4:30 PM', foods:'Banana, Peanut Butter Toast'               },
+      { emoji:'💪', color:'var(--ai-accent)', bg:'rgba(var(--ai-rgb),0.15)',name:'Recovery',       time:'7:00 PM', foods:'Paneer, Roti, Curd, Vegetables'            },
+      { emoji:'🫕', color:'var(--ai-accent)', bg:'rgba(var(--ai-rgb),0.15)',name:'Dinner',         time:'8:30 PM', foods:'Khichdi / Sabzi, Roti, Salad'              },
     ];
 
     mealList.innerHTML = staticMeals.map((m, i) =>

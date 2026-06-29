@@ -595,27 +595,27 @@
         if (d < 0.55) {
           iel.style.fontSize   = '32px';
           iel.style.fontWeight = '800';
-          iel.style.color      = '#FF8A00';
+          iel.style.color      = 'var(--primary)';
           iel.style.opacity    = '1';
           iel.style.transform  = 'scale(1)';
         } else if (d < 1.55) {
           var t = (d - 0.55) / 1.0;
           iel.style.fontSize   = (32 - 12 * t).toFixed(1) + 'px';
           iel.style.fontWeight = '600';
-          iel.style.color      = 'rgba(255,255,255,' + (0.65 - 0.28 * t).toFixed(2) + ')';
+          iel.style.color      = 'rgba(var(--white-rgb),' + (0.65 - 0.28 * t).toFixed(2) + ')';
           iel.style.opacity    = (1 - 0.38 * t).toFixed(2);
           iel.style.transform  = 'scale(' + (1 - 0.07 * t).toFixed(3) + ')';
         } else if (d < 2.55) {
           var t = (d - 1.55);
           iel.style.fontSize   = '18px';
           iel.style.fontWeight = '500';
-          iel.style.color      = 'rgba(255,255,255,' + (0.32 - 0.14 * t).toFixed(2) + ')';
+          iel.style.color      = 'rgba(var(--white-rgb),' + (0.32 - 0.14 * t).toFixed(2) + ')';
           iel.style.opacity    = (0.62 - 0.28 * t).toFixed(2);
           iel.style.transform  = 'scale(0.87)';
         } else {
           iel.style.fontSize   = '15px';
           iel.style.fontWeight = '400';
-          iel.style.color      = 'rgba(255,255,255,0.10)';
+          iel.style.color      = 'rgba(var(--white-rgb),0.10)';
           iel.style.opacity    = '0.35';
           iel.style.transform  = 'scale(0.80)';
         }
@@ -959,7 +959,7 @@
           esc(opt.label) + '</button>';
       });
       html += '</div>';
-      html += '<p class="q-hint" id="qMsErr" style="color:#EF4444;display:none">Please select at least one option</p>';
+      html += '<p class="q-hint" id="qMsErr" style="color:var(--primary-dark);display:none">Please select at least one option</p>';
       html += '<button class="q-continue-btn" id="qContinueBtn" style="margin-top:16px">Continue →</button>';
     } else if (q.type === 'slider') {
       var def = (state.answers[q.field] !== undefined) ? state.answers[q.field] : q.defaultVal;
@@ -994,7 +994,7 @@
         'class="q-text-input" id="qTextInput" ' +
         'placeholder="' + esc(q.placeholder || '') + '" ' +
         'value="' + esc(String(existingVal)) + '" />' +
-        '<p class="q-hint" id="qErrMsg" style="color:#EF4444;display:none">' + esc(q.errMsg || '') + '</p>' +
+        '<p class="q-hint" id="qErrMsg" style="color:var(--primary-dark);display:none">' + esc(q.errMsg || '') + '</p>' +
         '<button class="q-continue-btn" id="qContinueBtn">Continue →</button>';
     }
 
@@ -1113,7 +1113,7 @@
         var valid = !q.validate || q.validate(raw);
         if (!valid) {
           if (errEl) errEl.style.display = 'block';
-          if (textEl) textEl.style.borderColor = '#EF4444';
+          if (textEl) textEl.style.borderColor = 'var(--primary-dark)';
           return;
         }
         state.answers[q.field] = q.parse ? q.parse(raw) : raw;
@@ -1135,7 +1135,7 @@
 
   function updateSliderBg(el) {
     var pct = ((el.value - el.min) / (el.max - el.min)) * 100;
-    el.style.background = 'linear-gradient(to right, var(--accent) 0%, var(--accent) ' + pct + '%, rgba(255,255,255,0.1) ' + pct + '%, rgba(255,255,255,0.1) 100%)';
+    el.style.background = 'linear-gradient(to right, var(--accent) 0%, var(--accent) ' + pct + '%, rgba(var(--white-rgb),0.1) ' + pct + '%, rgba(var(--white-rgb),0.1) 100%)';
   }
 
   function advanceQuestion() {
@@ -2035,7 +2035,6 @@
           expertModifications: {},
           isExpertPlan:        false,
         };
-        console.trace("[WRITE zitlas_diet_plan]", _aiPlanStorage);
         localStorage.setItem('zitlas_diet_plan', JSON.stringify(_aiPlanStorage));
       }
       if (data.workout_plan) {

@@ -13,97 +13,11 @@ function esc(s) {
   return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-/* ══════════════════════════════════════════════
-   EXPERT DATABASE (mirrors COACH_DB in cprofile.js)
-   ══════════════════════════════════════════════ */
-
-const EXPERT_DB = {
-
-  rahul: {
-    id: 'rahul', name: 'Rahul Sharma', firstName: 'Rahul',
-    role: 'Weight Loss Nutritionist', rating: '4.9', reviewCount: 128,
-    experience: '8+ Years Experience', achievement: 'Former State Player',
-    initials: 'RS', colorAccent: '#FF8A00', fee: 149, duration: '15 Min',
-    about: 'Certified nutritionist with over 8 years of experience helping clients lose weight through sustainable meal plans. Specializes in calorie-smart eating habits that fit real Indian lifestyles.',
-    quote: 'My goal is to make healthy eating feel effortless and delicious for you.',
-    stats: [{ value: '1.2K+', label: 'Sessions' }, { value: '850+', label: 'Clients' }, { value: '98%', label: 'Success Rate' }, { value: '8+', label: 'Years' }],
-  },
-
-  arjun: {
-    id: 'arjun', name: 'Arjun Nair', firstName: 'Arjun',
-    role: 'Sports Dietitian', rating: '4.8', reviewCount: 96,
-    experience: '8+ Years Experience', achievement: 'Former National-Level Player',
-    initials: 'AN', colorAccent: '#3B82F6', fee: 229, duration: '20 Min',
-    about: 'Sports dietitian with 8+ years of experience in holistic wellness transformation. Specializes in combining mental conditioning and structured goal-setting for sustainable weight loss.',
-    quote: 'True transformation happens when your mind and body work together.',
-    stats: [{ value: '1.0K+', label: 'Sessions' }, { value: '780+', label: 'Clients' }, { value: '97%', label: 'Success Rate' }, { value: '8+', label: 'Years' }],
-  },
-
-  vikas: {
-    id: 'vikas', name: 'Vikas Saxena', firstName: 'Vikas',
-    role: 'Meal Planning Expert', rating: '4.7', reviewCount: 80,
-    experience: '6+ Years Experience', achievement: 'Former Fitness Trainer',
-    initials: 'VS', colorAccent: '#EAB308', fee: 129, duration: '15 Min',
-    about: 'Certified strength & conditioning specialist with 6+ years of experience building fat-loss and fitness programs.',
-    quote: 'Your body is your greatest tool — I help you train it to burn fat and build strength at the same time.',
-    stats: [{ value: '950+', label: 'Sessions' }, { value: '620+', label: 'Clients' }, { value: '96%', label: 'Success Rate' }, { value: '6+', label: 'Years' }],
-  },
-
-  rohit: {
-    id: 'rohit', name: 'Rohit Deshmukh', firstName: 'Rohit',
-    role: 'Fat Loss Nutritionist', rating: '4.8', reviewCount: 72,
-    experience: '7+ Years Experience', achievement: 'Certified Fat-Loss Specialist',
-    initials: 'RD', colorAccent: '#FF8A00', fee: 199, duration: '20 Min',
-    about: 'Certified fat-loss nutritionist with 7+ years of experience helping clients achieve sustainable weight loss.',
-    quote: 'Every kilo lost starts with a well-planned strategy. I teach you the plan and how to stick to it.',
-    stats: [{ value: '1.1K+', label: 'Sessions' }, { value: '720+', label: 'Clients' }, { value: '97%', label: 'Success Rate' }, { value: '7+', label: 'Years' }],
-  },
-
-  aman: {
-    id: 'aman', name: 'Aman Verma', firstName: 'Aman',
-    role: 'Habit & Wellness Expert', rating: '4.6', reviewCount: 54,
-    experience: '5+ Years Experience', achievement: 'Behaviour Change Specialist',
-    initials: 'AV', colorAccent: '#22C55E', fee: 99, duration: '10 Min',
-    about: 'Behaviour change specialist with 5+ years of experience helping clients build lasting health habits.',
-    quote: 'Lasting weight loss is not a diet — it is a lifestyle. I build the habits that make it stick for life.',
-    stats: [{ value: '780+', label: 'Sessions' }, { value: '530+', label: 'Clients' }, { value: '95%', label: 'Success Rate' }, { value: '5+', label: 'Years' }],
-  },
-
-  prakash: {
-    id: 'prakash', name: 'Prakash Sir', firstName: 'Prakash',
-    role: 'Head Nutritionist', rating: '4.9', reviewCount: 210,
-    experience: '12+ Years Experience', achievement: 'Head Nutritionist — ZITLAS Wellness',
-    initials: 'PS', colorAccent: '#FF8A00', fee: 299, duration: '30 Min',
-    about: 'Head of the ZITLAS Wellness nutrition team with 12+ years of experience in holistic member development and mental conditioning.',
-    quote: 'Every great journey starts from zero. My job is to build the foundation that lasts a lifetime.',
-    stats: [{ value: '2.0K+', label: 'Sessions' }, { value: '1.2K+', label: 'Clients' }, { value: '99%', label: 'Success Rate' }, { value: '12+', label: 'Years' }],
-  },
-
-  ramesh: {
-    id: 'ramesh', name: 'Ramesh Patil', firstName: 'Ramesh',
-    role: 'Weight Loss Nutritionist', rating: '4.8', reviewCount: 145,
-    experience: '9+ Years Experience', achievement: 'Certified Weight-Loss Specialist',
-    initials: 'RP', colorAccent: '#22C55E', fee: 249, duration: '25 Min',
-    about: 'Certified weight-loss nutritionist with 9+ years of helping clients transform their diet and health. Known for practical, sustainable plans tailored to the Indian lifestyle.',
-    quote: 'Real results come from real habits. I build both — for life.',
-    stats: [{ value: '1.4K+', label: 'Sessions' }, { value: '900+', label: 'Clients' }, { value: '97%', label: 'Success Rate' }, { value: '9+', label: 'Years' }],
-  },
-};
+/* Expert profile is loaded dynamically via ZitlasExpertProfile (expert-profile.js) */
 
 /* ══════════════════════════════════════════════
    EXPERT PROFILE HELPERS
    ══════════════════════════════════════════════ */
-
-const EXPERT_EMAIL_MAP = {
-  'ramesh@zitlas.com': 'ramesh', 'rahul@zitlas.com':   'rahul',
-  'arjun@zitlas.com':  'arjun',  'vikas@zitlas.com':   'vikas',
-  'rohit@zitlas.com':  'rohit',  'aman@zitlas.com':    'aman',
-  'prakash@zitlas.com':'prakash',
-};
-
-function getExpertIdByEmail(email) {
-  return EXPERT_EMAIL_MAP[(email || '').toLowerCase()] || null;
-}
 
 function buildExpertFromFirebase(firebaseUser, firestoreData) {
   const nameParts = (firebaseUser.displayName || 'Expert').split(' ');
@@ -118,7 +32,7 @@ function buildExpertFromFirebase(firebaseUser, firestoreData) {
     experience:  'ZITLAS Certified',
     achievement: 'ZITLAS Expert',
     initials:    initials,
-    colorAccent: '#FF8A00',
+    colorAccent: 'var(--primary)',
     fee:         199,
     duration:    '20 Min',
     photo:       firebaseUser.photoURL || firestoreData.photo_url || null,
@@ -134,8 +48,25 @@ function buildExpertFromFirebase(firebaseUser, firestoreData) {
 }
 
 function getExpert() {
-  const id = localStorage.getItem('zitlas_expert_id') || 'ramesh';
-  return EXPERT_DB[id] || EXPERT_DB.ramesh;
+  if (typeof ZitlasExpertProfile !== 'undefined') {
+    return ZitlasExpertProfile.toInternal(ZitlasExpertProfile.getProfile(), {});
+  }
+  /* Fallback: build minimal profile from localStorage */
+  var fbu = {};
+  try { fbu = JSON.parse(localStorage.getItem('zitlas_firebase_user') || '{}'); } catch (_) {}
+  var n = (fbu.name || fbu.displayName || 'Expert').split(/\s+/);
+  return {
+    id: 'expert', name: fbu.name || fbu.displayName || 'Expert',
+    firstName: n[0] || 'Expert', role: 'Expert',
+    rating: '5.0', reviewCount: 0, experience: 'ZITLAS Expert',
+    achievement: 'ZITLAS Expert', initials: 'EX',
+    colorAccent: 'var(--primary)', fee: 0, duration: '20 Min',
+    about: '', quote: '',
+    stats: [
+      { value: '0', label: 'Sessions' }, { value: '0', label: 'Clients' },
+      { value: '0%', label: 'Success Rate' }, { value: '0+', label: 'Years' },
+    ],
+  };
 }
 
 /* ══════════════════════════════════════════════
@@ -651,15 +582,15 @@ function edShowToast(msg, duration) {
     bottom:         '100px',
     left:           '50%',
     transform:      'translateX(-50%)',
-    background:     '#222',
-    color:          '#fff',
+    background:     'var(--border)',
+    color:          'var(--text-primary)',
     fontSize:       '13px',
     fontWeight:     '600',
     padding:        '10px 20px',
     borderRadius:   '40px',
     zIndex:         '10000',
     pointerEvents:  'none',
-    boxShadow:      '0 4px 20px rgba(0,0,0,0.5)',
+    boxShadow:      '0 4px 20px rgba(var(--black-rgb),0.5)',
     whiteSpace:     'nowrap',
     opacity:        '0',
     transition:     'opacity 0.22s',
@@ -1844,8 +1775,205 @@ function initExpertChatImageAttach(expert, msgWrap) {
 }
 
 /* ══════════════════════════════════════════════
-   RENDER PROFILE SECTION
+   EDIT PROFILE
    ══════════════════════════════════════════════ */
+
+/* Module-level state — set in renderAll, referenced across functions */
+let _currentExpert         = null;
+let _baseExpert            = null;
+let _epPhotoDataUrl        = undefined; /* undefined = no change; null = remove; string = new data URL */
+let _epIsOnline            = true;
+let _epEditListenersAdded  = false;
+
+function loadProfile(baseExpert) {
+  /* Prefer the canonical ZitlasExpertProfile helper (loaded from expert-profile.js) */
+  if (window.ZitlasExpertProfile) {
+    try {
+      const canonical = ZitlasExpertProfile.getProfile();
+      return ZitlasExpertProfile.toInternal(canonical, baseExpert);
+    } catch (_) {}
+  }
+  /* Fallback: old localStorage schema */
+  try {
+    const saved = JSON.parse(localStorage.getItem('zitlas_expert_profile') || 'null');
+    if (!saved) return baseExpert;
+    return _mergeProfile(baseExpert, saved);
+  } catch (_) { return baseExpert; }
+}
+
+function _mergeProfile(expert, saved) {
+  const merged = Object.assign({}, expert);
+
+  if (saved.name && saved.name.trim()) {
+    merged.name      = saved.name.trim();
+    const parts      = merged.name.split(/\s+/);
+    merged.firstName = parts[0] || merged.firstName;
+    merged.initials  = parts.map(function (p) { return p[0] || ''; }).slice(0, 2).join('').toUpperCase() || merged.initials;
+  }
+  if (saved.role)     merged.role     = saved.role;
+  if (saved.about)    merged.about    = saved.about;
+  if (saved.quote)    merged.quote    = saved.quote;
+  if (saved.duration) merged.duration = saved.duration;
+  if (typeof saved.fee === 'number' && !isNaN(saved.fee)) merged.fee = saved.fee;
+  if (saved.photo !== undefined) merged.photo = saved.photo || null;
+  merged.isOnline = (saved.isOnline !== undefined) ? saved.isOnline : true;
+
+  const base = expert.stats || [];
+  merged.stats = [
+    { value: saved.sessions   || (base[0] ? base[0].value : '-'), label: 'Sessions'     },
+    { value: saved.clients    || (base[1] ? base[1].value : '-'), label: 'Clients'      },
+    { value: saved.successRate|| (base[2] ? base[2].value : '-'), label: 'Success Rate' },
+    { value: saved.years      || (base[3] ? base[3].value : '-'), label: 'Years'        },
+  ];
+  if (saved.years) merged.experience = saved.years + ' Years Experience';
+  return merged;
+}
+
+function openEditModal() {
+  const expert   = _currentExpert;
+  if (!expert) return;
+  const backdrop = document.getElementById('epModalBackdrop');
+  if (!backdrop) return;
+
+  /* Reset transient photo state */
+  _epPhotoDataUrl = undefined;
+  _epIsOnline     = (expert.isOnline !== false);
+
+  /* Pre-fill text fields */
+  _epSetVal('epFieldName',     expert.name        || '');
+  _epSetVal('epFieldRole',     expert.role        || '');
+  _epSetVal('epFieldTitle',    expert.achievement || '');
+  _epSetVal('epFieldAbout',    expert.about       || '');
+  _epSetVal('epFieldQuote',    expert.quote       || '');
+  _epSetVal('epFieldDuration', expert.duration    || '');
+  _epSetVal('epFieldFee',      expert.fee !== undefined ? String(expert.fee) : '');
+
+  /* Stat fields come from the stats array */
+  const s = expert.stats || [];
+  _epSetVal('epFieldSessions', s[0] ? s[0].value : '');
+  _epSetVal('epFieldClients',  s[1] ? s[1].value : '');
+  _epSetVal('epFieldSuccess',  s[2] ? s[2].value : '');
+  _epSetVal('epFieldYears',    s[3] ? s[3].value : '');
+
+  /* Photo preview */
+  _epRefreshPhotoPreview();
+
+  /* Online/Offline toggle buttons */
+  _epSetOnlineBtn(_epIsOnline);
+
+  /* Clear any previous validation errors */
+  _epClearErrors();
+
+  backdrop.classList.add('open');
+  document.body.style.overflow = 'hidden';
+
+  /* Delay focus so animation completes first */
+  setTimeout(function () {
+    const f = document.getElementById('epFieldName');
+    if (f) f.focus();
+  }, 320);
+}
+
+function closeEditModal() {
+  const backdrop = document.getElementById('epModalBackdrop');
+  if (backdrop) backdrop.classList.remove('open');
+  document.body.style.overflow = '';
+  _epPhotoDataUrl = undefined;
+}
+
+function saveProfile() {
+  const expert = _currentExpert;
+  if (!expert) return;
+
+  /* Collect raw values */
+  const nameVal     = (_epGetVal('epFieldName')    || '').trim();
+  const feeRaw      = _epGetVal('epFieldFee');
+  const yearsRaw    = _epGetVal('epFieldYears');
+
+  _epClearErrors();
+  let valid = true;
+
+  if (!nameVal) {
+    _epShowError('epErrName', 'epFieldName');
+    valid = false;
+  }
+  if (feeRaw !== '' && (isNaN(parseFloat(feeRaw)) || !isFinite(Number(feeRaw)))) {
+    _epShowError('epErrFee', 'epFieldFee');
+    valid = false;
+  }
+  /* Years: extract leading number; reject negative */
+  if (yearsRaw !== '') {
+    const yNum = parseFloat(yearsRaw);
+    if (!isNaN(yNum) && yNum < 0) {
+      _epShowError('epErrYears', 'epFieldYears');
+      valid = false;
+    }
+  }
+
+  if (!valid) return;
+
+  /* Success rate: normalise — add % if missing */
+  let successVal = _epGetVal('epFieldSuccess');
+  if (successVal && !successVal.includes('%') && !isNaN(parseFloat(successVal))) {
+    successVal = successVal + '%';
+  }
+
+  /* Duration: extract integer minutes from "25 Min" / "25" / "25min" */
+  const durationRaw = _epGetVal('epFieldDuration');
+  const durationNum = parseInt(durationRaw) || (expert.duration ? parseInt(expert.duration) : 25) || 25;
+
+  /* Photo: undefined=no change, null=removed, string=new dataURL */
+  const photoVal = _epPhotoDataUrl !== undefined ? _epPhotoDataUrl : (expert.photo || null);
+
+  /* Build canonical updates for ZitlasExpertProfile */
+  const canonicalUpdates = {
+    name:            nameVal,
+    specialization:  _epGetVal('epFieldRole')      || undefined,
+    title:           _epGetVal('epFieldTitle')     || undefined,
+    bio:             _epGetVal('epFieldAbout')      || undefined,
+    quote:           _epGetVal('epFieldQuote')      || undefined,
+    experience:      _epGetVal('epFieldYears')      || undefined,
+    sessions:        _epGetVal('epFieldSessions')   || undefined,
+    clients:         _epGetVal('epFieldClients')    || undefined,
+    successRate:     successVal                     || undefined,
+    reviewFee:       feeRaw !== '' ? Math.round(Number(feeRaw)) : expert.fee,
+    sessionDuration: durationNum,
+    status:          _epIsOnline ? 'online' : 'offline',
+    profilePhoto:    photoVal,
+  };
+
+  /* Remove undefined keys so we don't overwrite valid stored values with undefined */
+  Object.keys(canonicalUpdates).forEach(function (k) {
+    if (canonicalUpdates[k] === undefined) delete canonicalUpdates[k];
+  });
+
+  if (window.ZitlasExpertProfile) {
+    ZitlasExpertProfile.save(canonicalUpdates); /* also dispatches expertProfileUpdated */
+  } else {
+    /* Fallback: old schema */
+    try {
+      localStorage.setItem('zitlas_expert_profile', JSON.stringify({
+        name: canonicalUpdates.name, role: canonicalUpdates.specialization,
+        about: canonicalUpdates.bio, quote: canonicalUpdates.quote,
+        duration: durationNum + ' Min', fee: canonicalUpdates.reviewFee,
+        years: canonicalUpdates.experience, sessions: canonicalUpdates.sessions,
+        clients: canonicalUpdates.clients, successRate: canonicalUpdates.successRate,
+        isOnline: _epIsOnline, photo: photoVal,
+      }));
+    } catch (e) { console.warn('[EP] localStorage save failed:', e); }
+  }
+
+  /* Rebuild merged expert and refresh all display surfaces */
+  const newExpert  = loadProfile(_baseExpert || expert);
+  _currentExpert   = newExpert;
+  renderHeader(newExpert);
+  renderDashboard(newExpert);
+  renderProfile(newExpert);
+  _epUpdateOnlineDots(newExpert.isOnline !== false);
+
+  closeEditModal();
+  _epToast('Profile updated!');
+}
 
 function renderProfile(expert) {
   const epfAvatar      = document.getElementById('epfAvatar');
@@ -1879,6 +2007,164 @@ function renderProfile(expert) {
     const ids = ['epfSessions', 'epfClients', 'epfSuccess', 'epfYears'];
     expert.stats.forEach((s, i) => setText(ids[i], s.value));
   }
+
+  _epUpdateOnlineDots(expert.isOnline !== false);
+}
+
+/* ── Edit profile event wiring (called once from renderAll) ── */
+function initEditProfile() {
+  if (_epEditListenersAdded) return;
+  _epEditListenersAdded = true;
+
+  /* Open modal */
+  const editBtn = document.getElementById('epEditProfileBtn');
+  if (editBtn) editBtn.addEventListener('click', openEditModal);
+
+  /* Close modal */
+  ['epModalClose', 'epModalCancel'].forEach(function (id) {
+    const btn = document.getElementById(id);
+    if (btn) btn.addEventListener('click', closeEditModal);
+  });
+
+  /* Backdrop click */
+  const backdrop = document.getElementById('epModalBackdrop');
+  if (backdrop) {
+    backdrop.addEventListener('click', function (e) {
+      if (e.target === backdrop) closeEditModal();
+    });
+  }
+
+  /* Save */
+  const saveBtn = document.getElementById('epModalSave');
+  if (saveBtn) saveBtn.addEventListener('click', saveProfile);
+
+  /* Photo upload */
+  const photoInput = document.getElementById('epPhotoInput');
+  if (photoInput) {
+    photoInput.addEventListener('change', function () {
+      const file = photoInput.files[0];
+      if (!file) return;
+      /* Warn if image is very large (>2MB) */
+      if (file.size > 2 * 1024 * 1024) {
+        _epToast('Image too large — please use a smaller photo.');
+        photoInput.value = '';
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = function (ev) {
+        _epPhotoDataUrl = ev.target.result;
+        _epRefreshPhotoPreview();
+      };
+      reader.readAsDataURL(file);
+      photoInput.value = '';
+    });
+  }
+
+  /* Photo remove */
+  const removeBtn = document.getElementById('epPhotoRemove');
+  if (removeBtn) {
+    removeBtn.addEventListener('click', function () {
+      _epPhotoDataUrl = null; /* explicit null = remove photo */
+      _epRefreshPhotoPreview();
+    });
+  }
+
+  /* Online / Offline toggle */
+  const onBtn  = document.getElementById('epStatusOnline');
+  const offBtn = document.getElementById('epStatusOffline');
+  if (onBtn)  onBtn.addEventListener('click',  function () { _epSetOnlineBtn(true);  _epIsOnline = true;  });
+  if (offBtn) offBtn.addEventListener('click', function () { _epSetOnlineBtn(false); _epIsOnline = false; });
+
+  /* Escape key */
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    const bd = document.getElementById('epModalBackdrop');
+    if (bd && bd.classList.contains('open')) closeEditModal();
+  });
+}
+
+/* ── Private helpers ── */
+
+function _epRefreshPhotoPreview() {
+  const preview = document.getElementById('epPhotoPreview');
+  if (!preview) return;
+  const expert = _currentExpert;
+
+  /* Determine which photo to show */
+  const src = _epPhotoDataUrl !== undefined
+    ? _epPhotoDataUrl                                /* user just changed or removed it */
+    : (expert ? expert.photo : null);
+
+  if (src) {
+    preview.innerHTML = `<img src="${src}" alt="Profile photo">`;
+  } else {
+    const inits = expert
+      ? (expert.initials || (expert.name || 'EX').split(' ').map(function (p) { return p[0] || ''; }).slice(0, 2).join('').toUpperCase())
+      : 'EX';
+    preview.innerHTML = `<span style="font-size:22px;font-weight:900;color:var(--accent)">${inits}</span>`;
+  }
+}
+
+function _epSetOnlineBtn(isOnline) {
+  const onBtn  = document.getElementById('epStatusOnline');
+  const offBtn = document.getElementById('epStatusOffline');
+  if (onBtn)  onBtn.classList.toggle('active',  isOnline);
+  if (offBtn) offBtn.classList.toggle('active', !isOnline);
+}
+
+function _epUpdateOnlineDots(isOnline) {
+  /* Header dot + label */
+  const dot   = document.querySelector('.ed-online-dot');
+  const label = document.querySelector('.ed-online-label');
+  if (dot) {
+    dot.style.background = isOnline ? 'var(--success)' : '#ef4444';
+    dot.style.boxShadow  = isOnline ? '0 0 6px rgba(var(--success-rgb),0.6)' : '0 0 6px rgba(239,68,68,0.5)';
+  }
+  if (label) {
+    label.textContent = isOnline ? 'Online' : 'Offline';
+    label.style.color = isOnline ? 'var(--success)' : '#ef4444';
+  }
+  /* Dashboard card status dot */
+  const pcsDot = document.querySelector('.epc-status-dot');
+  if (pcsDot) {
+    pcsDot.style.background = isOnline ? 'var(--success)' : '#ef4444';
+    pcsDot.style.boxShadow  = isOnline ? '0 0 6px rgba(var(--success-rgb),0.5)' : '0 0 6px rgba(239,68,68,0.5)';
+  }
+}
+
+function _epGetVal(id) {
+  const el = document.getElementById(id);
+  return el ? el.value.trim() : '';
+}
+
+function _epSetVal(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.value = val;
+}
+
+function _epShowError(errId, inputId) {
+  const err = document.getElementById(errId);
+  const inp = document.getElementById(inputId);
+  if (err) err.classList.add('visible');
+  if (inp) inp.classList.add('ep-input--error');
+}
+
+function _epClearErrors() {
+  document.querySelectorAll('.ep-error').forEach(function (el) { el.classList.remove('visible'); });
+  document.querySelectorAll('.ep-input--error').forEach(function (el) { el.classList.remove('ep-input--error'); });
+}
+
+function _epToast(msg) {
+  let t = document.getElementById('edToast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'edToast';
+    document.body.appendChild(t);
+  }
+  t.textContent  = msg;
+  t.style.opacity = '1';
+  clearTimeout(t._t);
+  t._t = setTimeout(function () { t.style.opacity = '0'; }, 2400);
 }
 
 /* ══════════════════════════════════════════════
@@ -2778,7 +3064,7 @@ function buildPlanReviewCard(review, expert) {
   } else if (st === 'completed') {
     actionHtml = '<span class="erc-approved-stamp">✅ Review Complete</span>';
   } else if (st === 'rejected') {
-    actionHtml = '<span class="erc-approved-stamp" style="color:#EF4444">✕ Rejected</span>';
+    actionHtml = '<span class="erc-approved-stamp" style="color:var(--primary-dark)">✕ Rejected</span>';
   } else {
     actionHtml =
       '<button class="erc-btn erc-btn--secondary pr-suggest-btn" data-pr-id="' + esc(review.id) + '">✏️ Send Feedback</button>';
@@ -2974,7 +3260,7 @@ function initPlanReviewCardInteractions(card, review, expert) {
       var badge = card.querySelector('.erc-badge');
       if (badge) { badge.textContent = 'Rejected'; badge.className = 'erc-badge status-rejected'; }
       var actions = card.querySelector('.erc-actions');
-      if (actions) actions.innerHTML = '<span class="erc-approved-stamp" style="color:#EF4444">✕ Rejected</span>';
+      if (actions) actions.innerHTML = '<span class="erc-approved-stamp" style="color:var(--primary-dark)">✕ Rejected</span>';
       card.dataset.prStatus = 'rejected';
       edShowToast('Plan review rejected.');
     }
@@ -3039,7 +3325,7 @@ function initPrSuggestModal() {
         var sb = statusBadge('completed');
         if (badge) { badge.textContent = sb.label; badge.className = 'erc-badge ' + sb.cls; }
         var actions = ctx.card.querySelector('.erc-actions');
-        if (actions) actions.innerHTML = '<span class="erc-approved-stamp" style="color:#3B82F6">✏️ Feedback Sent</span>';
+        if (actions) actions.innerHTML = '<span class="erc-approved-stamp" style="color:var(--ai-accent)">✏️ Feedback Sent</span>';
         ctx.card.dataset.prStatus = 'completed';
         if (notes) {
           var noteEl = ctx.card.querySelector('.erc-expert-note');
@@ -3100,6 +3386,15 @@ function renderInbox(expert) {
     navBadge.textContent  = total;
     navBadge.style.display = total ? 'inline-flex' : 'none';
   }
+
+  /* Update dashboard stat cards from the canonical expert_plan_reviews source */
+  var doneBucket = reviews.filter(function(r) {
+    return r.status === 'review_completed' || r.status === 'completed' || r.status === 'approved';
+  });
+  var activeClients = reviews.filter(function(r) { return r.status !== 'rejected'; });
+  setText('statPending',  pending.length + inProgress.length);
+  setText('statClients',  activeClients.length);
+  setText('statEarnings', doneBucket.length > 0 ? '₹' + (doneBucket.length * expert.fee) : '₹0');
 
   /* Pick the correct bucket for the active tab */
   var bucket;
@@ -3402,12 +3697,18 @@ function renderPlanReviews(expert) { renderInbox(expert); }
    RENDER ALL — shared between Firebase and legacy paths
    ══════════════════════════════════════════════ */
 
-function renderAll(expert) {
+function renderAll(baseExpert) {
+  /* Apply any saved profile overrides on top of the Firebase/EXPERT_DB base */
+  _baseExpert    = baseExpert;
+  const expert   = loadProfile(baseExpert);
+  _currentExpert = expert;
+
   renderHeader(expert);
   renderDashboard(expert);
   renderProfile(expert);
   initNavigation();
   initLogout();
+  initEditProfile();
   initExpertChatOverlay();
   _initInboxTabs(expert);
   renderInbox(expert);
@@ -3415,6 +3716,19 @@ function renderAll(expert) {
   listenForReviews(expert);
   /* Auto-open chat when returning from a modify page after completing review */
   _prCheckPendingChatOpen(expert);
+
+  /* Listen for cross-tab profile updates (another page called ZitlasExpertProfile.save) */
+  if (!renderAll._profileListenerAdded) {
+    renderAll._profileListenerAdded = true;
+    window.addEventListener('expertProfileUpdated', function () {
+      if (!_baseExpert) return;
+      const refreshed  = loadProfile(_baseExpert);
+      _currentExpert   = refreshed;
+      renderHeader(refreshed);
+      renderDashboard(refreshed);
+      renderProfile(refreshed);
+    });
+  }
 }
 
 function _prCheckPendingChatOpen(expert) {
@@ -3496,16 +3810,9 @@ function _initInboxTabs(expert) {
           role:  'expert',
         }));
 
-        /* Build expert profile — prefer EXPERT_DB entry, fallback to Google profile */
-        const expertId = getExpertIdByEmail(firebaseUser.email);
-        const expert   = expertId
-          ? EXPERT_DB[expertId]
-          : buildExpertFromFirebase(firebaseUser, data);
-
-        /* Attach Google photo to the expert object if not in EXPERT_DB */
-        if (!expertId && firebaseUser.photoURL) {
-          expert.photo = firebaseUser.photoURL;
-        }
+        /* Build expert profile from Firebase user */
+        const expert = buildExpertFromFirebase(firebaseUser, data);
+        if (firebaseUser.photoURL) expert.photo = firebaseUser.photoURL;
 
         renderAll(expert);
 

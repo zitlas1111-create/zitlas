@@ -7,21 +7,50 @@
 
   /* ══════════════════════════════════════════
      RECENT CHATS
+     Reads from zitlas_chats localStorage. Shows
+     empty state when no real conversations exist.
   ══════════════════════════════════════════ */
-  const MOCK_CHATS = [
-    { initials: 'PS', color: '#FF8A00', name: 'Priya Sharma',    role: 'Nutritionist', msg: 'Your meal plan for this week is ready.',     time: '2 min ago',  unread: 2 },
-    { initials: 'AP', color: '#3B82F6', name: 'Arjun Patil',     role: 'Member',       msg: 'Completed today\'s workout!',                time: '15 min ago', unread: 0 },
-    { initials: 'NK', color: '#22C55E', name: 'Neha Kulkarni',   role: 'Nutritionist', msg: 'Swap your dinner — better protein option.',  time: '1 hour ago', unread: 0 },
-    { initials: 'RD', color: '#A855F7', name: 'Rohan Deshmukh',  role: 'Member',       msg: 'Hit my step goal today 🎉',                  time: '2 hours ago',unread: 0 },
-    { initials: 'AD', color: '#EAB308', name: 'Amit Desai',      role: 'Nutritionist', msg: 'Water intake reminder sent.',                time: 'Yesterday',  unread: 0 },
-  ];
-
   function renderChats() {
-    console.log('[ZITLAS] renderChats called');
     const list = document.getElementById('dashChatsList');
-    console.log('[ZITLAS] dashChatsList found:', !!list);
     if (!list) return;
-    list.innerHTML = MOCK_CHATS.map(c => {
+
+    var chats = [];
+    try {
+      var raw = localStorage.getItem('zitlas_chats');
+      if (raw) {
+        var stored = JSON.parse(raw);
+        /* zitlas_chats is an object keyed by conversationId */
+        if (stored && typeof stored === 'object' && !Array.isArray(stored)) {
+          chats = Object.values(stored).map(function(conv) {
+            var lastMsg = (conv.messages && conv.messages.length)
+              ? conv.messages[conv.messages.length - 1]
+              : null;
+            var name = conv.expertName || conv.coachName || 'Expert';
+            var initials = name.split(' ').slice(0, 2).map(function(w) { return w[0] || ''; }).join('').toUpperCase();
+            return {
+              initials: initials,
+              color:    'var(--primary)',
+              name:     name,
+              role:     conv.expertRole || 'Expert',
+              msg:      lastMsg ? (lastMsg.text || lastMsg.content || '') : 'No messages yet',
+              time:     lastMsg ? (lastMsg.time || '') : '',
+              unread:   conv.unreadByAthlete || 0,
+            };
+          }).filter(function(c) { return c.msg; });
+        }
+      }
+    } catch (_) {}
+
+    if (!chats.length) {
+      list.innerHTML = '<div class="dash-chat-empty">'
+        + '<div class="dash-chat-empty-icon">💬</div>'
+        + '<div class="dash-chat-empty-text">No conversations yet</div>'
+        + '<div class="dash-chat-empty-sub">Connect with a coach or nutritionist to start a chat</div>'
+        + '</div>';
+      return;
+    }
+
+    list.innerHTML = chats.map(function(c) {
       const badge = c.unread > 0 ? `<div class="dash-chat-unread">${c.unread}</div>` : '';
       return `<div class="dash-chat-card${c.unread > 0 ? ' unread' : ''}">`
         + `<div class="dash-chat-avatar" style="background:${c.color}1F;color:${c.color};border:1.5px solid ${c.color}40;">${c.initials}</div>`
@@ -29,9 +58,8 @@
         + `<div class="dash-chat-right"><div class="dash-chat-time">${c.time}</div>${badge}</div>`
         + `</div>`;
     }).join('');
-    console.log('[ZITLAS] renderChats innerHTML length:', list.innerHTML.length);
-    list.querySelectorAll('.dash-chat-card').forEach(card => {
-      card.addEventListener('click', () => showToast('Chats — coming soon!'));
+    list.querySelectorAll('.dash-chat-card').forEach(function(card) {
+      card.addEventListener('click', function() { showToast('Chats — coming soon!'); });
     });
   }
 
@@ -106,12 +134,22 @@
      GREETING
   ══════════════════════════════════════════ */
   function initGreeting() {
-    const el = document.getElementById('greetingLine');
-    if (!el) return;
-    const h = new Date().getHours();
-    if (h < 12)      el.textContent = 'Good Morning,';
-    else if (h < 17) el.textContent = 'Good Afternoon,';
-    else             el.textContent = 'Good Evening,';
+    const lineEl = document.getElementById('greetingLine');
+    const nameEl = document.getElementById('greetingName');
+    if (lineEl) {
+      const h = new Date().getHours();
+      lineEl.textContent = h < 12 ? 'Good Morning,' : h < 17 ? 'Good Afternoon,' : 'Good Evening,';
+    }
+    if (nameEl) {
+      try {
+        var _u    = JSON.parse(localStorage.getItem('zitlas_user')          || '{}');
+        var _pi   = JSON.parse(localStorage.getItem('zitlas_personal_info') || '{}');
+        var _fb   = JSON.parse(localStorage.getItem('zitlas_firebase_user') || '{}');
+        var _full = (_pi.fullName || _u.name || _fb.name || _fb.displayName || '').trim();
+        var _first = _full.split(/\s+/)[0] || '';
+        nameEl.textContent = _first ? _first + '! 👋' : 'Athlete! 👋';
+      } catch (_) {}
+    }
   }
 
   /* ══════════════════════════════════════════
@@ -384,34 +422,123 @@
   }
 
   /* ══════════════════════════════════════════
-     FIREBASE PROFILE PHOTO
-     Load Google photo into header avatar when
-     user signed in via Google
+     PROFILE PHOTO — single source of truth
+     Priority: custom base64 upload (zitlas_personal_info.photo)
+               → Firebase/Google URL (zitlas_user.photo)
+               → fallback initials SVG
   ══════════════════════════════════════════ */
-  function loadFirebaseUserProfile() {
-    const raw = localStorage.getItem('zitlas_firebase_user');
-    if (!raw) return;
+
+  function getCurrentUserProfileImage() {
     try {
-      const user   = JSON.parse(raw);
-      const avatar = document.getElementById('headerAvatar');
-      if (avatar && user.photo) {
-        avatar.src = user.photo;
-        avatar.alt = user.name || 'Profile';
+      var info = JSON.parse(localStorage.getItem('zitlas_personal_info') || '{}');
+      if (info.photo && info.photo.startsWith('data:')) {
+        console.log('[DASHBOARD] Loaded image: custom upload');
+        return info.photo;
+      }
+      var zUser = JSON.parse(localStorage.getItem('zitlas_user') || '{}');
+      if (zUser.photo) {
+        console.log('[DASHBOARD] Loaded image:', zUser.photo);
+        return zUser.photo;
+      }
+      var fbUser = JSON.parse(localStorage.getItem('zitlas_firebase_user') || '{}');
+      var fbPhoto = fbUser.photo || fbUser.photoURL;
+      if (fbPhoto) {
+        console.log('[DASHBOARD] Loaded image:', fbPhoto);
+        return fbPhoto;
+      }
+    } catch (_) {}
+    console.log('[DASHBOARD] Loaded image: fallback SVG');
+    return null;
+  }
+
+  function applyProfileImages() {
+    var user = {};
+    try { user = JSON.parse(localStorage.getItem('zitlas_user') || '{}'); } catch (_) {}
+    var url      = getCurrentUserProfileImage();
+    var initials = getUserInitials();
+
+    /* ── Header avatar (top-right) ── */
+    var headerAvatar = document.getElementById('headerAvatar');
+    if (headerAvatar) {
+      headerAvatar.src = url || makeFallbackSVG(initials, 'var(--primary)', 38);
+      headerAvatar.onerror = function () {
+        headerAvatar.src = makeFallbackSVG(initials, 'var(--primary)', 38);
+      };
+    }
+
+    /* ── Goal card avatar ── */
+    var goalPanel = document.getElementById('goalAvatarWrap');
+    console.log('[ZITLAS] user photo:', url);
+    console.log('[ZITLAS] avatar element:', goalPanel);
+
+    if (goalPanel) {
+      if (url) {
+        goalPanel.innerHTML = '<img'
+          + ' src="' + url + '"'
+          + ' alt="Profile"'
+          + ' style="width:100%;height:100%;object-fit:cover;border-radius:50%;"'
+          + '>';
+        var newImg = goalPanel.querySelector('img');
+        if (newImg) {
+          newImg.onerror = function () {
+            goalPanel.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;'
+              + 'width:100%;height:100%;font-size:3rem;font-weight:800;'
+              + 'color:var(--primary);opacity:0.5;">' + initials + '</div>';
+          };
+        }
+      } else {
+        goalPanel.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;'
+          + 'width:100%;height:100%;font-size:3rem;font-weight:800;'
+          + 'color:var(--primary);opacity:0.5;">' + initials + '</div>';
+      }
+    }
+  }
+
+  function loadFirebaseUserProfile() {
+    /* Sync Firebase photo URL into zitlas_user so it's available offline */
+    try {
+      var user = JSON.parse(localStorage.getItem('zitlas_user') || '{}');
+      if (!user.photo) {
+        var fb = JSON.parse(localStorage.getItem('zitlas_firebase_user') || '{}');
+        if (fb.photo || fb.photoURL) {
+          user.photo = fb.photo || fb.photoURL;
+          if (!user.name) user.name = fb.name || fb.displayName || '';
+          localStorage.setItem('zitlas_user', JSON.stringify(user));
+        }
       }
     } catch (e) {
       console.warn('[ZITLAS] loadFirebaseUserProfile error:', e);
     }
+    applyProfileImages();
   }
 
-  /* Also listen for Firebase auth state so photo updates after token refresh */
+  /* Firebase auth state: update localStorage then re-apply.
+     Goes through applyProfileImages() so custom upload always wins. */
   if (typeof ZitlasAuth !== 'undefined') {
     ZitlasAuth.onAuthStateChanged(function (user) {
-      if (user && user.photoURL) {
-        const avatar = document.getElementById('headerAvatar');
-        if (avatar) { avatar.src = user.photoURL; avatar.alt = user.displayName || 'Profile'; }
+      if (user) {
+        try {
+          var zUser = JSON.parse(localStorage.getItem('zitlas_user') || '{}');
+          if (user.photoURL) zUser.photo = user.photoURL;
+          if (user.displayName) zUser.name = user.displayName;
+          localStorage.setItem('zitlas_user', JSON.stringify(zUser));
+        } catch (_) {}
+        applyProfileImages();
       }
     });
   }
+
+  /* Cross-tab: re-apply when personal_info or user profile changes in another tab */
+  window.addEventListener('storage', function (e) {
+    if (e.key === 'zitlas_personal_info' || e.key === 'zitlas_user') {
+      applyProfileImages();
+    }
+  });
+
+  /* Back-forward cache: refresh images when user navigates back */
+  window.addEventListener('pageshow', function (e) {
+    if (e.persisted) applyProfileImages();
+  });
 
   /* ══════════════════════════════════════════
      GOAL ACTION BUTTON → auth → survey → modal
@@ -705,20 +832,21 @@
     )}`;
   }
 
+  function getUserInitials() {
+    try {
+      var info   = JSON.parse(localStorage.getItem('zitlas_personal_info') || '{}');
+      var zUser  = JSON.parse(localStorage.getItem('zitlas_user')           || '{}');
+      var fbUser = JSON.parse(localStorage.getItem('zitlas_firebase_user')  || '{}');
+      var name   = (info.fullName || zUser.name || fbUser.name || fbUser.displayName || '').trim();
+      if (name) {
+        return name.split(/\s+/).slice(0, 2).map(function(w) { return w[0] || ''; }).join('').toUpperCase() || name[0].toUpperCase();
+      }
+    } catch (_) {}
+    return 'ZT';
+  }
+
   function initImageFallbacks() {
-    const avatar = document.getElementById('headerAvatar');
-    if (avatar) avatar.addEventListener('error', () => { avatar.src = makeFallbackSVG('AP', '#FF8A00', 38); });
-
-    const goalImg = document.getElementById('goalPlayerImg');
-    if (goalImg) {
-      goalImg.addEventListener('error', () => {
-        goalImg.src = makeFallbackSVG('AP', '#FF8A00', 200);
-        goalImg.style.objectFit = 'contain';
-        goalImg.style.padding = '20px';
-        goalImg.style.opacity = '0.5';
-      });
-    }
-
+    applyProfileImages();
   }
 
   /* ══════════════════════════════════════════
@@ -755,9 +883,9 @@
   };
 
   const DRILL_COLORS = [
-    'rgba(255,138,0,0.15)',
-    'rgba(34,197,94,0.15)',
-    'rgba(59,130,246,0.15)',
+    'rgba(var(--primary-rgb),0.15)',
+    'rgba(var(--success-rgb),0.15)',
+    'rgba(var(--ai-rgb),0.15)',
   ];
 
   /* ── Render training cards for the selected day ── */
@@ -1043,10 +1171,10 @@
     }
 
     const scoreChips = [
-      { label: 'Physical', val: scores.physical, color: '#22C55E' },
-      { label: 'Mental',   val: scores.mental,   color: '#3B82F6' },
-      { label: 'Diet',     val: scores.diet,      color: '#FF8A00' },
-      { label: 'Lifestyle',val: scores.lifestyle, color: '#A855F7' },
+      { label: 'Physical', val: scores.physical, color: 'var(--success)' },
+      { label: 'Mental',   val: scores.mental,   color: 'var(--ai-accent)' },
+      { label: 'Diet',     val: scores.diet,      color: 'var(--primary)' },
+      { label: 'Lifestyle',val: scores.lifestyle, color: 'var(--ai-accent)' },
     ].filter(c => c.val != null);
 
     const archetypePill = document.getElementById('swotArchetypePill');
@@ -1094,12 +1222,12 @@
      without touching the UI code.
   ══════════════════════════════════════════ */
 
-  /* Seed the global data object — replace these values with Health Connect later */
+  /* Baseline zeros — Health Connect overwrites with real data when available */
   window.zitlasSteps = window.zitlasSteps || {
-    today_steps:     6162,
+    today_steps:     0,
     daily_step_goal: 10000,
-    calories_burned: 204,
-    distance_km:     4.5,
+    calories_burned: 0,
+    distance_km:     0,
     active_minutes:  85,
     streak_days:     7,
   };
@@ -1524,7 +1652,7 @@
     setInterval(() => {
       count++;
       if (count % 4 === 0) {
-        card.style.boxShadow = '0 0 18px rgba(255,138,0,0.45)';
+        card.style.boxShadow = '0 0 18px rgba(var(--primary-rgb),0.45)';
         setTimeout(() => { card.style.boxShadow = ''; }, 500);
       }
     }, 2000);
@@ -1594,6 +1722,7 @@
 
     safeRun('checkPendingAction',   checkPendingAction);
     safeRun('renderGoalCard',       renderGoalCard);
+    safeRun('applyProfileImages',   applyProfileImages);
     safeRun('initGoalActionBtn',    initGoalActionBtn);
     safeRun('initSetGoalModal',     initSetGoalModal);
     safeRun('initResetGoalModal',   initResetGoalModal);

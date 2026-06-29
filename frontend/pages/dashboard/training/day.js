@@ -797,7 +797,7 @@
     const fitCard = el('tpFitnessCard');
     if (fitCard) {
       if (!exercises.length) {
-        fitCard.innerHTML = '<p style="color:#888;font-size:14px;padding:12px 0">No exercises listed for this session.</p>';
+        fitCard.innerHTML = '<p style="color:var(--text-muted);font-size:14px;padding:12px 0">No exercises listed for this session.</p>';
       } else {
         fitCard.innerHTML = exercises.map((ex, i) => {
           const chips = [];
@@ -814,7 +814,7 @@
             </div>` : '';
 
           const sep = i > 0
-            ? '<hr style="border:none;border-top:1px solid rgba(255,255,255,0.06);margin:14px 0">'
+            ? '<hr style="border:none;border-top:1px solid rgba(var(--white-rgb),0.06);margin:14px 0">'
             : '';
 
           return sep
@@ -830,13 +830,13 @@
         noteBlock.id = 'tpExpertNoteBlock';
         noteBlock.style.cssText =
           'margin-top:14px;padding:12px 14px;border-radius:10px;' +
-          'background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.22)';
+          'background:rgba(var(--ai-rgb),0.08);border:1px solid rgba(var(--ai-rgb),0.22)';
         noteBlock.innerHTML =
-          '<p style="font-size:11px;font-weight:700;color:#818CF8;' +
+          '<p style="font-size:11px;font-weight:700;color:var(--ai-accent);' +
               'text-transform:uppercase;letter-spacing:0.06em;margin:0 0 5px 0">' +
             '💬 Expert Note' +
           '</p>' +
-          '<p style="font-size:14px;color:var(--text-1,#E5E7EB);margin:0;line-height:1.55">' +
+          '<p style="font-size:14px;color:var(--text-1,var(--text-secondary));margin:0;line-height:1.55">' +
             escHtml(expertNote) +
           '</p>';
         fitCard.appendChild(noteBlock);
@@ -860,8 +860,8 @@
     const loadEl = el('tpLoading');
     if (loadEl) loadEl.innerHTML = `
       <span style="font-size:32px">⚠️</span>
-      <p style="color:#B5B5B5;font-size:14px">No training plan found.<br>Complete the assessment to generate your plan.</p>
-      <button onclick="goBack()" style="margin-top:16px;padding:12px 24px;background:#141414;border:1px solid #262626;border-radius:10px;color:#fff;font-size:14px;font-weight:700;cursor:pointer;">← Go Back</button>`;
+      <p style="color:var(--text-secondary);font-size:14px">No training plan found.<br>Complete the assessment to generate your plan.</p>
+      <button onclick="goBack()" style="margin-top:16px;padding:12px 24px;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;color:var(--text-primary);font-size:14px;font-weight:700;cursor:pointer;">← Go Back</button>`;
   }
 
   /* ══════════════════════════════════════════

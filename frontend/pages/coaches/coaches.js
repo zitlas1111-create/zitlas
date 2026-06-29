@@ -1,156 +1,10 @@
 /* ── ZITLAS Nutritionist Marketplace ── */
 'use strict';
 
-// ─── DATA ──────────────────────────────────────────────────────────────────
-
-const NUTRITIONISTS = [
-  {
-    id: 'rahul',
-    name: 'Rahul Sharma',
-    role: 'Weight Loss Nutritionist',
-    image: '../../assets/coach1.png',
-    initials: 'RS',
-    color: '#FF8A00',
-    rating: 4.9,
-    reviews: 128,
-    exp: '8+',
-    fee: 149,
-    duration: '15 Min',
-    available: true,
-    specialties: ['weight_loss', 'general'],
-    lang: ['EN', 'HI'],
-  },
-  {
-    id: 'vikas',
-    name: 'Vikas Saxena',
-    role: 'Strength & Fitness Specialist',
-    image: '../../assets/coach2.png',
-    initials: 'VS',
-    color: '#EAB308',
-    rating: 4.7,
-    reviews: 80,
-    exp: '6+',
-    fee: 129,
-    duration: '15 Min',
-    available: true,
-    specialties: ['general', 'muscle_gain'],
-    lang: ['HI', 'MR'],
-  },
-  {
-    id: 'rohit',
-    name: 'Rohit Deshmukh',
-    role: 'Fat Loss Nutritionist',
-    image: '../../assets/coach3.png',
-    initials: 'RD',
-    color: '#EF4444',
-    rating: 4.8,
-    reviews: 72,
-    exp: '7+',
-    fee: 199,
-    duration: '20 Min',
-    available: false,
-    specialties: ['weight_loss'],
-    lang: ['EN', 'HI'],
-  },
-  {
-    id: 'aman',
-    name: 'Aman Verma',
-    role: 'Habit & Wellness Expert',
-    image: '../../assets/coach4.png',
-    initials: 'AV',
-    color: '#22C55E',
-    rating: 4.6,
-    reviews: 54,
-    exp: '5+',
-    fee: 99,
-    duration: '10 Min',
-    available: true,
-    specialties: ['general', 'diabetes'],
-    lang: ['HI'],
-  },
-  {
-    id: 'prakash',
-    name: 'Prakash Sir',
-    role: 'Head Nutritionist',
-    image: '../../assets/ac1.png',
-    initials: 'PS',
-    color: '#FF8A00',
-    rating: 4.9,
-    reviews: 210,
-    exp: '12+',
-    fee: 299,
-    duration: '30 Min',
-    available: true,
-    specialties: ['weight_loss', 'pcos', 'diabetes'],
-    lang: ['EN', 'HI', 'MR'],
-  },
-  {
-    id: 'ramesh',
-    name: 'Ramesh Patil',
-    role: 'Weight Loss Nutritionist',
-    image: '../../assets/ac2.png',
-    initials: 'RP',
-    color: '#22C55E',
-    rating: 4.8,
-    reviews: 145,
-    exp: '9+',
-    fee: 249,
-    duration: '25 Min',
-    available: false,
-    specialties: ['weight_loss', 'general'],
-    lang: ['HI', 'MR'],
-  },
-  {
-    id: 'vivek',
-    name: 'Vivek Sharma',
-    role: 'Fitness Specialist',
-    image: '../../assets/ac3.png',
-    initials: 'VS',
-    color: '#3B82F6',
-    rating: 4.8,
-    reviews: 118,
-    exp: '8+',
-    fee: 179,
-    duration: '20 Min',
-    available: true,
-    specialties: ['muscle_gain', 'general'],
-    lang: ['EN', 'HI'],
-  },
-  {
-    id: 'sanjay',
-    name: 'Sanjay Kulkarni',
-    role: 'Habit & Wellness Expert',
-    image: '../../assets/ac4.png',
-    initials: 'SK',
-    color: '#8B5CF6',
-    rating: 4.7,
-    reviews: 98,
-    exp: '7+',
-    fee: 149,
-    duration: '15 Min',
-    available: true,
-    specialties: ['general', 'diabetes'],
-    lang: ['HI', 'MR'],
-  },
-  {
-    id: 'abhishek',
-    name: 'Abhishek More',
-    role: 'Sports Nutrition Specialist',
-    image: '../../assets/ac5.png',
-    initials: 'AM',
-    color: '#EAB308',
-    rating: 4.8,
-    reviews: 132,
-    exp: '6+',
-    fee: 199,
-    duration: '20 Min',
-    available: false,
-    specialties: ['muscle_gain', 'pcos'],
-    lang: ['EN', 'MR'],
-  },
-];
-
 // ─── STATE ─────────────────────────────────────────────────────────────────
+
+let _expertsData     = [];
+let _loadingExperts  = true;
 
 let currentSort      = 'rated';
 let currentSpecialty = 'all';
@@ -184,6 +38,11 @@ function avatarBg(n) {
 }
 
 function renderNutritionistCard(n) {
+  /* Apply live profile data for the logged-in expert */
+  if (window.ZitlasExpertProfile && n.id === ZitlasExpertProfile.getExpertId()) {
+    n = ZitlasExpertProfile.applyToCard(n);
+  }
+
   const availClass = n.available ? 'avail-tag--now' : 'avail-tag--later';
   const availText  = n.available ? '🟢 Available Today' : '⏰ Available Tomorrow';
   const langStr    = n.lang.join(', ');
@@ -201,7 +60,7 @@ function renderNutritionistCard(n) {
   <div class="nutri-body">
     <div class="nutri-name-row">
       <span class="nutri-name">${n.name}</span>
-      <svg class="verified-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22C55E" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-label="Verified expert">
+      <svg class="verified-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-label="Verified expert">
         <polyline points="20 6 9 17 4 12"/>
       </svg>
     </div>
@@ -234,6 +93,18 @@ function renderNutritionistCard(n) {
 </article>`;
 }
 
+function renderNoExpertsState() {
+  return `<div class="empty-state">
+  <div class="empty-icon">🧑‍⚕️</div>
+  <h3 class="empty-heading">No Experts Available</h3>
+  <p class="empty-desc">Experts will appear here once approved by the ZITLAS team.</p>
+  <a href="../login/login.html" class="ask-btn" style="display:inline-flex;align-items:center;gap:6px;margin-top:12px;text-decoration:none;">
+    Become an Expert
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+  </a>
+</div>`;
+}
+
 function renderEmptyState() {
   return `<div class="empty-state">
   <div class="empty-icon">🧑‍⚕️</div>
@@ -245,7 +116,7 @@ function renderEmptyState() {
 // ─── FILTER + SORT ─────────────────────────────────────────────────────────
 
 function getFiltered() {
-  let list = NUTRITIONISTS.slice();
+  let list = _expertsData.slice();
 
   if (currentSpecialty !== 'all') {
     list = list.filter(n => n.specialties.includes(currentSpecialty));
@@ -275,6 +146,16 @@ function getFiltered() {
 }
 
 function updateList() {
+  if (_loadingExperts) {
+    coachesList.innerHTML = '<div class="empty-state"><p class="empty-desc">Loading experts...</p></div>';
+    resultsCount.textContent = '...';
+    return;
+  }
+  if (_expertsData.length === 0) {
+    coachesList.innerHTML = renderNoExpertsState();
+    resultsCount.textContent = '0 Experts';
+    return;
+  }
   const list = getFiltered();
   if (list.length === 0) {
     coachesList.innerHTML = renderEmptyState();
@@ -284,6 +165,51 @@ function updateList() {
   coachesList.innerHTML = list.map(renderNutritionistCard).join('');
   const n = list.length;
   resultsCount.textContent = `${n} Expert${n === 1 ? '' : 's'}`;
+}
+
+// ─── FIREBASE LOADING ──────────────────────────────────────────────────────
+
+function _normalizeInitials(name) {
+  return (name || 'EX').split(/\s+/).map(function(w){return w[0]||'';}).slice(0,2).join('').toUpperCase() || 'EX';
+}
+
+function loadExpertsFromFirebase() {
+  if (typeof ZitlasDB === 'undefined') {
+    _loadingExperts = false;
+    updateList();
+    return;
+  }
+  ZitlasDB.collection('experts')
+    .where('approved', '==', true)
+    .get()
+    .then(function(snapshot) {
+      _expertsData = [];
+      snapshot.forEach(function(doc) {
+        var d = doc.data();
+        _expertsData.push({
+          id:         doc.id,
+          name:       d.name             || 'Expert',
+          role:       d.specialization   || d.role || 'Expert',
+          image:      d.profilePhoto     || d.image || '',
+          initials:   d.initials         || _normalizeInitials(d.name),
+          color:      d.colorAccent      || 'var(--primary)',
+          rating:     parseFloat(d.rating) || 5.0,
+          reviews:    parseInt(d.reviewCount, 10) || 0,
+          exp:        d.experience       || '1+',
+          fee:        parseInt(d.fee, 10) || 0,
+          duration:   d.sessionDuration  ? (d.sessionDuration + ' Min') : '20 Min',
+          available:  d.status !== 'offline',
+          specialties: Array.isArray(d.specialties) ? d.specialties : [],
+          lang:       Array.isArray(d.languages)    ? d.languages   : ['EN'],
+        });
+      });
+      _loadingExperts = false;
+      updateList();
+    })
+    .catch(function() {
+      _loadingExperts = false;
+      updateList();
+    });
 }
 
 // ─── PILL SYNC ─────────────────────────────────────────────────────────────
@@ -417,7 +343,8 @@ function showToast(msg) {
   document.documentElement.setAttribute('data-theme', t);
 
   searchClearBtn.style.display = 'none';
-  updateList();
+  updateList(); // shows loading state immediately
+  loadExpertsFromFirebase();
 
   if (window.ZitlasLang) window.ZitlasLang.applyTranslations();
 })();

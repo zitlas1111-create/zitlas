@@ -6,6 +6,25 @@
 'use strict';
 
 /* ══════════════════════════════════════════════
+   PHASE 8 — PERSIST LOGIN: fast startup redirect
+   If loggedIn flag + zitlas_user exist, skip Firebase
+   and go straight to dashboard (no network round-trip).
+   ══════════════════════════════════════════════ */
+(function () {
+  try {
+    if (localStorage.getItem('loggedIn') !== 'true') return;
+    var _u = localStorage.getItem('zitlas_user');
+    if (!_u) return;
+    var _role = localStorage.getItem('zitlas_user_role') || 'athlete';
+    window.location.replace(
+      _role === 'expert'
+        ? '../experts/expert-dashboard.html'
+        : '../dashboard/dashboard.html'
+    );
+  } catch (_) {}
+}());
+
+/* ══════════════════════════════════════════════
    STAT COUNT-UP
    Same algorithm as dashboard.js countUp()
    ══════════════════════════════════════════════ */
@@ -97,7 +116,7 @@ function setRole(role) {
     ? 'Sign in to your ZITLAS Expert Portal'
     : 'Sign in to continue your weight-loss journey';
   if (emailInput)    emailInput.placeholder = role === 'expert'
-    ? 'Expert Email (e.g. ramesh@zitlas.com)'
+    ? 'Expert Email'
     : 'Email or Mobile Number';
   if (loginBtnText)  loginBtnText.textContent = role === 'expert' ? 'Expert Login →' : 'Sign In';
 }
@@ -117,11 +136,32 @@ if (typeof ZitlasAuth !== 'undefined') {
   ZitlasAuth.onAuthStateChanged(async function (user) {
     if (!user) return; /* not signed in — stay on login */
     try {
-      const doc = await ZitlasDB.collection('users').doc(user.uid).get();
-      if (!doc.exists) return; /* new user awaiting role selection */
-      const role = doc.data().role;
-      syncFirebaseUser(user, role);
-      const dest = role === 'expert'
+      const docSnap = await ZitlasDB.collection('users').doc(user.uid).get();
+      if (!docSnap.exists) return; /* new user awaiting role selection */
+      const data = docSnap.data();
+
+      /* Phase 6 — resolve role from new schema (roles[]/expert_status) or legacy (role field) */
+      const roles        = Array.isArray(data.roles) ? data.roles : [];
+      const expertStatus = data.expert_status || '';
+      const legacyRole   = data.role          || '';
+      const isExpert     =
+        roles.includes('expert')  ||
+        expertStatus === 'approved' ||
+        legacyRole   === 'expert';
+      const resolvedRole = isExpert ? 'expert' : 'athlete';
+
+      /* Update name/photo/last_login without touching roles or expert_status */
+      try {
+        await ZitlasDB.collection('users').doc(user.uid).update({
+          name:       user.displayName || data.name  || '',
+          photo:      user.photoURL    || data.photo || data.photo_url || null,
+          last_login: firebase.firestore.FieldValue.serverTimestamp(),
+        });
+      } catch (_) {}
+
+      syncFirebaseUser(user, resolvedRole);
+
+      const dest = resolvedRole === 'expert'
         ? '../experts/expert-dashboard.html'
         : (function () {
             const p = new URLSearchParams(window.location.search);
@@ -131,7 +171,7 @@ if (typeof ZitlasAuth !== 'undefined') {
               ? '../dashboard/dashboard.html?action=set-goal'
               : '../dashboard/dashboard.html';
           }());
-      window.location.href = dest;
+      window.location.replace(dest);
     } catch (e) {
       console.warn('[ZITLAS] onAuthStateChanged error:', e);
     }
@@ -217,18 +257,6 @@ function setLoading(on) {
 if (emailInput)    emailInput.addEventListener('input',    () => clearInputError('emailGroup'));
 if (passwordInput) passwordInput.addEventListener('input', () => clearInputError('passwordGroup'));
 
-/* Expert accounts — demo credentials (password: expert123) */
-const EXPERT_ACCOUNTS = {
-  'ramesh@zitlas.com':  'ramesh',
-  'rahul@zitlas.com':   'rahul',
-  'arjun@zitlas.com':   'arjun',
-  'vikas@zitlas.com':   'vikas',
-  'rohit@zitlas.com':   'rohit',
-  'aman@zitlas.com':    'aman',
-  'prakash@zitlas.com': 'prakash',
-  'expert@zitlas.com':  'ramesh',
-};
-
 if (loginForm) {
   loginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -239,21 +267,9 @@ if (loginForm) {
     if (!email)    { setInputError('emailGroup');    return; }
     if (!password) { setInputError('passwordGroup'); return; }
 
-    /* ── Expert login ── */
+    /* Expert email/password login is not supported — use Google Sign-In */
     if (selectedRole === 'expert') {
-      const expertId = EXPERT_ACCOUNTS[email.toLowerCase()];
-      if (!expertId || password !== 'expert123') {
-        setInputError('emailGroup');
-        setInputError('passwordGroup');
-        showToast('Invalid expert credentials. Use password: expert123');
-        return;
-      }
-      setLoading(true);
-      await new Promise(r => setTimeout(r, 1200));
-      localStorage.setItem('zitlas_token',     'expert_' + Date.now());
-      localStorage.setItem('zitlas_user_role', 'expert');
-      localStorage.setItem('zitlas_expert_id', expertId);
-      showLoginOverlay();
+      showToast('Experts must sign in with Google. Use the "Continue with Google" button.');
       return;
     }
 
@@ -316,10 +332,28 @@ if (googleBtn) {
       const doc = await ZitlasDB.collection('users').doc(user.uid).get();
 
       if (doc.exists) {
-        /* Returning user — read role, sync state, redirect */
-        const role = doc.data().role;
-        syncFirebaseUser(user, role);
-        selectedRole = role;
+        /* Returning user — resolve role from new schema OR legacy schema */
+        const data        = doc.data();
+        const roles       = Array.isArray(data.roles) ? data.roles : [];
+        const expertStatus = data.expert_status || '';
+        const legacyRole  = data.role           || '';
+        const isExpert    =
+          roles.includes('expert')    ||
+          expertStatus === 'approved' ||
+          legacyRole   === 'expert';
+        const resolvedRole = isExpert ? 'expert' : 'athlete';
+
+        /* Phase 5 — update name/photo/last_login without overwriting roles/expert_status */
+        try {
+          await ZitlasDB.collection('users').doc(user.uid).update({
+            name:       user.displayName || '',
+            photo:      user.photoURL    || null,
+            last_login: firebase.firestore.FieldValue.serverTimestamp(),
+          });
+        } catch (_) {}
+
+        syncFirebaseUser(user, resolvedRole);
+        selectedRole = resolvedRole;
         showLoginOverlay();
       } else {
         /* New Google user — ask which account type */
@@ -355,17 +389,26 @@ if (skipBtn) {
    ══════════════════════════════════════════════ */
 
 function syncFirebaseUser(user, role) {
+  /* Phase 4 — canonical user object read everywhere in the app */
+  localStorage.setItem('zitlas_user', JSON.stringify({
+    uid:      user.uid,
+    name:     user.displayName || '',
+    email:    user.email       || '',
+    photo:    user.photoURL    || null,
+    provider: 'google',
+  }));
+  /* Phase 4 — session flag for fast startup redirect */
+  localStorage.setItem('loggedIn', 'true');
+
+  /* Phase 6 — role sync */
   localStorage.setItem('zitlas_token',     'firebase_' + user.uid);
   localStorage.setItem('zitlas_user_role', role);
+
   if (role === 'expert') {
-    const map = {
-      'ramesh@zitlas.com': 'ramesh', 'rahul@zitlas.com': 'rahul',
-      'arjun@zitlas.com':  'arjun',  'vikas@zitlas.com': 'vikas',
-      'rohit@zitlas.com':  'rohit',  'aman@zitlas.com':  'aman',
-      'prakash@zitlas.com':'prakash',
-    };
-    localStorage.setItem('zitlas_expert_id', map[(user.email || '').toLowerCase()] || 'ramesh');
+    localStorage.setItem('zitlas_expert_id', user.uid);
   }
+
+  /* Keep zitlas_firebase_user for backward compat with existing readers */
   localStorage.setItem('zitlas_firebase_user', JSON.stringify({
     uid:   user.uid,
     name:  user.displayName  || '',
@@ -438,17 +481,18 @@ function hideRoleModal() {
     if (confirmSpin) confirmSpin.style.display = 'flex';
 
     try {
-      /* Expert applicants are saved as 'expert_pending' until manually approved.
-         Athlete sign-ups proceed immediately. */
-      const firestoreRole = chosenRole === 'expert' ? 'expert_pending' : chosenRole;
+      /* Phase 5 — Firestore schema: roles[] + expert_status (never overwrites on update) */
+      const newRoles = ['athlete'];
+      if (chosenRole === 'expert') newRoles.push('expert_pending');
 
       await ZitlasDB.collection('users').doc(user.uid).set({
-        uid:        user.uid,
-        name:       user.displayName  || '',
-        email:      user.email        || '',
-        photo_url:  user.photoURL     || null,
-        role:       firestoreRole,
-        created_at: firebase.firestore.FieldValue.serverTimestamp(),
+        uid:           user.uid,
+        name:          user.displayName || '',
+        email:         user.email       || '',
+        photo:         user.photoURL    || null,
+        roles:         newRoles,
+        expert_status: chosenRole === 'expert' ? 'pending' : 'none',
+        created_at:    firebase.firestore.FieldValue.serverTimestamp(),
       });
 
       if (chosenRole === 'expert') {
@@ -477,7 +521,6 @@ function hideRoleModal() {
   if (reviewHomeBtn) {
     reviewHomeBtn.addEventListener('click', function () {
       console.log('[ZITLAS] Under-review → continuing as athlete guest');
-      console.trace('Redirect executed');
       sessionStorage.setItem('zitlas_guest', '1');
       /* replace() so the back button does NOT return to the application form */
       window.location.replace('../dashboard/dashboard.html');
@@ -540,14 +583,14 @@ function showToast(msg) {
       'bottom:28px',
       'left:50%',
       'transform:translateX(-50%)',
-      'background:#141414',
-      'border:1px solid #262626',
-      'color:#fff',
+      'background:var(--bg-card)',
+      'border:1px solid var(--border)',
+      'color:var(--text-primary)',
       'font-size:13px',
       'font-weight:600',
       'padding:11px 22px',
       'border-radius:40px',
-      'box-shadow:0 4px 24px rgba(0,0,0,0.5)',
+      'box-shadow:0 4px 24px rgba(var(--black-rgb),0.5)',
       'z-index:10000',
       'opacity:0',
       'transition:opacity 0.22s ease',

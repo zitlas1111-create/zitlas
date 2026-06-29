@@ -4,99 +4,8 @@
 
 'use strict';
 
-/* ── Expert data — IDs match COACH_DB in cprofile.js ── */
-const EXPERTS = [
-  {
-    id: 'prakash',
-    name: 'Prakash Sir',
-    specialization: 'Head Nutritionist',
-    experience: 12,
-    rating: 4.9,
-    reviews: 210,
-    languages: ['Hindi', 'English', 'Marathi'],
-    sports: ['Weight Loss', 'Fitness', 'Wellness'],
-    fee: 299,
-    mode: ['online'],
-    initials: 'PS',
-    color: '#FF8A00',
-    verified: true,
-  },
-  {
-    id: 'ramesh',
-    name: 'Ramesh Patil',
-    specialization: 'Weight Loss Expert',
-    experience: 9,
-    rating: 4.8,
-    reviews: 145,
-    languages: ['Hindi', 'Marathi'],
-    sports: ['Weight Loss', 'Nutrition'],
-    fee: 249,
-    mode: ['online'],
-    initials: 'RP',
-    color: '#22C55E',
-    verified: true,
-  },
-  {
-    id: 'vivek',
-    name: 'Vivek Sharma',
-    specialization: 'Fitness Specialist',
-    experience: 8,
-    rating: 4.8,
-    reviews: 118,
-    languages: ['Hindi', 'English'],
-    sports: ['Fitness', 'Athletics', 'Weight Loss'],
-    fee: 179,
-    mode: ['online'],
-    initials: 'VS',
-    color: '#3B82F6',
-    verified: true,
-  },
-  {
-    id: 'rahul',
-    name: 'Rahul Sharma',
-    specialization: 'Weight Loss Expert',
-    experience: 8,
-    rating: 4.9,
-    reviews: 128,
-    languages: ['Hindi', 'English'],
-    sports: ['Weight Loss', 'Nutrition'],
-    fee: 149,
-    mode: ['online'],
-    initials: 'RS',
-    color: '#FF8A00',
-    verified: true,
-  },
-  {
-    id: 'sanjay',
-    name: 'Sanjay Kulkarni',
-    specialization: 'Habit & Wellness Expert',
-    experience: 7,
-    rating: 4.7,
-    reviews: 98,
-    languages: ['Hindi', 'Marathi'],
-    sports: ['Wellness', 'Fitness'],
-    fee: 149,
-    mode: ['online'],
-    initials: 'SK',
-    color: '#8B5CF6',
-    verified: true,
-  },
-  {
-    id: 'abhishek',
-    name: 'Abhishek More',
-    specialization: 'Fitness Specialist',
-    experience: 6,
-    rating: 4.8,
-    reviews: 132,
-    languages: ['English', 'Marathi'],
-    sports: ['Fitness', 'Athletics'],
-    fee: 199,
-    mode: ['online'],
-    initials: 'AM',
-    color: '#EAB308',
-    verified: false,
-  },
-];
+/* Expert data loaded from Firestore 'experts' collection (approved only) */
+let _expertsData = [];
 
 /* ── State ── */
 const state = {
@@ -122,12 +31,49 @@ function goToProfile(id) {
 /* ────────────────────────────────────────────
    INIT
    ──────────────────────────────────────────── */
+function loadExpertsFromFirebase() {
+  if (typeof ZitlasDB === 'undefined') {
+    renderCards(_expertsData);
+    return;
+  }
+  ZitlasDB.collection('experts')
+    .where('approved', '==', true)
+    .get()
+    .then(function(snapshot) {
+      _expertsData = [];
+      snapshot.forEach(function(doc) {
+        var d = doc.data();
+        var expYrs = parseInt(d.experience, 10) || 0;
+        _expertsData.push({
+          id:            doc.id,
+          name:          d.name           || 'Expert',
+          specialization:d.specialization || d.role || 'Expert',
+          experience:    expYrs,
+          rating:        parseFloat(d.rating) || 5.0,
+          reviews:       parseInt(d.reviewCount, 10) || 0,
+          languages:     Array.isArray(d.languages)  ? d.languages  : ['English'],
+          sports:        Array.isArray(d.specialties) ? d.specialties.map(function(s){ return s.replace(/_/g,' ').replace(/\b\w/g,function(c){return c.toUpperCase();}); }) : [],
+          fee:           parseInt(d.fee, 10) || 0,
+          mode:          d.status === 'offline' ? ['offline'] : ['online'],
+          initials:      d.initials || (d.name||'EX').split(/\s+/).map(function(w){return w[0]||'';}).slice(0,2).join('').toUpperCase(),
+          color:         d.colorAccent || 'var(--primary)',
+          verified:      true,
+        });
+      });
+      renderCards(_expertsData);
+    })
+    .catch(function() {
+      renderCards(_expertsData); // shows empty state
+    });
+}
+
 function init() {
   var _nb = document.getElementById('zitlas-navbar');
   if (_nb) document.documentElement.style.setProperty('--nav-height', (window.innerHeight - _nb.getBoundingClientRect().top) + 'px');
 
   detectElite();
-  renderCards(EXPERTS);
+  renderCards(_expertsData); // shows empty state while loading
+  loadExpertsFromFirebase();
   bindFilters();
   bindNav();
 
@@ -149,13 +95,29 @@ function renderCards(list) {
   dtList.innerHTML = '';
 
   if (list.length === 0) {
-    dtEmpty.style.display = 'flex';
+    /* If no experts exist at all (not a filter miss) show the notify banner */
+    if (_expertsData.length === 0) {
+      dtEmpty.style.display = 'none';
+      dtNotifyBanner.style.display = 'flex';
+      var titleEl = dtNotifyBanner.querySelector('.dt-notify-title');
+      var subEl   = dtNotifyBanner.querySelector('.dt-notify-sub');
+      if (titleEl) titleEl.textContent = 'No Experts Available';
+      if (subEl)   subEl.textContent   = 'Experts will appear here once approved by the ZITLAS team.';
+      var notifyBtn = dtNotifyBanner.querySelector('.dt-notify-btn');
+      if (notifyBtn) {
+        notifyBtn.textContent = 'Become an Expert';
+        notifyBtn.onclick = function() { window.location.href = '../login/login.html'; };
+      }
+    } else {
+      dtEmpty.style.display = 'flex';
+      dtNotifyBanner.style.display = 'none';
+    }
     dtCount.textContent = '0 available';
-    dtNotifyBanner.style.display = 'none';
     return;
   }
 
   dtEmpty.style.display = 'none';
+  dtNotifyBanner.style.display = 'none';
   dtCount.textContent = `${list.length} available`;
 
   list.forEach(d => {
@@ -165,6 +127,11 @@ function renderCards(list) {
 }
 
 function buildCard(d) {
+  /* Apply live profile data for the logged-in expert */
+  if (window.ZitlasExpertProfile && d.id === ZitlasExpertProfile.getExpertId()) {
+    d = ZitlasExpertProfile.applyToCard(d);
+  }
+
   const isFreeForElite = state.isElite;
 
   const card = document.createElement('div');
@@ -187,7 +154,7 @@ function buildCard(d) {
   ).join('');
 
   const verifiedSvg = d.verified
-    ? `<svg class="dt-verified-badge" viewBox="0 0 24 24" fill="#3B82F6"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>`
+    ? `<svg class="dt-verified-badge" viewBox="0 0 24 24" fill="var(--ai-accent)"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>`
     : '';
 
   const freeTag = isFreeForElite
@@ -313,7 +280,7 @@ function bindFilters() {
 function applyFilters() {
   const { lang, mode, fee, sport } = state.activeFilters;
 
-  const filtered = EXPERTS.filter(d => {
+  const filtered = _expertsData.filter(d => {
     if (lang && lang !== 'all') {
       const langs = d.languages.map(l => l.toLowerCase());
       if (!langs.includes(lang)) return false;
@@ -344,7 +311,7 @@ function resetFilters() {
     p.classList.remove('active', 'active-mode-online', 'active-mode-offline');
   });
   document.querySelector('[data-filter="lang"][data-value="all"]').classList.add('active');
-  renderCards(EXPERTS);
+  renderCards(_expertsData);
   renderActiveFilterTags();
 }
 

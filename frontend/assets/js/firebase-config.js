@@ -1,18 +1,10 @@
 /* ══════════════════════════════════════════════════════════
    ZITLAS — Firebase Configuration
-   ──────────────────────────────────────────────────────────
+   Firebase project: zitlas-b8677 (shared with ZITLAS Hiring)
+   SDK: Firebase v10 compat (same API surface as v8)
 
-   SETUP STEPS:
-   1. Go to https://console.firebase.google.com
-   2. Create a project (or use an existing one)
-   3. Project Settings → General → "Your apps" → Add Web App
-   4. Copy the firebaseConfig object values below
-   5. Authentication → Sign-in method → Enable Google
-   6. Firestore Database → Create database → Start in test mode
-   7. Add your domain to Authentication → Settings → Authorized domains
-
-   FIRESTORE SECURITY RULES (paste in Firestore → Rules):
-   ──────────────────────────────────────────────────────────
+   Firestore security rules required in Firebase Console:
+   ──────────────────────────────────────────────────────
    rules_version = '2';
    service cloud.firestore {
      match /databases/{database}/documents {
@@ -25,23 +17,24 @@
 
 'use strict';
 
-const FIREBASE_CONFIG = {
-  apiKey:            "REPLACE_WITH_YOUR_API_KEY",
-  authDomain:        "REPLACE_WITH_YOUR_PROJECT_ID.firebaseapp.com",
-  projectId:         "REPLACE_WITH_YOUR_PROJECT_ID",
-  storageBucket:     "REPLACE_WITH_YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "REPLACE_WITH_YOUR_MESSAGING_SENDER_ID",
-  appId:             "REPLACE_WITH_YOUR_APP_ID",
+var FIREBASE_CONFIG = {
+  apiKey:            "AIzaSyAR4Q0Ldur2Y2N8iHwsAmPS4V2cWCvf_pg",
+  authDomain:        "zitlas-b8677.firebaseapp.com",
+  projectId:         "zitlas-b8677",
+  storageBucket:     "zitlas-b8677.firebasestorage.app",
+  messagingSenderId: "203730393646",
+  appId:             "1:203730393646:web:f1f4776d8b0d1134bf1dbf",
+  measurementId:     "G-MK3CYXXS8Q"
 };
 
-/* ── Initialize (guard against double-init on multi-page nav) ── */
+/* Guard against double-init on multi-page navigation */
 if (!firebase.apps.length) {
   firebase.initializeApp(FIREBASE_CONFIG);
 }
 
-/* ── Global singletons used across all pages ── */
+/* Global singletons — used across login.js, profile.js, dashboard.js */
 var ZitlasAuth = firebase.auth();
 var ZitlasDB   = firebase.firestore();
 
-/* ── Persist login across tabs + page reloads ── */
+/* Persist login across tabs and page reloads */
 ZitlasAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);

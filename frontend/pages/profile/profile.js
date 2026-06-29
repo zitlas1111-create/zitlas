@@ -148,11 +148,12 @@
           window.location.href = './help-support/help-support.html';
           return;
         }
+        if (action === 'subscription') {
+          window.location.href = './membership/membership.html';
+          return;
+        }
         const t = window.ZitlasLang ? ZitlasLang.t.bind(ZitlasLang) : (k => k);
-        const labels = {
-          subscription: t('toast_subscription_soon'),
-        };
-        showToast(labels[action] || t('toast_coming_soon'));
+        showToast(t('toast_coming_soon'));
       });
     });
   }
@@ -178,9 +179,9 @@
         if (typeof ZitlasAuth !== 'undefined') await ZitlasAuth.signOut();
       } catch (e) { console.warn('[ZITLAS] signOut error:', e); }
 
-      /* Clear all session storage */
-      ['zitlas_token','zitlas_user','user','zitlas_user_role',
-       'zitlas_expert_id','zitlas_firebase_user'].forEach(k => localStorage.removeItem(k));
+      /* Phase 9 — clear all session keys including new ones */
+      ['zitlas_token','zitlas_user','zitlas_firebase_user','zitlas_user_role',
+       'zitlas_expert_id','loggedIn','user'].forEach(k => localStorage.removeItem(k));
       ['zitlas_guest','zitlas_pending_action','user'].forEach(k => sessionStorage.removeItem(k));
 
       window.location.replace('../login/login.html');
@@ -251,6 +252,83 @@
     });
   }
 
+  /* ---- Load Athlete Profile from localStorage ---- */
+  function loadAthleteProfile() {
+    var info = {};
+    try { info = JSON.parse(localStorage.getItem('zitlas_personal_info') || '{}'); } catch (_) {}
+    var zUser = {};
+    try { zUser = JSON.parse(localStorage.getItem('zitlas_user') || '{}'); } catch (_) {}
+    var fbUser = {};
+    try { fbUser = JSON.parse(localStorage.getItem('zitlas_firebase_user') || '{}'); } catch (_) {}
+    var survey = {};
+    try { survey = JSON.parse(localStorage.getItem('zitlas_survey') || '{}'); } catch (_) {}
+
+    var name = (info.fullName || zUser.name || fbUser.displayName || fbUser.name || '').trim();
+    var photo = info.photo || zUser.photo || fbUser.photoURL || fbUser.photo || null;
+
+    var nameEl = document.querySelector('.player-name');
+    if (nameEl && name) nameEl.textContent = name;
+
+    var avatarImg = document.getElementById('avatarImg');
+    if (avatarImg) {
+      if (photo && (photo.startsWith('data:') || photo.startsWith('http'))) {
+        avatarImg.src = photo;
+        avatarImg.onerror = function () {
+          if (!name) return;
+          var _ini = name.split(/\s+/).slice(0, 2).map(function (w) { return w[0] || ''; }).join('').toUpperCase() || name[0].toUpperCase();
+          avatarImg.onerror = null;
+          avatarImg.src = 'data:image/svg+xml,' + encodeURIComponent(
+            '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120">' +
+            '<rect width="120" height="120" rx="60" fill="#FF8C00"/>' +
+            '<text x="50%" y="50%" dominant-baseline="central" text-anchor="middle" font-size="48" font-weight="bold" fill="white" font-family="system-ui">' + _ini + '</text></svg>'
+          );
+        };
+      } else if (name) {
+        var initials = name.split(/\s+/).slice(0, 2).map(function (w) { return w[0] || ''; }).join('').toUpperCase() || name[0].toUpperCase();
+        avatarImg.src = 'data:image/svg+xml,' + encodeURIComponent(
+          '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120">' +
+          '<rect width="120" height="120" rx="60" fill="#FF8C00"/>' +
+          '<text x="50%" y="50%" dominant-baseline="central" text-anchor="middle" font-size="48" font-weight="bold" fill="white" font-family="system-ui">' + initials + '</text></svg>'
+        );
+      }
+    }
+
+    var goalData = {};
+    try { goalData = JSON.parse(localStorage.getItem('zitlas_goal') || '{}'); } catch (_) {}
+    var goalType = (goalData.type || survey.fitness_goal || '').replace(/_/g, ' ');
+    var aiLabel = document.querySelector('.ai-label');
+    if (aiLabel && goalType) {
+      aiLabel.textContent = 'AI ' + goalType.replace(/\b\w/g, function (c) { return c.toUpperCase(); }) + ' Member';
+    }
+
+    /* Update membership badge and subscription item subtitle */
+    var membership = {};
+    try { membership = JSON.parse(localStorage.getItem('zitlas_membership') || '{}'); } catch (_) {}
+    var isPremium = membership.plan === 'premium';
+
+    var roleBadge = document.querySelector('.role-badge');
+    if (roleBadge) {
+      roleBadge.innerHTML = isPremium
+        ? '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.09 6.26L20 9.27l-4.91 4.79L16.18 21 12 17.27 7.82 21l1.09-6.94L4 9.27l5.91-.01z"/></svg>Premium Member'
+        : '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>Basic Member';
+    }
+
+    var subItem = document.querySelector('.settings-item[data-action="subscription"]');
+    if (subItem) {
+      var label = subItem.querySelector('.settings-label');
+      if (label) {
+        var existingSubtitle = label.querySelector('.settings-subtitle');
+        if (!existingSubtitle) {
+          existingSubtitle = document.createElement('span');
+          existingSubtitle.className = 'settings-subtitle';
+          label.style.cssText = 'flex:1;display:flex;flex-direction:column;gap:2px;';
+          label.appendChild(existingSubtitle);
+        }
+        existingSubtitle.textContent = 'Current Plan: ' + (isPremium ? 'Premium' : 'Basic');
+      }
+    }
+  }
+
   /* ---- Avatar fallback ---- */
   function initAvatarFallback() {
     const img = document.getElementById('avatarImg');
@@ -275,6 +353,7 @@
 
     loadTheme();
     initSystemThemeWatcher();
+    loadAthleteProfile();
     initAppearanceModal();
     initLanguageModal();
     initSettingsItems();

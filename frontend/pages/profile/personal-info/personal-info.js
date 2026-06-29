@@ -52,7 +52,7 @@
     initials = initials || 'ZT';
     return 'data:image/svg+xml,' + encodeURIComponent(
       '<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">' +
-      '<rect width="96" height="96" rx="48" fill="#FF8A00"/>' +
+      '<rect width="96" height="96" rx="48" fill="var(--primary)"/>' +
       '<text x="50%" y="50%" dominant-baseline="central" text-anchor="middle" ' +
       'font-size="36" font-weight="bold" fill="white" font-family="system-ui">' +
       initials + '</text></svg>'
@@ -63,16 +63,40 @@
     var raw  = localStorage.getItem(STORAGE_KEY);
     var data = raw ? JSON.parse(raw) : {};
 
-    /* Photo */
+    /* Phase 7 — Pre-populate name/email from zitlas_user (Google sign-in) if not yet saved locally */
+    try {
+      var zUser = JSON.parse(localStorage.getItem('zitlas_user') || '{}');
+      if (!data.fullName && zUser.name)  data.fullName = zUser.name;
+      if (!data.email    && zUser.email) data.email    = zUser.email;
+    } catch (_) {}
+
+    /* Photo — prefer saved base64 photo, then Google photo URL, then initials fallback */
     var photoImg = document.getElementById('photoImg');
     if (photoImg) {
-      photoImg.src = (data.photo && data.photo.startsWith('data:'))
-        ? data.photo
-        : avatarFallback(
+      var googlePhoto = '';
+      try {
+        var _zu = JSON.parse(localStorage.getItem('zitlas_user') || '{}');
+        googlePhoto = _zu.photo || '';
+      } catch (_) {}
+
+      if (data.photo && data.photo.startsWith('data:')) {
+        photoImg.src = data.photo;
+      } else if (googlePhoto && googlePhoto.startsWith('http')) {
+        photoImg.src = googlePhoto;
+        photoImg.addEventListener('error', function () {
+          photoImg.src = avatarFallback(
             data.fullName
               ? data.fullName.trim().split(/\s+/).slice(0, 2).map(function (w) { return w[0]; }).join('').toUpperCase()
               : 'ZT'
           );
+        }, { once: true });
+      } else {
+        photoImg.src = avatarFallback(
+          data.fullName
+            ? data.fullName.trim().split(/\s+/).slice(0, 2).map(function (w) { return w[0]; }).join('').toUpperCase()
+            : 'ZT'
+        );
+      }
       photoImg.addEventListener('error', function () { photoImg.src = avatarFallback('ZT'); });
     }
 
@@ -307,6 +331,7 @@
 
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        console.log('[PROFILE] Saved image:', photoToStore ? 'base64 upload (' + photoToStore.length + ' chars)' : 'none');
         var surveyRaw = localStorage.getItem(SURVEY_KEY);
         var survey    = surveyRaw ? JSON.parse(surveyRaw) : {};
         if (heightCm !== null) survey.height_cm = heightCm;

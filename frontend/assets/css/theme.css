@@ -1,0 +1,137 @@
+/*
+ * ZITLAS Official Brand Theme
+ * Global design tokens and utility classes for the fitness + AI coaching app.
+ */
+
+:root,
+html,
+html[data-theme="dark"],
+html[data-theme="light"] {
+  --bg-primary: #000000;
+  --bg-card: #111111;
+  --bg-card-light: #171717;
+
+  --primary: #FF8C00;
+  --primary-hover: #FFA726;
+  --primary-dark: #E67E22;
+  --primary-rgb: 255,140,0;
+
+  --success: #22C55E;
+  --success-dark: #16A34A;
+  --success-rgb: 34,197,94;
+
+  --ai-accent: #00C2FF;
+  --ai-rgb: 0,194,255;
+
+  --text-primary: #FFFFFF;
+  --text-secondary: #9CA3AF;
+  --text-muted: #6B7280;
+  --white-rgb: 255,255,255;
+  --black-rgb: 0,0,0;
+
+  --border: #222222;
+  --shadow: rgba(255,140,0,0.20);
+
+  /* Compatibility aliases used by existing page styles. */
+  --bg: var(--bg-primary);
+  --bg-alt: var(--bg-card);
+  --bg-secondary: var(--bg-card);
+  --surface: var(--bg-card);
+  --surface2: var(--bg-card-light);
+  --card: var(--bg-card);
+  --card-bg: var(--bg-card);
+  --card-hover: var(--bg-card-light);
+  --card-active: var(--bg-card-light);
+  --border-light: var(--border);
+  --border-sub: var(--border);
+
+  --accent: var(--primary);
+  --accent-light: var(--primary-hover);
+  --accent-hover: var(--primary-hover);
+  --accent-dark: var(--primary-dark);
+  --accent-glow: rgba(255,140,0,0.20);
+  --accent-glow-s: rgba(255,140,0,0.10);
+
+  --green: var(--success);
+  --green-dark: var(--success-dark);
+  --blue: var(--ai-accent);
+  --cyan: var(--ai-accent);
+  --yellow: var(--primary-hover);
+
+  --text: var(--text-primary);
+  --text-sec: var(--text-secondary);
+  --text-1: var(--text-primary);
+  --text-2: var(--text-secondary);
+  --text-3: var(--text-muted);
+  --text-dim: var(--text-muted);
+
+  --radius: 22px;
+  --radius-md: 22px;
+  --radius-sm: 14px;
+  --radius-lg: 28px;
+  --glow-focus: 0 0 0 3px rgba(255,140,0,0.18);
+  --button-shadow: 0 0 30px rgba(255,140,0,0.25);
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.text-success { color: var(--success) !important; }
+.text-primary { color: var(--primary) !important; }
+.text-ai { color: var(--ai-accent) !important; }
+
+.bg-card {
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 22px !important;
+}
+
+.btn-primary {
+  background: var(--primary) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--primary) !important;
+  box-shadow: var(--button-shadow) !important;
+}
+
+.btn-primary:hover {
+  background: var(--primary-hover) !important;
+  border-color: var(--primary-hover) !important;
+}
+
+.badge-success {
+  background: rgba(34,197,94,0.12) !important;
+  color: var(--success) !important;
+  border: 1px solid rgba(34,197,94,0.28) !important;
+}
+
+.badge-ai {
+  background: rgba(0,194,255,0.12) !important;
+  color: var(--ai-accent) !important;
+  border: 1px solid rgba(0,194,255,0.28) !important;
+}
+
+/* Common semantic hooks used across existing pages. */
+[class*="ai-badge"],
+[class*="badge--ai"],
+[class*="--ai"] {
+  --badge-bg: rgba(0,194,255,0.12);
+  --badge-color: var(--ai-accent);
+}
+
+[class*="success"],
+[class*="complete"],
+[class*="verified"],
+[class*="online"] {
+  --state-color: var(--success);
+}

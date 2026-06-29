@@ -738,7 +738,7 @@
 
       setTimeout(function() {
         btn.textContent      = 'Plan Approved ✓';
-        btn.style.background = '#22C55E';
+        btn.style.background = 'var(--success)';
       }, 600);
     });
   }

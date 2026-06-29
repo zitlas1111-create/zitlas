@@ -5,421 +5,9 @@
 (function () {
   'use strict';
 
-  /* ══════════════════════════════════════════
-     NUTRITIONIST DATABASE
-  ══════════════════════════════════════════ */
-  const COACH_DB = {
+  /* Expert profiles are loaded from Firestore — no hardcoded database */
 
-    rahul: {
-      id:          'rahul',
-      name:        'Rahul Sharma',
-      firstName:   'Rahul',
-      role:        'Weight Loss Nutritionist',
-      rating:      '4.9',
-      reviewCount: 128,
-      experience:  '8+ Years Experience',
-      achievement: 'Former State Player',
-      image:       '../../assets/coach1.png',
-      initials:    'RS',
-      colorAccent: '#FF8A00',
-      fee:         149,
-      duration:    '15 Min',
-      studentCount: '+124',
-      stats: [
-        { value: '1.2K+', label: 'Sessions' },
-        { value: '850+',  label: 'Clients' },
-        { value: '98%',   label: 'Success Rate' },
-        { value: '8+',    label: 'Years' },
-      ],
-      expertise: [
-        { icon: '🥗', label: 'Meal Planning' },
-        { icon: '🎯', label: 'Calorie Targeting' },
-        { icon: '⚡', label: 'Metabolism Boost' },
-        { icon: '📊', label: 'Macro Tracking' },
-      ],
-      about: 'Certified nutritionist with over 8 years of experience helping clients lose weight through sustainable meal plans. Specializes in building calorie-smart eating habits that fit real Indian lifestyles.',
-      quote: 'My goal is to make healthy eating feel effortless and delicious for you.',
-      reviews: [
-        {
-          name: 'Arjun Mehta', initials: 'AM', color: '#3B82F6', rating: 5.0,
-          text: "Rahul sir's meal plans completely changed my relationship with food. Lost 8 kg in 3 months with zero hunger!",
-        },
-        {
-          name: 'Priya Singh', initials: 'PS', color: '#22C55E', rating: 4.8,
-          text: 'Outstanding nutritionist! My eating habits improved dramatically within just 3 weeks of following his guidance.',
-        },
-      ],
-    },
 
-    arjun: {
-      id:          'arjun',
-      name:        'Arjun Nair',
-      firstName:   'Arjun',
-      role:        'Sports Dietitian',
-      rating:      '4.8',
-      reviewCount: 96,
-      experience:  '8+ Years Experience',
-      achievement: 'Former National-Level Player',
-      image:       '../../assets/coach2.png',
-      initials:    'AN',
-      colorAccent: '#3B82F6',
-      fee:         229,
-      duration:    '20 Min',
-      studentCount: '+112',
-      stats: [
-        { value: '1.0K+', label: 'Sessions' },
-        { value: '780+',  label: 'Clients' },
-        { value: '97%',   label: 'Success Rate' },
-        { value: '8+',    label: 'Years' },
-      ],
-      expertise: [
-        { icon: '📊', label: 'Performance Analysis' },
-        { icon: '🧠', label: 'Mental Conditioning' },
-        { icon: '🎯', label: 'Diet Strategy' },
-        { icon: '🏆', label: 'Precision Nutrition' },
-      ],
-      about: 'Sports dietitian with 8+ years of experience in holistic wellness transformation. Specializes in combining mental conditioning, habit analysis, and structured goal-setting for sustainable weight loss.',
-      quote: 'True transformation happens when your mind and body work together.',
-      reviews: [
-        {
-          name: 'Karan Mehta', initials: 'KM', color: '#FF8A00', rating: 5.0,
-          text: "Arjun sir's guidance elevated my entire wellness journey. His mental conditioning techniques kept me consistent for months!",
-        },
-        {
-          name: 'Riya Sharma', initials: 'RS', color: '#22C55E', rating: 4.8,
-          text: 'Outstanding nutritionist! Arjun sir helped me understand my body and my habits at a much deeper level than I ever had before.',
-        },
-      ],
-    },
-
-    vikas: {
-      id:          'vikas',
-      name:        'Vikas Saxena',
-      firstName:   'Vikas',
-      role:        'Meal Planning Expert',
-      rating:      '4.7',
-      reviewCount: 80,
-      experience:  '6+ Years Experience',
-      achievement: 'Former Fitness Trainer',
-      image:       '../../assets/coach2.png',
-      initials:    'VS',
-      colorAccent: '#EAB308',
-      fee:         129,
-      duration:    '15 Min',
-      studentCount: '+96',
-      stats: [
-        { value: '950+', label: 'Sessions' },
-        { value: '620+', label: 'Clients' },
-        { value: '96%',  label: 'Success Rate' },
-        { value: '6+',   label: 'Years' },
-      ],
-      expertise: [
-        { icon: '💪', label: 'Strength Training' },
-        { icon: '🏋️', label: 'Core Exercises' },
-        { icon: '🏃', label: 'Agility Drills' },
-        { icon: '💯', label: 'Fitness Assessment' },
-      ],
-      about: 'Certified strength & conditioning specialist with 6+ years of experience building fat-loss and fitness programs. Expert in resistance training, metabolic conditioning, and injury-prevention for weight-loss clients.',
-      quote: 'Your body is your greatest tool — I help you train it to burn fat and build strength at the same time.',
-      reviews: [
-        {
-          name: 'Rohit Kumar', initials: 'RK', color: '#FF8A00', rating: 5.0,
-          text: "Vikas sir's training completely changed my physique. My stamina and strength improved dramatically in just 6 weeks!",
-        },
-        {
-          name: 'Sneha Patel', initials: 'SP', color: '#8B5CF6', rating: 4.7,
-          text: 'The best fitness specialist I have worked with. His scientific approach to fat loss and muscle building is truly unmatched.',
-        },
-      ],
-    },
-
-    rohit: {
-      id:          'rohit',
-      name:        'Rohit Deshmukh',
-      firstName:   'Rohit',
-      role:        'Fat Loss Nutritionist',
-      rating:      '4.8',
-      reviewCount: 72,
-      experience:  '7+ Years Experience',
-      achievement: 'Certified Fat-Loss Specialist',
-      image:       '../../assets/coach3.png',
-      initials:    'RD',
-      colorAccent: '#FF8A00',
-      fee:         199,
-      duration:    '20 Min',
-      studentCount: '+108',
-      stats: [
-        { value: '1.1K+', label: 'Sessions' },
-        { value: '720+',  label: 'Clients' },
-        { value: '97%',   label: 'Success Rate' },
-        { value: '7+',    label: 'Years' },
-      ],
-      expertise: [
-        { icon: '📉', label: 'Calorie Deficit' },
-        { icon: '🏃', label: 'Cardio Planning' },
-        { icon: '🎯', label: 'Fat-Loss Strategy' },
-        { icon: '📊', label: 'Progress Tracking' },
-      ],
-      about: 'Certified fat-loss nutritionist with 7+ years of experience helping clients achieve sustainable weight loss. Specializes in calorie deficit planning, cardio programming, and long-term body composition changes.',
-      quote: 'Every kilo lost starts with a well-planned strategy. I teach you the plan and how to stick to it.',
-      reviews: [
-        {
-          name: 'Amit Shah', initials: 'AS', color: '#22C55E', rating: 4.8,
-          text: "Rohit sir transformed my body completely. His structured deficit plan helped me lose 12 kg without giving up the foods I love.",
-        },
-        {
-          name: 'Kavya Nair', initials: 'KN', color: '#3B82F6', rating: 5.0,
-          text: 'Exceptional nutritionist! My body fat dropped significantly and I finally understand how to maintain my results.',
-        },
-      ],
-    },
-
-    aman: {
-      id:          'aman',
-      name:        'Aman Verma',
-      firstName:   'Aman',
-      role:        'Habit & Wellness Expert',
-      rating:      '4.6',
-      reviewCount: 54,
-      experience:  '5+ Years Experience',
-      achievement: 'Behaviour Change Specialist',
-      image:       '../../assets/coach4.png',
-      initials:    'AV',
-      colorAccent: '#22C55E',
-      fee:         99,
-      duration:    '10 Min',
-      studentCount: '+84',
-      stats: [
-        { value: '780+', label: 'Sessions' },
-        { value: '530+', label: 'Clients' },
-        { value: '95%',  label: 'Success Rate' },
-        { value: '5+',   label: 'Years' },
-      ],
-      expertise: [
-        { icon: '⭐', label: 'Habit Building' },
-        { icon: '🧠', label: 'Mindset Wellness' },
-        { icon: '🎯', label: 'Goal Setting' },
-        { icon: '📅', label: 'Daily Routine Design' },
-      ],
-      about: 'Behaviour change specialist with 5+ years of experience helping clients build lasting health habits. Known for designing simple daily routines that make weight loss feel automatic rather than effortful.',
-      quote: 'Lasting weight loss is not a diet — it is a lifestyle. I build the habits that make it stick for life.',
-      reviews: [
-        {
-          name: 'Dev Patel', initials: 'DP', color: '#FF8A00', rating: 4.7,
-          text: "Aman sir's habit programme is intense but incredibly effective. My consistency improved dramatically in just a month.",
-        },
-        {
-          name: 'Sanya Mehta', initials: 'SM', color: '#8B5CF6', rating: 5.0,
-          text: 'Best wellness expert I have worked with! His attention to behaviour and routine design is truly world-class.',
-        },
-      ],
-    },
-
-    prakash: {
-      id:          'prakash',
-      name:        'Prakash Sir',
-      firstName:   'Prakash',
-      role:        'Head Nutritionist',
-      rating:      '4.9',
-      reviewCount: 210,
-      experience:  '12+ Years Experience',
-      achievement: 'Head Nutritionist — ZITLAS Wellness',
-      image:       '../../assets/ac1.png',
-      initials:    'PS',
-      colorAccent: '#FF8A00',
-      fee:         299,
-      duration:    '30 Min',
-      studentCount: '+200',
-      stats: [
-        { value: '2.0K+', label: 'Sessions' },
-        { value: '1.2K+', label: 'Clients' },
-        { value: '99%',   label: 'Success Rate' },
-        { value: '12+',   label: 'Years' },
-      ],
-      expertise: [
-        { icon: '🥗', label: 'Nutrition Strategy' },
-        { icon: '🧠', label: 'Mental Strength' },
-        { icon: '🎯', label: 'Member Development' },
-        { icon: '🏆', label: 'Goal Achievement' },
-      ],
-      about: 'Head of the ZITLAS Wellness nutrition team with 12+ years of experience. Specializes in holistic member development, mental conditioning, and guiding clients to achieve sustainable weight-loss and nutrition goals.',
-      quote: 'Every great journey starts from zero. My job is to build the foundation that lasts a lifetime.',
-      reviews: [
-        {
-          name: 'Rahul Mehta', initials: 'RM', color: '#FF8A00', rating: 5.0,
-          text: 'Prakash sir is the backbone of our platform. His holistic approach transformed not just my eating habits but my entire mindset.',
-        },
-        {
-          name: 'Sneha Desai', initials: 'SD', color: '#22C55E', rating: 5.0,
-          text: 'The best nutritionist I have ever worked with. His understanding of each member\'s potential is extraordinary.',
-        },
-      ],
-    },
-
-    ramesh: {
-      id:          'ramesh',
-      name:        'Ramesh Patil',
-      firstName:   'Ramesh',
-      role:        'Weight Loss Nutritionist',
-      rating:      '4.8',
-      reviewCount: 145,
-      experience:  '9+ Years Experience',
-      achievement: 'Certified Weight-Loss Specialist',
-      image:       '../../assets/ac2.png',
-      initials:    'RP',
-      colorAccent: '#22C55E',
-      fee:         249,
-      duration:    '25 Min',
-      studentCount: '+140',
-      stats: [
-        { value: '1.4K+', label: 'Sessions' },
-        { value: '900+',  label: 'Clients' },
-        { value: '97%',   label: 'Success Rate' },
-        { value: '9+',    label: 'Years' },
-      ],
-      expertise: [
-        { icon: '📉', label: 'Fat Loss Planning' },
-        { icon: '🎯', label: 'Deficit Strategy' },
-        { icon: '⚡', label: 'Metabolism Training' },
-        { icon: '🧘', label: 'Mindful Eating' },
-      ],
-      about: 'Certified weight-loss nutritionist with 9+ years of dedicated experience. Known for his patient and structured approach to building sustainable calorie deficits and healthy eating foundations in clients of all ages.',
-      quote: 'A solid plan is the base of every transformation. We build yours together, one week at a time.',
-      reviews: [
-        {
-          name: 'Arjun Patil', initials: 'AP', color: '#3B82F6', rating: 4.9,
-          text: "Ramesh sir's weight-loss plans are methodical and effective. My eating habits and body composition have improved dramatically under his guidance.",
-        },
-        {
-          name: 'Kavya Shah', initials: 'KS', color: '#8B5CF6', rating: 4.8,
-          text: 'Brilliant nutritionist! His focus on the fundamentals built a strong healthy lifestyle that I can sustain permanently.',
-        },
-      ],
-    },
-
-    vivek: {
-      id:          'vivek',
-      name:        'Vivek Sharma',
-      firstName:   'Vivek',
-      role:        'Fitness Specialist',
-      rating:      '4.8',
-      reviewCount: 118,
-      experience:  '8+ Years Experience',
-      achievement: 'Certified Personal Trainer',
-      image:       '../../assets/ac3.png',
-      initials:    'VS',
-      colorAccent: '#3B82F6',
-      fee:         179,
-      duration:    '20 Min',
-      studentCount: '+110',
-      stats: [
-        { value: '1.1K+', label: 'Sessions' },
-        { value: '760+',  label: 'Clients' },
-        { value: '97%',   label: 'Success Rate' },
-        { value: '8+',    label: 'Years' },
-      ],
-      expertise: [
-        { icon: '💪', label: 'Strength Training' },
-        { icon: '🏃', label: 'Cardio Programming' },
-        { icon: '🎯', label: 'Progressive Overload' },
-        { icon: '🔄', label: 'Recovery Protocols' },
-      ],
-      about: 'Certified personal trainer with 8+ years of fitness expertise. Expert in teaching proper form, progressive strength training, and building cardiovascular endurance for sustainable fat loss and body recomposition.',
-      quote: 'Fitness is a skill. I teach you the form, the consistency, and the confidence to push your limits safely.',
-      reviews: [
-        {
-          name: 'Siddharth Rao', initials: 'SR', color: '#FF8A00', rating: 4.8,
-          text: 'Vivek sir transformed my fitness entirely. His progressive training approach helped me build real strength I never thought possible.',
-        },
-        {
-          name: 'Pooja Nair', initials: 'PN', color: '#22C55E', rating: 4.9,
-          text: 'Our platform is so lucky to have Vivek sir. His technical knowledge of training and fat loss programming is exceptional.',
-        },
-      ],
-    },
-
-    sanjay: {
-      id:          'sanjay',
-      name:        'Sanjay Kulkarni',
-      firstName:   'Sanjay',
-      role:        'Habit & Wellness Expert',
-      rating:      '4.7',
-      reviewCount: 98,
-      experience:  '7+ Years Experience',
-      achievement: 'Certified Behaviour Specialist',
-      image:       '../../assets/ac4.png',
-      initials:    'SK',
-      colorAccent: '#8B5CF6',
-      fee:         149,
-      duration:    '15 Min',
-      studentCount: '+95',
-      stats: [
-        { value: '980+', label: 'Sessions' },
-        { value: '640+', label: 'Clients' },
-        { value: '96%',  label: 'Success Rate' },
-        { value: '7+',   label: 'Years' },
-      ],
-      expertise: [
-        { icon: '⭐', label: 'Habit Design' },
-        { icon: '🧠', label: 'Behaviour Change' },
-        { icon: '📅', label: 'Routine Building' },
-        { icon: '⚡', label: 'Motivation Systems' },
-      ],
-      about: 'Certified behaviour specialist with 7+ years of habit coaching experience. Renowned for his practical systems that help clients build automatic healthy routines, eliminate self-sabotage, and stay consistent with their weight-loss goals.',
-      quote: 'Every healthy habit compounds. I help you build the small wins that create the big transformation.',
-      reviews: [
-        {
-          name: 'Manish Kulkarni', initials: 'MK', color: '#FF8A00', rating: 4.8,
-          text: "Sanjay sir's habit sessions are intense and incredibly productive. My consistency has never been better!",
-        },
-        {
-          name: 'Anita Joshi', initials: 'AJ', color: '#3B82F6', rating: 4.7,
-          text: 'Best wellness expert on our platform. His systems build automatic behaviours that make weight loss feel effortless.',
-        },
-      ],
-    },
-
-    abhishek: {
-      id:          'abhishek',
-      name:        'Abhishek More',
-      firstName:   'Abhishek',
-      role:        'Fitness Specialist',
-      rating:      '4.8',
-      reviewCount: 132,
-      experience:  '6+ Years Experience',
-      achievement: 'Certified Sports Fitness Trainer',
-      image:       '../../assets/ac5.png',
-      initials:    'AM',
-      colorAccent: '#EAB308',
-      fee:         199,
-      duration:    '20 Min',
-      studentCount: '+125',
-      stats: [
-        { value: '1.2K+', label: 'Sessions' },
-        { value: '820+',  label: 'Clients' },
-        { value: '98%',   label: 'Success Rate' },
-        { value: '6+',    label: 'Years' },
-      ],
-      expertise: [
-        { icon: '💪', label: 'Strength Training' },
-        { icon: '🏃', label: 'Speed & Agility' },
-        { icon: '🧘', label: 'Flexibility' },
-        { icon: '💯', label: 'Fitness Assessment' },
-      ],
-      about: 'Certified sports fitness specialist with 6+ years of experience building fat-loss fitness programs. Specializes in strength, agility, HIIT, and injury prevention for weight-loss clients at all fitness levels.',
-      quote: 'Your body is your tool. I help you sharpen it so you can burn fat and feel incredible every single day.',
-      reviews: [
-        {
-          name: 'Rohan More', initials: 'RM', color: '#22C55E', rating: 5.0,
-          text: "Abhishek sir's fitness program is game-changing. My stamina and body composition improved dramatically within weeks!",
-        },
-        {
-          name: 'Shruti Pawar', initials: 'SP', color: '#8B5CF6', rating: 4.7,
-          text: 'The most dedicated fitness specialist I have trained with. He designs programs specifically around fat-loss and long-term health.',
-        },
-      ],
-    },
-  };
 
   /* ══════════════════════════════════════════
      THEME
@@ -486,7 +74,7 @@
     var r = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
     return r
       ? 'rgba(' + parseInt(r[1],16) + ',' + parseInt(r[2],16) + ',' + parseInt(r[3],16) + ',' + alpha + ')'
-      : 'rgba(255,138,0,' + alpha + ')';
+      : 'rgba(var(--primary-rgb),' + alpha + ')';
   }
 
   /* ══════════════════════════════════════════
@@ -678,11 +266,11 @@
     var heroGrad = document.getElementById('cpHeroGradient');
     if (heroGrad) {
       heroGrad.style.background =
-        'radial-gradient(ellipse at 50% 0%, ' + hexToRgba(coach.colorAccent || '#FF8A00', 0.28) + ' 0%, transparent 68%),' +
-        'linear-gradient(180deg, #0f0800 0%, #0A0A0A 100%)';
+        'radial-gradient(ellipse at 50% 0%, ' + hexToRgba(coach.colorAccent || 'var(--primary)', 0.28) + ' 0%, transparent 68%),' +
+        'linear-gradient(180deg, #0f0800 0%, var(--bg-primary) 100%)';
     }
     var ring = document.getElementById('cpProfileRing');
-    if (ring) ring.style.borderColor = coach.colorAccent || '#FF8A00';
+    if (ring) ring.style.borderColor = coach.colorAccent || 'var(--primary)';
 
     /* Text fields */
     setText('coachName',    coach.name);
@@ -1767,7 +1355,6 @@
   }
 
   function _cpSaveDietStorage(storage) {
-    console.trace("[WRITE zitlas_diet_plan]", storage);
     try { localStorage.setItem('zitlas_diet_plan', JSON.stringify(storage)); } catch (_) {}
   }
 
@@ -3127,19 +2714,62 @@
   /* ══════════════════════════════════════════
      INIT
   ══════════════════════════════════════════ */
+  /* Refresh only the fields that can change when a profile is saved */
+  function _refreshProfileOverlay(baseCoach) {
+    if (!window.ZitlasExpertProfile) return;
+    var p = ZitlasExpertProfile.getProfile();
+    if (!p) return;
+
+    if (p.name) {
+      setText('coachName',      p.name);
+      setText('cpHdrName',      (p.name.split(/\s+/)[0] || p.name));
+      setText('chatHdrName',    p.name);
+      setText('modalCoachName', p.name);
+    }
+    if (p.specialization) {
+      setText('coachRole',      p.specialization);
+      setText('chatHdrRole',    p.specialization);
+      setText('modalCoachRole', p.specialization);
+    }
+    if (p.bio)          setText('aboutText', p.bio);
+    if (p.experience)   setText('coachExp',  p.experience + '+ Years Experience');
+
+    if (p.reviewFee !== undefined) {
+      setText('cpChatRate',  '₹' + p.reviewFee);
+      setText('cpCallRate',  '₹' + (p.reviewFee + 30));
+      setText('cpStickyAmt', '₹' + p.reviewFee + '/min');
+      var ctxFeeEl = document.getElementById('ctxFeeVal');
+      if (ctxFeeEl) ctxFeeEl.textContent = '₹' + p.reviewFee;
+    }
+
+    if (p.initials) {
+      var heroInitialsEl = document.getElementById('cpHeroInitials');
+      if (heroInitialsEl && !p.profilePhoto) heroInitialsEl.textContent = p.initials;
+      var chatAvEl = document.getElementById('chatHdrAvatar');
+      if (chatAvEl && !p.profilePhoto) chatAvEl.textContent = p.initials;
+    }
+
+    if (p.profilePhoto) {
+      var heroImgEl = document.getElementById('coachImg');
+      if (heroImgEl) { heroImgEl.src = p.profilePhoto; heroImgEl.style.display = ''; }
+      var heroInitialsEl2 = document.getElementById('cpHeroInitials');
+      if (heroInitialsEl2) heroInitialsEl2.classList.remove('show');
+      var chatAvEl2 = document.getElementById('chatHdrAvatar');
+      if (chatAvEl2) chatAvEl2.innerHTML = '<img src="' + p.profilePhoto + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">';
+    }
+
+    if (baseCoach) renderMetrics(ZitlasExpertProfile.applyToCoach(baseCoach));
+  }
+
   function init() {
     loadTheme();
 
     var _nb = document.getElementById('zitlas-navbar');
     if (_nb) document.documentElement.style.setProperty('--nav-height', (window.innerHeight - _nb.getBoundingClientRect().top) + 'px');
 
-    var id    = getCoachId();
-    var coach = COACH_DB[id];
-
-    if (!coach) {
-      window.location.href = 'coaches.html';
-      return;
-    }
+    /* Expert profiles are loaded from Firestore — redirect to listing */
+    window.location.href = 'coaches.html';
+    return;
 
     populatePage(coach);
     initContextModal(coach);

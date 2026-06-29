@@ -17,6 +17,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 # Load environment variables from .env before anything else
@@ -102,6 +103,11 @@ app.include_router(support.router,    prefix="/api/support",    tags=["Support"]
 app.include_router(review.router,     prefix="/api/review",     tags=["Review"])
 app.include_router(system.router,     prefix="/api/system",     tags=["System"])
 app.include_router(chat.router,       prefix="/api/chat",       tags=["Chat"])
+
+# ── Root redirect ────────────────────────────────────────────────────────────
+@app.get("/")
+def root():
+    return RedirectResponse(url="/pages/login/login.html")
 
 # ── Serve uploaded chat images ────────────────────────────────────────────────
 _UPLOADS_DIR = BASE_DIR / "uploads"

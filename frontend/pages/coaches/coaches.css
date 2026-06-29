@@ -2,20 +2,20 @@
 
 /* ─── CSS Variables ──────────────────────────────────────────────── */
 :root {
-  --primary:      #FF8A00;
-  --primary-dark: #E07200;
-  --bg:           #0F0F0F;
-  --surface:      #1A1A1A;
-  --surface2:     #242424;
-  --border:       #2E2E2E;
-  --text:         #F0F0F0;
-  --text-muted:   #888;
-  --text-dim:     #555;
-  --green:        #22C55E;
-  --yellow:       #EAB308;
+  --primary:      var(--primary);
+  --primary-dark: var(--primary-dark);
+  --bg:           var(--bg-primary);
+  --surface:      var(--bg-card-light);
+  --surface2:     var(--border);
+  --border:       var(--border);
+  --text:         var(--text-primary);
+  --text-muted:   var(--text-muted);
+  --text-dim:     var(--text-muted);
+  --green:        var(--success);
+  --yellow:       var(--primary-hover);
   --radius:       16px;
   --radius-sm:    10px;
-  --shadow:       0 2px 12px rgba(0,0,0,.45);
+  --shadow:       0 2px 12px rgba(var(--black-rgb),.45);
   --nav-h:        72px;
   --header-h:     56px;
 }
@@ -36,7 +36,7 @@ html, body {
 .drawer-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,.6);
+  background: rgba(var(--black-rgb),.6);
   z-index: 800;
   opacity: 0;
   pointer-events: none;
@@ -131,7 +131,7 @@ html, body {
 .drawer-pill.active {
   background: var(--primary);
   border-color: var(--primary);
-  color: #fff;
+  color: var(--text-primary);
   font-weight: 600;
 }
 
@@ -165,7 +165,7 @@ html, body {
 .drawer-apply-btn {
   width: 100%;
   background: var(--primary);
-  color: #fff;
+  color: var(--text-primary);
   border: none;
   border-radius: var(--radius-sm);
   padding: 13px;
@@ -193,7 +193,7 @@ html, body {
   font-size: 1.1rem;
   font-weight: 900;
   letter-spacing: .05em;
-  background: linear-gradient(135deg, var(--primary), #FFD700);
+  background: linear-gradient(135deg, var(--primary), var(--primary-hover));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -318,7 +318,7 @@ html, body {
 .cat-pill.active {
   background: var(--primary);
   border-color: var(--primary);
-  color: #fff;
+  color: var(--text-primary);
   font-weight: 600;
 }
 .cat-pill svg { flex-shrink: 0; }
@@ -377,7 +377,7 @@ html, body {
 .nutri-card:hover,
 .nutri-card:focus-visible {
   border-color: var(--primary);
-  box-shadow: 0 4px 20px rgba(255,138,0,.12);
+  box-shadow: 0 4px 20px rgba(var(--primary-rgb),.12);
   transform: translateY(-1px);
 }
 .nutri-card::before {
@@ -488,7 +488,7 @@ html, body {
   font-weight: 600;
 }
 .avail-tag--now {
-  background: rgba(34,197,94,.12);
+  background: rgba(var(--success-rgb),.12);
   color: var(--green);
 }
 .avail-tag--later {
@@ -526,7 +526,7 @@ html, body {
   align-items: center;
   gap: 5px;
   background: var(--primary);
-  color: #fff;
+  color: var(--text-primary);
   border: none;
   border-radius: 8px;
   padding: 8px 13px;

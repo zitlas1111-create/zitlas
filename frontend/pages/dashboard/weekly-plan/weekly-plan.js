@@ -17,13 +17,13 @@
      No hardcoded labels — themes come from the plan.
   ══════════════════════════════════════════ */
   const DAY_COLORS = [
-    '#22C55E', /* Day 1 */
-    '#3B82F6', /* Day 2 */
-    '#F59E0B', /* Day 3 */
-    '#FF8A00', /* Day 4 */
-    '#EF4444', /* Day 5 */
-    '#A855F7', /* Day 6 */
-    '#06B6D4', /* Day 7 - Recovery */
+    'var(--success)', /* Day 1 */
+    'var(--ai-accent)', /* Day 2 */
+    'var(--primary)', /* Day 3 */
+    'var(--primary)', /* Day 4 */
+    'var(--primary-dark)', /* Day 5 */
+    'var(--ai-accent)', /* Day 6 */
+    'var(--ai-accent)', /* Day 7 - Recovery */
   ];
 
   /* Short day-name abbreviations */
@@ -387,7 +387,7 @@
     const weeklyFocus = plan.weeklyFocus || goalLabel;
     const improvement = plan.expectedImprovement || null;
     const ambition    = capitalise((plan.ambition || '').replace(/_/g, ' ')) || null;
-    const accentColor = plan.metaColor || '#FF8A00';
+    const accentColor = plan.metaColor || 'var(--primary)';
 
     const items = [
       { icon: '🎯', label: 'Goal',                value: goalLabel,   always: true  },
@@ -465,7 +465,7 @@
 
     const goalLabel   = plan.goalLabel  || capitalise(plan.goal  || 'Weight Loss');
     const improvement = plan.expectedImprovement || null;
-    const accentColor = plan.metaColor || '#FF8A00';
+    const accentColor = plan.metaColor || 'var(--primary)';
 
     wrap.innerHTML = `
       <div class="wp-week-progress" style="--prog-color: ${accentColor}">

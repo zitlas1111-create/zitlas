@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>ZITLAS — Membership &amp; Billing</title>
+  <link rel="stylesheet" href="membership.css" />
+  <link rel="stylesheet" href="../../../assets/css/theme.css" />
+  <script src="../../../assets/js/i18n.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="../../../assets/js/firebase-config.js"></script>
+</head>
+<body>
+
+  <!-- HEADER -->
+  <header class="mb-header">
+    <button class="mb-back-btn" id="mbBackBtn" aria-label="Go back">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
+    <span class="mb-header-title">Membership &amp; Billing</span>
+    <span class="mb-header-spacer"></span>
+  </header>
+
+  <!-- MAIN -->
+  <main class="mb-main">
+
+    <!-- CURRENT PLAN BANNER -->
+    <div class="mb-current-plan" id="mbCurrentPlan">
+      <div class="mb-cp-left">
+        <span class="mb-cp-icon" id="mbCpIcon">🆓</span>
+        <div>
+          <div class="mb-cp-label">Current Plan</div>
+          <div class="mb-cp-name" id="mbCpName">Basic</div>
+        </div>
+      </div>
+      <span class="mb-cp-status" id="mbCpStatus">Active</span>
+    </div>
+
+    <!-- BILLING PERIOD TOGGLE -->
+    <div class="mb-toggle-wrap">
+      <div class="mb-toggle">
+        <button class="mb-toggle-btn active" id="mbBtnMonthly" data-billing="monthly">Monthly</button>
+        <button class="mb-toggle-btn" id="mbBtnYearly" data-billing="yearly">
+          Yearly
+          <span class="mb-save-chip">Save 44%</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- PLAN CARDS -->
+    <div class="mb-cards">
+
+      <!-- BASIC PLAN -->
+      <div class="mb-card mb-card--basic" id="mbCardBasic">
+        <div class="mb-card-top">
+          <div class="mb-plan-icon-wrap mb-plan-icon-wrap--basic">🆓</div>
+          <div class="mb-plan-meta">
+            <div class="mb-plan-name">Basic</div>
+            <div class="mb-plan-price-row">
+              <span class="mb-plan-price" id="mbBasicPrice">₹0</span>
+              <span class="mb-plan-period" id="mbBasicPeriod">/month</span>
+            </div>
+          </div>
+          <div class="mb-current-chip" id="mbChipBasic">Current Plan</div>
+        </div>
+
+        <p class="mb-plan-desc">Perfect for getting started with your fitness journey.</p>
+
+        <ul class="mb-features">
+          <li><span class="mb-check">✅</span>3 Goal Set/Resets per week</li>
+          <li><span class="mb-check">✅</span>5 Meal Swaps per week</li>
+          <li><span class="mb-check">✅</span>AI-generated Diet Plan</li>
+          <li><span class="mb-check">✅</span>AI-generated Workout Plan</li>
+          <li><span class="mb-check">✅</span>SWOT Report</li>
+          <li><span class="mb-check">✅</span>Step Counter</li>
+          <li><span class="mb-check">✅</span>Progress Tracking</li>
+          <li class="mb-feat-neg"><span class="mb-check">📢</span>Ads included</li>
+        </ul>
+
+        <button class="mb-action-btn mb-action-btn--current" id="mbBtnBasic" disabled>Current Plan</button>
+      </div>
+
+      <!-- PREMIUM PLAN -->
+      <div class="mb-card mb-card--premium" id="mbCardPremium">
+        <div class="mb-premium-glow" aria-hidden="true"></div>
+        <div class="mb-premium-ribbon">Most Popular</div>
+
+        <div class="mb-card-top">
+          <div class="mb-plan-icon-wrap mb-plan-icon-wrap--premium">⭐</div>
+          <div class="mb-plan-meta">
+            <div class="mb-plan-name mb-plan-name--premium">Premium</div>
+            <div class="mb-plan-price-row">
+              <span class="mb-plan-price mb-plan-price--premium" id="mbPremiumPrice">₹149</span>
+              <span class="mb-plan-period" id="mbPremiumPeriod">/month</span>
+            </div>
+          </div>
+          <div class="mb-current-chip mb-current-chip--premium" id="mbChipPremium" style="display:none">Current Plan</div>
+        </div>
+
+        <p class="mb-plan-desc">For serious users who want flexibility and a smoother experience.</p>
+
+        <ul class="mb-features">
+          <li><span class="mb-check">✅</span>5 Goal Set/Resets per week</li>
+          <li><span class="mb-check">✅</span>Unlimited Meal Swaps</li>
+          <li><span class="mb-check">✅</span>AI-generated Diet Plan</li>
+          <li><span class="mb-check">✅</span>AI-generated Workout Plan</li>
+          <li><span class="mb-check">✅</span>SWOT Report</li>
+          <li><span class="mb-check">✅</span>Step Counter</li>
+          <li><span class="mb-check">✅</span>Progress Tracking</li>
+          <li class="mb-feat-pro"><span class="mb-check">🚫</span>No Ads</li>
+        </ul>
+
+        <button class="mb-action-btn mb-action-btn--upgrade" id="mbBtnUpgrade">Upgrade to Premium</button>
+      </div>
+
+    </div>
+
+    <!-- COMPARISON TABLE -->
+    <section class="mb-compare">
+      <h3 class="mb-compare-title">Full Comparison</h3>
+      <div class="mb-table-scroll">
+        <table class="mb-table">
+          <thead>
+            <tr>
+              <th class="mb-th mb-th--feat">Feature</th>
+              <th class="mb-th">Basic</th>
+              <th class="mb-th mb-th--prem">⭐ Premium</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td class="mb-td mb-td--feat">Goal Resets / week</td><td class="mb-td">3</td><td class="mb-td mb-td--prem">5</td></tr>
+            <tr><td class="mb-td mb-td--feat">Meal Swaps / week</td><td class="mb-td">5</td><td class="mb-td mb-td--prem">Unlimited</td></tr>
+            <tr><td class="mb-td mb-td--feat">AI Diet Plan</td><td class="mb-td">✅</td><td class="mb-td mb-td--prem">✅</td></tr>
+            <tr><td class="mb-td mb-td--feat">AI Workout Plan</td><td class="mb-td">✅</td><td class="mb-td mb-td--prem">✅</td></tr>
+            <tr><td class="mb-td mb-td--feat">SWOT Report</td><td class="mb-td">✅</td><td class="mb-td mb-td--prem">✅</td></tr>
+            <tr><td class="mb-td mb-td--feat">Step Counter</td><td class="mb-td">✅</td><td class="mb-td mb-td--prem">✅</td></tr>
+            <tr><td class="mb-td mb-td--feat">Progress Tracking</td><td class="mb-td">✅</td><td class="mb-td mb-td--prem">✅</td></tr>
+            <tr><td class="mb-td mb-td--feat">Ad-Free</td><td class="mb-td">❌</td><td class="mb-td mb-td--prem">✅</td></tr>
+            <tr><td class="mb-td mb-td--feat">Monthly Price</td><td class="mb-td">Free</td><td class="mb-td mb-td--prem">₹149/mo</td></tr>
+            <tr><td class="mb-td mb-td--feat">Yearly Price</td><td class="mb-td">Free</td><td class="mb-td mb-td--prem">₹999/yr</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- FINE PRINT -->
+    <p class="mb-fine-print">Subscriptions renew automatically. Cancel anytime from this screen. All prices are in Indian Rupees (INR). Payment integration coming soon.</p>
+
+  </main>
+
+  <div class="mb-toast" id="mbToast"></div>
+
+  <script src="../../../components/wallet.js"></script>
+  <script src="../../../components/navbar.js"></script>
+  <script src="membership.js"></script>
+</body>
+</html>

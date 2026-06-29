@@ -1,0 +1,530 @@
+/* =============================================
+   ZITLAS Membership & Billing — membership.css
+   ============================================= */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html {
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: #000;
+  color: #fff;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding-bottom: calc(90px + env(safe-area-inset-bottom, 0px));
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible { outline: 2px solid #FF8C00; outline-offset: 2px; }
+
+/* =============================================
+   HEADER
+   ============================================= */
+.mb-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 13px 16px;
+  background: rgba(0,0,0,0.92);
+  border-bottom: 1px solid #222;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.mb-back-btn {
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #111;
+  border: 1px solid #222;
+  color: #fff;
+  transition: background 0.18s, transform 0.18s;
+}
+
+.mb-back-btn:hover  { background: #1a1a1a; }
+.mb-back-btn:active { transform: scale(0.94); }
+
+.mb-header-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.2px;
+}
+
+.mb-header-spacer { width: 38px; }
+
+/* =============================================
+   MAIN CONTENT
+   ============================================= */
+.mb-main {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 20px 16px 0;
+}
+
+/* =============================================
+   CURRENT PLAN BANNER
+   ============================================= */
+.mb-current-plan {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #111;
+  border: 1px solid #222;
+  border-radius: 16px;
+  padding: 14px 16px;
+  margin-bottom: 20px;
+}
+
+.mb-cp-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mb-cp-icon {
+  font-size: 28px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.mb-cp-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: #9CA3AF;
+  margin-bottom: 3px;
+}
+
+.mb-cp-name {
+  font-size: 18px;
+  font-weight: 800;
+  color: #fff;
+}
+
+.mb-cp-status {
+  font-size: 12px;
+  font-weight: 700;
+  color: #22C55E;
+  background: rgba(34,197,94,0.12);
+  border: 1px solid rgba(34,197,94,0.3);
+  border-radius: 20px;
+  padding: 4px 10px;
+  flex-shrink: 0;
+}
+
+/* =============================================
+   BILLING TOGGLE
+   ============================================= */
+.mb-toggle-wrap {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.mb-toggle {
+  display: inline-flex;
+  background: #111;
+  border: 1px solid #222;
+  border-radius: 50px;
+  padding: 4px;
+  gap: 2px;
+}
+
+.mb-toggle-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  border-radius: 40px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #9CA3AF;
+  transition: background 0.2s, color 0.2s;
+  white-space: nowrap;
+}
+
+.mb-toggle-btn.active {
+  background: #FF8C00;
+  color: #000;
+}
+
+.mb-save-chip {
+  font-size: 10px;
+  font-weight: 700;
+  background: rgba(34,197,94,0.18);
+  color: #22C55E;
+  border: 1px solid rgba(34,197,94,0.35);
+  border-radius: 20px;
+  padding: 2px 6px;
+  letter-spacing: 0.3px;
+}
+
+.mb-toggle-btn.active .mb-save-chip {
+  background: rgba(0,0,0,0.2);
+  color: #000;
+  border-color: rgba(0,0,0,0.15);
+}
+
+/* =============================================
+   PLAN CARDS
+   ============================================= */
+.mb-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 28px;
+}
+
+/* ── Base card ── */
+.mb-card {
+  position: relative;
+  background: #111;
+  border: 1px solid #222;
+  border-radius: 20px;
+  padding: 20px 20px 18px;
+  overflow: hidden;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.mb-card:hover { transform: translateY(-2px); }
+
+/* ── Basic card accent ── */
+.mb-card--basic {
+  border-color: #2a2a2a;
+}
+
+/* ── Premium card ── */
+.mb-card--premium {
+  border-color: rgba(255,140,0,0.45);
+  background: linear-gradient(135deg, #111 0%, #1a1100 50%, #111 100%);
+  box-shadow: 0 0 0 1px rgba(255,140,0,0.12), 0 8px 40px rgba(255,140,0,0.10);
+}
+
+.mb-premium-glow {
+  position: absolute;
+  top: -60px;
+  right: -60px;
+  width: 200px;
+  height: 200px;
+  background: radial-gradient(circle, rgba(255,140,0,0.18) 0%, transparent 70%);
+  pointer-events: none;
+  border-radius: 50%;
+}
+
+.mb-premium-ribbon {
+  position: absolute;
+  top: 14px;
+  right: -28px;
+  background: linear-gradient(90deg, #FF8C00, #FFA726);
+  color: #000;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  padding: 4px 40px;
+  transform: rotate(35deg);
+  transform-origin: center;
+}
+
+/* ── Card top row ── */
+.mb-card-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.mb-plan-icon-wrap {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  flex-shrink: 0;
+}
+
+.mb-plan-icon-wrap--basic   { background: #1a1a1a; border: 1px solid #333; }
+.mb-plan-icon-wrap--premium { background: rgba(255,140,0,0.12); border: 1px solid rgba(255,140,0,0.3); }
+
+.mb-plan-meta { flex: 1; min-width: 0; }
+
+.mb-plan-name {
+  font-size: 17px;
+  font-weight: 800;
+  color: #fff;
+  margin-bottom: 3px;
+}
+
+.mb-plan-name--premium { color: #FF8C00; }
+
+.mb-plan-price-row { display: flex; align-items: baseline; gap: 2px; }
+
+.mb-plan-price {
+  font-size: 24px;
+  font-weight: 900;
+  color: #fff;
+  letter-spacing: -0.5px;
+}
+
+.mb-plan-price--premium { color: #FF8C00; }
+
+.mb-plan-period {
+  font-size: 13px;
+  font-weight: 500;
+  color: #9CA3AF;
+}
+
+/* ── Current plan chip ── */
+.mb-current-chip {
+  font-size: 11px;
+  font-weight: 700;
+  color: #9CA3AF;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 20px;
+  padding: 4px 10px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.mb-current-chip--premium {
+  color: #FF8C00;
+  background: rgba(255,140,0,0.08);
+  border-color: rgba(255,140,0,0.3);
+}
+
+/* ── Description ── */
+.mb-plan-desc {
+  font-size: 13px;
+  color: #9CA3AF;
+  line-height: 1.5;
+  margin-bottom: 16px;
+}
+
+/* ── Features list ── */
+.mb-features {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-bottom: 20px;
+}
+
+.mb-features li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  color: #e5e7eb;
+  line-height: 1.4;
+}
+
+.mb-check {
+  font-size: 14px;
+  flex-shrink: 0;
+  width: 20px;
+  text-align: center;
+}
+
+.mb-feat-neg { color: #9CA3AF; }
+.mb-feat-pro { color: #22C55E; }
+
+/* ── Action buttons ── */
+.mb-action-btn {
+  width: 100%;
+  padding: 13px 16px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  transition: opacity 0.18s, transform 0.18s, box-shadow 0.18s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.mb-action-btn--current {
+  background: #1a1a1a;
+  color: #6B7280;
+  border: 1px solid #333;
+  cursor: default;
+}
+
+.mb-action-btn--upgrade {
+  background: linear-gradient(90deg, #FF8C00 0%, #FFA726 100%);
+  color: #000;
+  font-weight: 800;
+  box-shadow: 0 4px 20px rgba(255,140,0,0.35);
+}
+
+.mb-action-btn--upgrade:hover  { opacity: 0.92; transform: translateY(-1px); box-shadow: 0 6px 28px rgba(255,140,0,0.45); }
+.mb-action-btn--upgrade:active { transform: scale(0.98); }
+
+.mb-action-btn--on-premium {
+  background: #1a1a1a;
+  color: #FF8C00;
+  border: 1px solid rgba(255,140,0,0.3);
+  cursor: default;
+}
+
+/* =============================================
+   COMPARISON TABLE
+   ============================================= */
+.mb-compare {
+  margin-bottom: 24px;
+}
+
+.mb-compare-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: #fff;
+  margin-bottom: 12px;
+}
+
+.mb-table-scroll {
+  overflow-x: auto;
+  border-radius: 14px;
+  border: 1px solid #222;
+  -webkit-overflow-scrolling: touch;
+}
+
+.mb-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 300px;
+}
+
+.mb-th {
+  padding: 11px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #9CA3AF;
+  text-align: center;
+  background: #111;
+  border-bottom: 1px solid #222;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.mb-th--feat { text-align: left; }
+
+.mb-th--prem {
+  color: #FF8C00;
+  background: rgba(255,140,0,0.06);
+}
+
+.mb-td {
+  padding: 11px 14px;
+  font-size: 13.5px;
+  color: #9CA3AF;
+  text-align: center;
+  border-bottom: 1px solid #1a1a1a;
+  background: #111;
+  vertical-align: middle;
+}
+
+.mb-td--feat {
+  text-align: left;
+  color: #e5e7eb;
+  font-weight: 500;
+}
+
+.mb-td--prem {
+  color: #FF8C00;
+  font-weight: 600;
+  background: rgba(255,140,0,0.04);
+}
+
+.mb-table tbody tr:last-child td { border-bottom: none; }
+
+.mb-table tbody tr:hover td { background: #141414; }
+
+/* =============================================
+   FINE PRINT
+   ============================================= */
+.mb-fine-print {
+  font-size: 11.5px;
+  color: #4B5563;
+  text-align: center;
+  line-height: 1.6;
+  margin-bottom: 16px;
+  padding: 0 8px;
+}
+
+/* =============================================
+   TOAST
+   ============================================= */
+.mb-toast {
+  position: fixed;
+  bottom: calc(90px + env(safe-area-inset-bottom, 12px));
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: #1c1c1c;
+  color: #fff;
+  border: 1px solid #333;
+  border-radius: 40px;
+  padding: 10px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.28s, transform 0.28s;
+  pointer-events: none;
+  z-index: 9999;
+  max-width: calc(100vw - 32px);
+  text-align: center;
+}
+
+.mb-toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* =============================================
+   RESPONSIVE
+   ============================================= */
+@media (min-width: 480px) {
+  .mb-main { padding: 24px 20px 0; }
+  .mb-cards { flex-direction: row; align-items: flex-start; }
+  .mb-card  { flex: 1; }
+}
+
+@media (min-width: 640px) {
+  .mb-plan-price { font-size: 28px; }
+  .mb-card { padding: 24px 22px 20px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

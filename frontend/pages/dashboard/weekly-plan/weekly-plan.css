@@ -4,20 +4,20 @@
    ============================================= */
 
 :root {
-  --accent:       #FF8A00;
-  --accent-light: #FFA940;
-  --accent-glow:  rgba(255, 138, 0, 0.20);
+  --accent:       var(--primary);
+  --accent-light: var(--primary-hover);
+  --accent-glow:  rgba(var(--primary-rgb),0.20);
 
-  --bg:           #0A0A0A;
-  --bg-alt:       #111111;
-  --card:         #141414;
-  --card-hover:   #1c1c1c;
-  --border:       #262626;
-  --border-light: #1e1e1e;
+  --bg:           var(--bg-primary);
+  --bg-alt:       var(--bg-card);
+  --card:         var(--bg-card);
+  --card-hover:   var(--bg-card-light);
+  --border:       var(--border);
+  --border-light: var(--border);
 
-  --text:         #FFFFFF;
-  --text-sec:     #B5B5B5;
-  --text-muted:   #555555;
+  --text:         var(--text-primary);
+  --text-sec:     var(--text-secondary);
+  --text-muted:   var(--text-muted);
 
   --radius:       18px;
   --radius-md:    14px;
@@ -29,13 +29,13 @@
   --nav-height:   100px;
 
   /* Day accent colours */
-  --day1: #22C55E;
-  --day2: #3B82F6;
-  --day3: #F59E0B;
-  --day4: #FF8A00;
-  --day5: #EF4444;
-  --day6: #A855F7;
-  --day7: #06B6D4;
+  --day1: var(--success);
+  --day2: var(--ai-accent);
+  --day3: var(--primary);
+  --day4: var(--primary);
+  --day5: var(--primary-dark);
+  --day6: var(--ai-accent);
+  --day7: var(--ai-accent);
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -55,7 +55,7 @@ body::before {
   content: '';
   position: fixed;
   inset: 0;
-  background: radial-gradient(ellipse at 50% 0%, rgba(255,138,0,0.04) 0%, transparent 60%);
+  background: radial-gradient(ellipse at 50% 0%, rgba(var(--primary-rgb),0.04) 0%, transparent 60%);
   pointer-events: none;
   z-index: 0;
 }
@@ -155,8 +155,8 @@ body::before {
 ══════════════════════════════════════════ */
 .wp-hero {
   margin: 20px 16px 0;
-  background: linear-gradient(135deg, #141414 0%, #1a1200 100%);
-  border: 1px solid rgba(255,138,0,0.20);
+  background: linear-gradient(135deg, var(--bg-card) 0%, #1a1200 100%);
+  border: 1px solid rgba(var(--primary-rgb),0.20);
   border-radius: var(--radius);
   padding: 20px;
   animation: fadeUp 0.4s var(--bounce) both;
@@ -174,9 +174,9 @@ body::before {
   font-weight: 800;
   letter-spacing: 1.2px;
   text-transform: uppercase;
-  background: rgba(255,138,0,0.15);
+  background: rgba(var(--primary-rgb),0.15);
   color: var(--accent);
-  border: 1px solid rgba(255,138,0,0.25);
+  border: 1px solid rgba(var(--primary-rgb),0.25);
   padding: 3px 8px;
   border-radius: 20px;
 }
@@ -184,9 +184,9 @@ body::before {
 .wp-ai-badge {
   font-size: 10px;
   font-weight: 700;
-  background: rgba(168, 85, 247, 0.15);
-  color: #A855F7;
-  border: 1px solid rgba(168,85,247,0.25);
+  background: rgba(var(--ai-rgb),0.15);
+  color: var(--ai-accent);
+  border: 1px solid rgba(var(--ai-rgb),0.25);
   padding: 3px 8px;
   border-radius: 20px;
 }
@@ -220,7 +220,7 @@ body::before {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-sec);
-  background: rgba(255,255,255,0.05);
+  background: rgba(var(--white-rgb),0.05);
   border: 1px solid var(--border);
   padding: 5px 10px;
   border-radius: 20px;
@@ -233,7 +233,7 @@ body::before {
 }
 
 .wp-hero-stat {
-  background: rgba(0,0,0,0.3);
+  background: rgba(var(--black-rgb),0.3);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 10px 12px;
@@ -299,7 +299,7 @@ body::before {
 }
 
 .wp-context-item {
-  background: rgba(255,255,255,0.03);
+  background: rgba(var(--white-rgb),0.03);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-sm);
   padding: 10px 12px;
@@ -335,7 +335,7 @@ body::before {
 .wp-analysis {
   margin: 14px 16px 0;
   background: var(--card);
-  border: 1px solid rgba(168, 85, 247, 0.20);
+  border: 1px solid rgba(var(--ai-rgb),0.20);
   border-radius: var(--radius);
   padding: 16px;
   animation: fadeUp 0.4s var(--bounce) 0.08s both;
@@ -354,7 +354,7 @@ body::before {
   font-size: 13px;
   font-weight: 800;
   letter-spacing: 0.5px;
-  color: #A855F7;
+  color: var(--ai-accent);
   text-transform: uppercase;
 }
 
@@ -365,7 +365,7 @@ body::before {
 }
 
 .wp-analysis-item {
-  border-left: 2px solid rgba(168, 85, 247, 0.40);
+  border-left: 2px solid rgba(var(--ai-rgb),0.40);
   padding-left: 12px;
 }
 
@@ -496,19 +496,19 @@ body::before {
 }
 
 .wp-status-badge--today {
-  background: rgba(255, 138, 0, 0.18);
+  background: rgba(var(--primary-rgb),0.18);
   color: var(--accent);
-  border: 1px solid rgba(255,138,0,0.30);
+  border: 1px solid rgba(var(--primary-rgb),0.30);
 }
 
 .wp-status-badge--done {
-  background: rgba(34, 197, 94, 0.12);
-  color: #22C55E;
-  border: 1px solid rgba(34,197,94,0.20);
+  background: rgba(var(--success-rgb),0.12);
+  color: var(--success);
+  border: 1px solid rgba(var(--success-rgb),0.20);
 }
 
 .wp-status-badge--upcoming {
-  background: rgba(255,255,255,0.05);
+  background: rgba(var(--white-rgb),0.05);
   color: var(--text-muted);
   border: 1px solid var(--border);
 }
@@ -567,7 +567,7 @@ body::before {
   font-weight: 600;
   padding: 3px 8px;
   border-radius: 6px;
-  background: rgba(255,255,255,0.05);
+  background: rgba(var(--white-rgb),0.05);
   color: var(--text-sec);
   border: 1px solid var(--border);
 }
@@ -606,9 +606,9 @@ body::before {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  background: rgba(34, 197, 94, 0.12);
-  border: 1px solid rgba(34, 197, 94, 0.3);
-  color: #22C55E;
+  background: rgba(var(--success-rgb),0.12);
+  border: 1px solid rgba(var(--success-rgb),0.3);
+  color: var(--success);
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
@@ -631,13 +631,13 @@ body::before {
   margin-right: 2px;
 }
 .wp-day-theme-new {
-  color: #22C55E;
+  color: var(--success);
   font-weight: 800;
 }
 
 /* Highlight the accent bar green for expert-reviewed days */
 .wp-day-card--reviewed .wp-day-accent {
-  background: #22C55E !important;
+  background: var(--success) !important;
 }
 
 /* ══════════════════════════════════════════
@@ -681,7 +681,7 @@ body::before {
 
 .wp-prog-bar-track {
   height: 4px;
-  background: rgba(255,255,255,0.07);
+  background: rgba(var(--white-rgb),0.07);
   border-radius: 4px;
   overflow: hidden;
 }
@@ -713,8 +713,8 @@ body::before {
 }
 
 .wp-prog-dot--done {
-  background: rgba(34, 197, 94, 0.6);
-  border-color: #22C55E;
+  background: rgba(var(--success-rgb),0.6);
+  border-color: var(--success);
 }
 
 .wp-prog-dot--active {
@@ -768,7 +768,7 @@ body::before {
 ══════════════════════════════════════════ */
 .wp-review {
   margin: 20px 16px 0;
-  background: linear-gradient(135deg, rgba(234,179,8,0.07) 0%, rgba(255,138,0,0.07) 100%);
+  background: linear-gradient(135deg, rgba(234,179,8,0.07) 0%, rgba(var(--primary-rgb),0.07) 100%);
   border: 1px solid rgba(234,179,8,0.25);
   border-radius: var(--radius);
   padding: 20px;
@@ -788,7 +788,7 @@ body::before {
   font-size: 14px;
   font-weight: 900;
   letter-spacing: 0.5px;
-  color: #EAB308;
+  color: var(--primary-hover);
   text-transform: uppercase;
 }
 
@@ -805,8 +805,8 @@ body::before {
 }
 
 .wp-review-item {
-  background: rgba(0,0,0,0.25);
-  border: 1px solid rgba(255,255,255,0.06);
+  background: rgba(var(--black-rgb),0.25);
+  border: 1px solid rgba(var(--white-rgb),0.06);
   border-radius: var(--radius-sm);
   padding: 12px 14px;
 }
@@ -856,7 +856,7 @@ body::before {
   font-weight: 800;
   letter-spacing: 0.8px;
   text-transform: uppercase;
-  color: #EAB308;
+  color: var(--primary-hover);
 }
 
 .wp-review-notes-text {
@@ -927,7 +927,7 @@ body::before {
   margin-top: 8px;
   padding: 14px 28px;
   background: var(--accent);
-  color: #000;
+  color: var(--bg-primary);
   border: none;
   border-radius: var(--radius-md);
   font-size: 14px;
