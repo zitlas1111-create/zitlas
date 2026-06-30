@@ -5,24 +5,10 @@
 
 'use strict';
 
-/* ══════════════════════════════════════════════
-   PHASE 8 — PERSIST LOGIN: fast startup redirect
-   If loggedIn flag + zitlas_user exist, skip Firebase
-   and go straight to dashboard (no network round-trip).
-   ══════════════════════════════════════════════ */
-(function () {
-  try {
-    if (localStorage.getItem('loggedIn') !== 'true') return;
-    var _u = localStorage.getItem('zitlas_user');
-    if (!_u) return;
-    var _role = localStorage.getItem('zitlas_user_role') || 'athlete';
-    window.location.replace(
-      _role === 'expert'
-        ? '../experts/expert-dashboard.html'
-        : '../dashboard/dashboard.html'
-    );
-  } catch (_) {}
-}());
+/* Phase 8 fast-redirect REMOVED.
+   It trusted localStorage without verifying Firebase Auth, which caused
+   User A's stale session to redirect User B to User A's dashboard.
+   onAuthStateChanged below is the single source of truth for redirects. */
 
 /* ══════════════════════════════════════════════
    STAT COUNT-UP
@@ -184,12 +170,14 @@ function getAuthErrorMsg(code) {
 if (typeof ZitlasAuth !== 'undefined') {
   ZitlasAuth.onAuthStateChanged(async function (user) {
     if (!user) return; /* not signed in — stay on login */
+    console.log('[AUTH] onAuthStateChanged uid=' + user.uid + ' email=' + user.email);
     try {
       const docSnap = await ZitlasDB.collection('users').doc(user.uid).get();
       if (!docSnap.exists) return; /* new user awaiting role selection */
       const data = docSnap.data();
+      console.log('[USER FOUND] uid=' + user.uid + ' email=' + user.email);
 
-      /* Phase 6 — resolve role from new schema (roles[]/expert_status) or legacy (role field) */
+      /* Resolve role from new schema (roles[]/expert_status) or legacy (role field) */
       const roles        = Array.isArray(data.roles) ? data.roles : [];
       const expertStatus = data.expert_status || '';
       const legacyRole   = data.role          || '';
@@ -200,6 +188,8 @@ if (typeof ZitlasAuth !== 'undefined') {
         expertStatus === 'pending'       ||
         legacyRole   === 'expert';
       const resolvedRole = isExpert ? 'expert' : 'athlete';
+
+      if (isExpert) console.log('[EXPERT FOUND] uid=' + user.uid + ' email=' + user.email);
 
       /* Update name/photo/last_login without touching roles or expert_status */
       try {
@@ -222,9 +212,10 @@ if (typeof ZitlasAuth !== 'undefined') {
               ? '../dashboard/dashboard.html?action=set-goal'
               : '../dashboard/dashboard.html';
           }());
+      console.log('[REDIRECT]', dest);
       window.location.replace(dest);
     } catch (e) {
-      console.warn('[ZITLAS] onAuthStateChanged error:', e);
+      console.warn('[AUTH] onAuthStateChanged error:', e);
     }
   });
 }
@@ -344,35 +335,66 @@ if (loginForm) {
 
     try {
       if (isSignupMode) {
-        /* ── Create Account ── */
+        /* ── STEP 1: Pre-auth checks — no Firebase Auth account exists yet ── */
+
+        /* Abort if email already has ANY sign-in method */
+        const existingMethods = await ZitlasAuth.fetchSignInMethodsForEmail(email);
+        if (existingMethods.length > 0) {
+          showToast('Account already exists. Please sign in.');
+          setLoading(false);
+          return;
+        }
+
+        /* For experts: check Firestore BEFORE creating the Auth account */
+        if (selectedRole === 'expert') {
+          const existingExpert = await ZitlasDB.collection('experts')
+            .where('email', '==', email).limit(1).get();
+          if (!existingExpert.empty) {
+            console.log('[EXPERT FOUND] by email before signup — aborting account creation');
+            showToast('Expert account already exists. Please sign in.');
+            setLoading(false);
+            return;
+          }
+        }
+
+        /* ── STEP 2: Create Firebase Auth account ── */
         const cred = await ZitlasAuth.createUserWithEmailAndPassword(email, password);
         const user = cred.user;
-        await user.updateProfile({ displayName: name });
 
-        const ts = firebase.firestore.FieldValue.serverTimestamp();
+        /* ── STEP 3: Firestore setup — rollback Auth account on any failure ── */
+        try {
+          await user.updateProfile({ displayName: name });
+          const ts = firebase.firestore.FieldValue.serverTimestamp();
 
-        if (selectedRole === 'expert') {
-          await ZitlasDB.collection('users').doc(user.uid).set({
-            uid: user.uid, email: user.email, name,
-            role: 'expert', photo: '', createdAt: ts,
-          });
-          await ZitlasDB.collection('experts').doc(user.uid).set({
-            uid: user.uid, email: user.email, name,
-            role: 'expert', speciality: '', photo: '',
-            verified: false, approved: false, rating: 0, reviews: 0, createdAt: ts,
-          });
-          syncEmailUser(user, name, 'expert');
-          setLoading(false);
-          showToast('Expert account created! Your application is under review.');
-          setTimeout(() => window.location.replace('../experts/expert-dashboard.html'), 2200);
-        } else {
-          await ZitlasDB.collection('users').doc(user.uid).set({
-            uid: user.uid, email: user.email, name,
-            role: 'athlete', photo: '', createdAt: ts,
-          });
-          syncEmailUser(user, name, 'athlete');
-          selectedRole = 'athlete';
-          showLoginOverlay();
+          if (selectedRole === 'expert') {
+            console.log('[PROFILE CREATED] new expert uid=' + user.uid + ' email=' + user.email);
+            await ZitlasDB.collection('users').doc(user.uid).set({
+              uid: user.uid, email: user.email, name,
+              role: 'expert', photo: '', createdAt: ts,
+            });
+            await ZitlasDB.collection('experts').doc(user.uid).set({
+              uid: user.uid, email: user.email, name,
+              role: 'expert', speciality: '', photo: '',
+              verified: false, approved: false, rating: 0, reviews: 0, createdAt: ts,
+            });
+            syncEmailUser(user, name, 'expert');
+            setLoading(false);
+            showToast('Expert account created! Your application is under review.');
+            setTimeout(() => window.location.replace('../experts/expert-dashboard.html'), 2200);
+          } else {
+            await ZitlasDB.collection('users').doc(user.uid).set({
+              uid: user.uid, email: user.email, name,
+              role: 'athlete', photo: '', createdAt: ts,
+            });
+            syncEmailUser(user, name, 'athlete');
+            selectedRole = 'athlete';
+            showLoginOverlay();
+          }
+        } catch (firestoreErr) {
+          /* Rollback: delete the just-created Auth account so the email stays free */
+          console.warn('[AUTH] Firestore setup failed — deleting orphan Auth account', firestoreErr);
+          try { await user.delete(); } catch (_) {}
+          throw firestoreErr; /* re-throw so outer catch shows the error */
         }
       } else {
         /* ── Sign In ── */
@@ -427,6 +449,7 @@ if (googleBtn) {
 
       const result = await ZitlasAuth.signInWithPopup(provider);
       const user   = result.user;
+      console.log('[GOOGLE LOGIN] uid=' + user.uid + ' email=' + user.email);
 
       /* Check Firestore for existing role */
       const doc = await ZitlasDB.collection('users').doc(user.uid).get();
@@ -445,7 +468,10 @@ if (googleBtn) {
           legacyRole   === 'expert';
         const resolvedRole = isExpert ? 'expert' : 'athlete';
 
-        /* Phase 5 — update name/photo/last_login without overwriting roles/expert_status */
+        console.log('[USER FOUND] uid=' + user.uid + ' resolvedRole=' + resolvedRole);
+        if (isExpert) console.log('[EXPERT FOUND] uid=' + user.uid + ' email=' + user.email);
+
+        /* Update name/photo/last_login without overwriting roles/expert_status */
         try {
           await ZitlasDB.collection('users').doc(user.uid).update({
             name:       user.displayName || '',
@@ -458,9 +484,24 @@ if (googleBtn) {
         selectedRole = resolvedRole;
         showLoginOverlay();
       } else {
-        /* New Google user — ask which account type */
-        setGoogleLoading(false);
-        showRoleModal(user);
+        /* New Google user — check experts collection by email before showing role modal */
+        console.log('[GOOGLE LOGIN] No users doc for uid=' + user.uid + ' — checking experts by email');
+        const expertByEmail = await ZitlasDB.collection('experts')
+          .where('email', '==', user.email).limit(1).get();
+        if (!expertByEmail.empty) {
+          console.log('[EXPERT FOUND] by email', user.email);
+          await ZitlasDB.collection('users').doc(user.uid).set({
+            uid: user.uid, name: user.displayName || '', email: user.email || '',
+            photo: user.photoURL || null, role: 'expert',
+            created_at: firebase.firestore.FieldValue.serverTimestamp(),
+          }, { merge: true });
+          syncFirebaseUser(user, 'expert');
+          selectedRole = 'expert';
+          showLoginOverlay();
+        } else {
+          setGoogleLoading(false);
+          showRoleModal(user);
+        }
       }
 
     } catch (err) {
@@ -490,6 +531,13 @@ if (skipBtn) {
    FIREBASE HELPERS
    ══════════════════════════════════════════════ */
 
+function _clearAuthLocalStorage() {
+  ['zitlas_user','zitlas_user_role','zitlas_expert_profile','zitlas_expert_id',
+   'zitlas_firebase_user','zitlas_token','loggedIn','currentUser','user'
+  ].forEach(function(k) { localStorage.removeItem(k); });
+  console.log('[LOCAL STORAGE CLEARED]');
+}
+
 function _addToExpertsStorage(uid, email, name) {
   var list = [];
   try {
@@ -506,6 +554,9 @@ function _addToExpertsStorage(uid, email, name) {
 }
 
 function syncFirebaseUser(user, role) {
+  _clearAuthLocalStorage();
+  console.log('[AUTH] syncFirebaseUser uid=' + user.uid + ' role=' + role);
+
   const provider = (user.providerData && user.providerData[0])
     ? user.providerData[0].providerId : 'password';
 
@@ -542,6 +593,9 @@ function syncFirebaseUser(user, role) {
 
 /* Sync for email/password sign-ups (name may not be set on user.displayName yet) */
 function syncEmailUser(user, name, role) {
+  _clearAuthLocalStorage();
+  console.log('[AUTH] syncEmailUser uid=' + user.uid + ' role=' + role);
+
   const userName = name || user.displayName || '';
   localStorage.setItem('zitlas_user', JSON.stringify({
     uid:      user.uid,

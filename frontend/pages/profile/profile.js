@@ -181,7 +181,9 @@
 
       /* Phase 9 — clear all session keys including new ones */
       ['zitlas_token','zitlas_user','zitlas_firebase_user','zitlas_user_role',
-       'zitlas_expert_id','loggedIn','user'].forEach(k => localStorage.removeItem(k));
+       'zitlas_expert_id','loggedIn','user','zitlas_expert_profile','currentUser',
+       'zitlas_expert_applied','zitlas_experts'].forEach(k => localStorage.removeItem(k));
+      console.log('[LOCAL STORAGE CLEARED]');
       ['zitlas_guest','zitlas_pending_action','user'].forEach(k => sessionStorage.removeItem(k));
 
       window.location.replace('../login/login.html');

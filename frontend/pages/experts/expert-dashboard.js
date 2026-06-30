@@ -23,7 +23,7 @@ function buildExpertFromFirebase(firebaseUser, firestoreData) {
   const nameParts = (firebaseUser.displayName || 'Expert').split(' ');
   const initials  = nameParts.map(function (p) { return p[0] || ''; }).slice(0, 2).join('').toUpperCase() || 'EX';
   return {
-    id:          'google_' + firebaseUser.uid.slice(0, 8),
+    id:          firebaseUser.uid,
     name:        firebaseUser.displayName || firestoreData.name || 'Expert',
     firstName:   nameParts[0] || 'Expert',
     role:        'Nutrition Expert',
@@ -2213,10 +2213,12 @@ async function logout() {
   try {
     if (typeof ZitlasAuth !== 'undefined') await ZitlasAuth.signOut();
   } catch (e) { console.warn('[ZITLAS] signOut error:', e); }
-  ['zitlas_token','zitlas_user','user','zitlas_user_role',
-   'zitlas_expert_id','zitlas_firebase_user'].forEach(function (k) {
+  ['zitlas_token','zitlas_user','user','zitlas_user_role','zitlas_expert_id',
+   'zitlas_firebase_user','loggedIn','zitlas_expert_profile','currentUser',
+   'zitlas_expert_applied','zitlas_experts'].forEach(function (k) {
     localStorage.removeItem(k);
   });
+  console.log('[LOCAL STORAGE CLEARED]');
   sessionStorage.removeItem('zitlas_guest');
   window.location.href = '../login/login.html';
 }
@@ -3793,7 +3795,16 @@ function _initInboxTabs(expert) {
 
         const data = doc.data();
 
-        if (data.role !== 'expert') {
+        const _roles       = Array.isArray(data.roles) ? data.roles : [];
+        const _expertStatus = data.expert_status || '';
+        const _legacyRole   = data.role || '';
+        const isExpert =
+          _roles.includes('expert')         ||
+          _roles.includes('expert_pending') ||
+          _expertStatus === 'approved'      ||
+          _expertStatus === 'pending'       ||
+          _legacyRole   === 'expert';
+        if (!isExpert) {
           /* Athlete tried to access expert dashboard */
           window.location.href = '../dashboard/dashboard.html';
           return;
