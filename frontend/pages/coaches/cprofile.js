@@ -2761,16 +2761,7 @@
     if (baseCoach) renderMetrics(ZitlasExpertProfile.applyToCoach(baseCoach));
   }
 
-  function init() {
-    loadTheme();
-
-    var _nb = document.getElementById('zitlas-navbar');
-    if (_nb) document.documentElement.style.setProperty('--nav-height', (window.innerHeight - _nb.getBoundingClientRect().top) + 'px');
-
-    /* Expert profiles are loaded from Firestore — redirect to listing */
-    window.location.href = 'coaches.html';
-    return;
-
+  function _initWithCoach(coach, params) {
     populatePage(coach);
     initContextModal(coach);
     initVerifyModal(coach);
@@ -2786,8 +2777,7 @@
     initBottomNav();
     initStatCountUp(coach);
 
-    /* Deep-link: auto-open when arriving from Experts listing */
-    var action = new URLSearchParams(window.location.search).get('action');
+    var action = params.get('action');
     if (action === 'ask') {
       setTimeout(function() {
         var btn = document.getElementById('inlineChatBtn');
@@ -2801,6 +2791,67 @@
     }
 
     requestAnimationFrame(function() { initScrollAnimations(); });
+  }
+
+  function _normalizeExpertToCoach(doc) {
+    var d = doc.data();
+    var nameParts = (d.name || 'Expert').split(/\s+/);
+    return {
+      id:           doc.id,
+      name:         d.name            || 'Expert',
+      firstName:    nameParts[0]      || 'Expert',
+      role:         d.specialization  || d.speciality || d.role || 'Expert',
+      initials:     nameParts.map(function(w){ return w[0]||''; }).slice(0,2).join('').toUpperCase() || 'EX',
+      image:        d.profilePhoto    || d.photo || d.image || '',
+      colorAccent:  d.colorAccent     || 'var(--primary)',
+      rating:       parseFloat(d.rating)          || 5.0,
+      reviewCount:  parseInt(d.reviews, 10)       || parseInt(d.reviewCount, 10) || 0,
+      experience:   d.experience      || '1+ yr',
+      fee:          parseInt(d.fee, 10)            || 0,
+      chatRate:     parseInt(d.chatRate, 10)       || parseInt(d.fee, 10) || 0,
+      callRate:     parseInt(d.callRate, 10)       || ((parseInt(d.fee, 10) || 0) + 30),
+      about:        d.about           || d.bio || '',
+      quote:        d.quote           || '',
+      languages:    Array.isArray(d.languages) ? d.languages.join(', ') : (d.languages || 'EN'),
+      expertise:    Array.isArray(d.specialties) ? d.specialties : (d.speciality ? [d.speciality] : []),
+      availability: d.availability    || { isAvailableToday: true, slots: [] },
+      stats:        Array.isArray(d.stats) ? d.stats : [],
+      reviews:      Array.isArray(d.clientReviews) ? d.clientReviews : [],
+      gallery:      Array.isArray(d.gallery) ? d.gallery : [],
+    };
+  }
+
+  function init() {
+    loadTheme();
+
+    var _nb = document.getElementById('zitlas-navbar');
+    if (_nb) document.documentElement.style.setProperty('--nav-height', (window.innerHeight - _nb.getBoundingClientRect().top) + 'px');
+
+    var params   = new URLSearchParams(window.location.search);
+    var expertId = params.get('expertId') || params.get('id');
+
+    if (!expertId) {
+      window.location.href = 'coaches.html';
+      return;
+    }
+
+    if (typeof ZitlasDB === 'undefined') {
+      showToast('Could not connect to database. Please try again.');
+      setTimeout(function() { window.location.href = 'coaches.html'; }, 1800);
+      return;
+    }
+
+    ZitlasDB.collection('experts').doc(expertId).get().then(function(doc) {
+      if (!doc.exists) {
+        showToast('Expert profile not found.');
+        setTimeout(function() { window.location.href = 'coaches.html'; }, 1800);
+        return;
+      }
+      _initWithCoach(_normalizeExpertToCoach(doc), params);
+    }).catch(function() {
+      showToast('Failed to load expert profile.');
+      setTimeout(function() { window.location.href = 'coaches.html'; }, 1800);
+    });
   }
 
   if (document.readyState === 'loading') {

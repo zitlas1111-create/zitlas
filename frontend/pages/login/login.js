@@ -96,6 +96,7 @@ if (pwToggle && pwInput && eyeIcon) {
    ══════════════════════════════════════════════ */
 
 let selectedRole = 'athlete';
+let isSignupMode = false;
 
 const roleTabAthlete = document.getElementById('roleTabAthlete');
 const roleTabExpert  = document.getElementById('roleTabExpert');
@@ -109,16 +110,18 @@ function setRole(role) {
   selectedRole = role;
   if (roleTabAthlete) roleTabAthlete.classList.toggle('active', role === 'athlete');
   if (roleTabExpert)  roleTabExpert.classList.toggle('active',  role === 'expert');
-  if (expertHint)     expertHint.style.display = role === 'expert' ? 'none' : '';
-  if (skipBtn)        skipBtn.style.display    = role === 'expert' ? 'none' : '';
-  if (loginCardTitle) loginCardTitle.textContent = role === 'expert' ? 'Expert Login 👨‍⚕️' : 'Welcome Back 👋';
-  if (loginCardSub)   loginCardSub.textContent   = role === 'expert'
-    ? 'Sign in to your ZITLAS Expert Portal'
-    : 'Sign in to continue your weight-loss journey';
-  if (emailInput)    emailInput.placeholder = role === 'expert'
-    ? 'Expert Email'
-    : 'Email or Mobile Number';
-  if (loginBtnText)  loginBtnText.textContent = role === 'expert' ? 'Expert Login →' : 'Sign In';
+  if (expertHint)     expertHint.style.display = (role === 'expert' || isSignupMode) ? 'none' : '';
+  if (skipBtn)        skipBtn.style.display    = (role === 'expert' || isSignupMode) ? 'none' : '';
+  if (loginCardTitle) loginCardTitle.textContent = isSignupMode
+    ? (role === 'expert' ? 'Create Expert Account 👨‍⚕️' : 'Create Account 🚀')
+    : (role === 'expert' ? 'Expert Login 👨‍⚕️' : 'Welcome Back 👋');
+  if (loginCardSub)   loginCardSub.textContent = isSignupMode
+    ? 'Join ZITLAS — start your journey'
+    : (role === 'expert' ? 'Sign in to your ZITLAS Expert Portal' : 'Sign in to continue your weight-loss journey');
+  if (emailInput)    emailInput.placeholder = role === 'expert' ? 'Expert Email' : 'Email or Mobile Number';
+  if (loginBtnText)  loginBtnText.textContent = isSignupMode
+    ? (role === 'expert' ? 'Create Expert Account' : 'Create Account')
+    : (role === 'expert' ? 'Expert Login →' : 'Sign In');
 }
 
 if (roleTabAthlete) roleTabAthlete.addEventListener('click', () => setRole('athlete'));
@@ -127,6 +130,52 @@ if (expertHintBtn)  expertHintBtn.addEventListener('click',  () => {
   setRole('expert');
   document.getElementById('emailInput')?.focus();
 });
+
+/* ══════════════════════════════════════════════
+   SIGNUP MODE TOGGLE
+   ══════════════════════════════════════════════ */
+
+function setSignupMode(on) {
+  isSignupMode = on;
+  const nameGroup      = document.getElementById('nameGroup');
+  const confirmPwGroup = document.getElementById('confirmPwGroup');
+  const forgotRow      = document.querySelector('.lf-row-between');
+
+  if (nameGroup)      nameGroup.style.display     = on ? '' : 'none';
+  if (confirmPwGroup) confirmPwGroup.style.display = on ? '' : 'none';
+  if (forgotRow)      forgotRow.style.display      = on ? 'none' : '';
+
+  if (loginCardTitle) loginCardTitle.textContent = on
+    ? (selectedRole === 'expert' ? 'Create Expert Account 👨‍⚕️' : 'Create Account 🚀')
+    : (selectedRole === 'expert' ? 'Expert Login 👨‍⚕️' : 'Welcome Back 👋');
+  if (loginCardSub) loginCardSub.textContent = on
+    ? 'Join ZITLAS — start your journey'
+    : (selectedRole === 'expert' ? 'Sign in to your ZITLAS Expert Portal' : 'Sign in to continue your weight-loss journey');
+  if (loginBtnText) loginBtnText.textContent = on
+    ? (selectedRole === 'expert' ? 'Create Expert Account' : 'Create Account')
+    : (selectedRole === 'expert' ? 'Expert Login →' : 'Sign In');
+  if (createLink) createLink.textContent = on ? 'Already have an account? Sign In' : 'Create Account';
+  if (expertHint) expertHint.style.display = (on || selectedRole === 'expert') ? 'none' : '';
+  if (skipBtn)    skipBtn.style.display    = on ? 'none' : (selectedRole === 'expert' ? 'none' : '');
+}
+
+/* ══════════════════════════════════════════════
+   AUTH ERROR MESSAGES
+   ══════════════════════════════════════════════ */
+
+function getAuthErrorMsg(code) {
+  var msgs = {
+    'auth/user-not-found':         'No account found with this email.',
+    'auth/wrong-password':         'Incorrect password. Please try again.',
+    'auth/invalid-credential':     'Invalid email or password.',
+    'auth/email-already-in-use':   'An account with this email already exists.',
+    'auth/weak-password':          'Password must be at least 6 characters.',
+    'auth/invalid-email':          'Please enter a valid email address.',
+    'auth/too-many-requests':      'Too many attempts. Please try again later.',
+    'auth/network-request-failed': 'Network error. Check your connection.',
+  };
+  return msgs[code] || 'Authentication failed. Please try again.';
+}
 
 /* ══════════════════════════════════════════════
    FIREBASE — AUTO-REDIRECT IF ALREADY SIGNED IN
@@ -240,12 +289,15 @@ function clearInputError(groupId) {
    LOGIN FORM
    ══════════════════════════════════════════════ */
 
-const loginForm     = document.getElementById('loginForm');
-const loginBtn      = document.getElementById('loginBtn');
-const loginBtnText  = document.getElementById('loginBtnText');
+const loginForm      = document.getElementById('loginForm');
+const loginBtn       = document.getElementById('loginBtn');
+const loginBtnText   = document.getElementById('loginBtnText');
 const loginBtnSpinner = document.getElementById('loginBtnSpinner');
-const emailInput    = document.getElementById('emailInput');
-const passwordInput = document.getElementById('passwordInput');
+const emailInput     = document.getElementById('emailInput');
+const passwordInput  = document.getElementById('passwordInput');
+const nameInput      = document.getElementById('nameInput');
+const confirmPwInput = document.getElementById('confirmPwInput');
+const rememberInput  = document.getElementById('rememberInput');
 
 function setLoading(on) {
   if (!loginBtn) return;
@@ -261,36 +313,82 @@ if (loginForm) {
   loginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
 
-    const email    = emailInput?.value.trim() || '';
-    const password = passwordInput?.value     || '';
+    const email     = emailInput?.value.trim()  || '';
+    const password  = passwordInput?.value      || '';
+    const name      = nameInput?.value.trim()   || '';
+    const confirmPw = confirmPwInput?.value     || '';
 
     if (!email)    { setInputError('emailGroup');    return; }
     if (!password) { setInputError('passwordGroup'); return; }
 
-    /* Expert email/password login is not supported — use Google Sign-In */
-    if (selectedRole === 'expert') {
-      showToast('Experts must sign in with Google. Use the "Continue with Google" button.');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setInputError('emailGroup');
+      showToast('Please enter a valid email address.');
       return;
     }
 
-    /* ── Athlete login ── */
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && !/^\d{10}$/.test(email)) {
-      setInputError('emailGroup');
+    if (typeof ZitlasAuth === 'undefined') {
+      showToast('Firebase not configured. Please set up firebase-config.js.');
       return;
+    }
+
+    if (isSignupMode) {
+      if (!name)                 { setInputError('nameGroup');      showToast('Please enter your full name.');           return; }
+      if (password.length < 6)   { setInputError('passwordGroup'); showToast('Password must be at least 6 characters.'); return; }
+      if (password !== confirmPw) { setInputError('confirmPwGroup'); showToast('Passwords do not match.');               return; }
     }
 
     setLoading(true);
 
     try {
-      /* TODO: real API call */
-      await new Promise(r => setTimeout(r, 1200));
-      localStorage.setItem('zitlas_token',     'demo_' + Date.now());
-      localStorage.setItem('zitlas_user_role', 'athlete');
-      showLoginOverlay();
-    } catch {
+      if (isSignupMode) {
+        /* ── Create Account ── */
+        const cred = await ZitlasAuth.createUserWithEmailAndPassword(email, password);
+        const user = cred.user;
+        await user.updateProfile({ displayName: name });
+
+        const ts = firebase.firestore.FieldValue.serverTimestamp();
+
+        if (selectedRole === 'expert') {
+          await ZitlasDB.collection('users').doc(user.uid).set({
+            uid: user.uid, email: user.email, name,
+            role: 'expert', photo: '', createdAt: ts,
+          });
+          await ZitlasDB.collection('experts').doc(user.uid).set({
+            uid: user.uid, email: user.email, name,
+            role: 'expert', speciality: '', photo: '',
+            verified: false, approved: false, rating: 0, reviews: 0, createdAt: ts,
+          });
+          syncEmailUser(user, name, 'expert');
+          setLoading(false);
+          showToast('Expert account created! Your application is under review.');
+          setTimeout(() => window.location.replace('../dashboard/dashboard.html'), 2200);
+        } else {
+          await ZitlasDB.collection('users').doc(user.uid).set({
+            uid: user.uid, email: user.email, name,
+            role: 'athlete', photo: '', createdAt: ts,
+          });
+          syncEmailUser(user, name, 'athlete');
+          selectedRole = 'athlete';
+          showLoginOverlay();
+        }
+      } else {
+        /* ── Sign In ── */
+        await ZitlasAuth.signInWithEmailAndPassword(email, password);
+        if (rememberInput?.checked) localStorage.setItem('zitlas_remember', 'true');
+        /* onAuthStateChanged handles localStorage sync + redirect — keep loading state */
+      }
+    } catch (err) {
       setLoading(false);
-      setInputError('emailGroup');
-      setInputError('passwordGroup');
+      showToast(getAuthErrorMsg(err.code));
+      if (['auth/user-not-found', 'auth/wrong-password', 'auth/invalid-credential'].includes(err.code)) {
+        setInputError('emailGroup');
+        setInputError('passwordGroup');
+      } else if (err.code === 'auth/email-already-in-use') {
+        setInputError('emailGroup');
+      } else if (err.code === 'auth/weak-password') {
+        setInputError('passwordGroup');
+      }
     }
   });
 }
@@ -389,26 +487,30 @@ if (skipBtn) {
    ══════════════════════════════════════════════ */
 
 function syncFirebaseUser(user, role) {
-  /* Phase 4 — canonical user object read everywhere in the app */
+  const provider = (user.providerData && user.providerData[0])
+    ? user.providerData[0].providerId : 'password';
+
   localStorage.setItem('zitlas_user', JSON.stringify({
     uid:      user.uid,
     name:     user.displayName || '',
     email:    user.email       || '',
     photo:    user.photoURL    || null,
-    provider: 'google',
+    provider: provider,
   }));
-  /* Phase 4 — session flag for fast startup redirect */
   localStorage.setItem('loggedIn', 'true');
-
-  /* Phase 6 — role sync */
   localStorage.setItem('zitlas_token',     'firebase_' + user.uid);
   localStorage.setItem('zitlas_user_role', role);
 
   if (role === 'expert') {
     localStorage.setItem('zitlas_expert_id', user.uid);
+    localStorage.setItem('zitlas_expert_profile', JSON.stringify({
+      uid:   user.uid,
+      email: user.email          || '',
+      name:  user.displayName    || '',
+      role:  'expert',
+    }));
   }
 
-  /* Keep zitlas_firebase_user for backward compat with existing readers */
   localStorage.setItem('zitlas_firebase_user', JSON.stringify({
     uid:   user.uid,
     name:  user.displayName  || '',
@@ -416,6 +518,41 @@ function syncFirebaseUser(user, role) {
     photo: user.photoURL     || null,
     role:  role,
   }));
+}
+
+/* Sync for email/password sign-ups (name may not be set on user.displayName yet) */
+function syncEmailUser(user, name, role) {
+  const userName = name || user.displayName || '';
+  localStorage.setItem('zitlas_user', JSON.stringify({
+    uid:      user.uid,
+    name:     userName,
+    email:    user.email || '',
+    photo:    null,
+    provider: 'password',
+  }));
+  localStorage.setItem('loggedIn',         'true');
+  localStorage.setItem('zitlas_token',     'firebase_' + user.uid);
+  localStorage.setItem('zitlas_user_role', role);
+
+  if (role === 'expert') {
+    localStorage.setItem('zitlas_expert_id', user.uid);
+    localStorage.setItem('zitlas_expert_profile', JSON.stringify({
+      uid:   user.uid,
+      email: user.email || '',
+      name:  userName,
+      role:  'expert',
+    }));
+  }
+
+  localStorage.setItem('zitlas_firebase_user', JSON.stringify({
+    uid:   user.uid,
+    name:  userName,
+    email: user.email || '',
+    photo: null,
+    role:  role,
+  }));
+
+  if (rememberInput?.checked) localStorage.setItem('zitlas_remember', 'true');
 }
 
 /* ══════════════════════════════════════════════
@@ -555,17 +692,27 @@ const createLink = document.getElementById('createLink');
 if (createLink) {
   createLink.addEventListener('click', (e) => {
     e.preventDefault();
-    /* TODO: window.location.href = '../signup/signup.html'; */
-    showToast('Create Account — coming soon!');
+    setSignupMode(!isSignupMode);
   });
 }
 
 const forgotLink = document.getElementById('forgotLink');
 if (forgotLink) {
-  forgotLink.addEventListener('click', (e) => {
+  forgotLink.addEventListener('click', async (e) => {
     e.preventDefault();
-    /* TODO: forgot password flow */
-    showToast('Password reset — coming soon!');
+    const email = emailInput?.value.trim() || '';
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      showToast('Enter your email address above, then click Forgot Password.');
+      setInputError('emailGroup');
+      return;
+    }
+    if (typeof ZitlasAuth === 'undefined') return;
+    try {
+      await ZitlasAuth.sendPasswordResetEmail(email);
+      showToast('Password reset email sent! Check your inbox.');
+    } catch (err) {
+      showToast(getAuthErrorMsg(err.code));
+    }
   });
 }
 

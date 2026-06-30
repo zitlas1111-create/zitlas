@@ -306,11 +306,11 @@ searchClearBtn.addEventListener('click', () => {
 coachesList.addEventListener('click', e => {
   const askBtn = e.target.closest('.ask-btn');
   if (askBtn) {
-    window.location.href = `cprofile.html?id=${askBtn.dataset.id}`;
+    window.location.href = `cprofile.html?expertId=${askBtn.dataset.id}`;
     return;
   }
   const card = e.target.closest('.nutri-card');
-  if (card) window.location.href = `cprofile.html?id=${card.dataset.id}`;
+  if (card) window.location.href = `cprofile.html?expertId=${card.dataset.id}`;
 });
 
 coachesList.addEventListener('keydown', e => {
@@ -318,7 +318,7 @@ coachesList.addEventListener('keydown', e => {
   const card = e.target.closest('.nutri-card');
   if (card) {
     e.preventDefault();
-    window.location.href = `cprofile.html?id=${card.dataset.id}`;
+    window.location.href = `cprofile.html?expertId=${card.dataset.id}`;
   }
 });
 
