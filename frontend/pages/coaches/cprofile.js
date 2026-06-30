@@ -2862,7 +2862,9 @@
     if (_nb) document.documentElement.style.setProperty('--nav-height', (window.innerHeight - _nb.getBoundingClientRect().top) + 'px');
 
     var params   = new URLSearchParams(window.location.search);
-    var expertId = params.get('expertId') || params.get('id') || localStorage.getItem('zitlas_expert_id');
+    var expertId = params.get('expertId') || params.get('id');
+
+    console.log('[EXPERT PROFILE] Loading expert:', expertId);
 
     if (!expertId) {
       window.location.href = 'coaches.html';
@@ -2885,8 +2887,13 @@
         setTimeout(function() { window.location.href = 'coaches.html'; }, 1800);
         return;
       }
-      _initWithCoach(_normalizeExpertToCoach(doc), params);
-    }).catch(function() {
+      var coach = _normalizeExpertToCoach(doc);
+      console.log('[EXPERT PROFILE] Firebase expert:', coach);
+      _initWithCoach(coach, params);
+    }).catch(function(err) {
+      console.warn('[EXPERT PROFILE] Firebase error:', err);
+      var _local = _findLocalExpert(expertId);
+      if (_local) { _initWithCoach(_local, params); return; }
       showToast('Failed to load expert profile.');
       setTimeout(function() { window.location.href = 'coaches.html'; }, 1800);
     });
