@@ -194,8 +194,10 @@ if (typeof ZitlasAuth !== 'undefined') {
       const expertStatus = data.expert_status || '';
       const legacyRole   = data.role          || '';
       const isExpert     =
-        roles.includes('expert')  ||
-        expertStatus === 'approved' ||
+        roles.includes('expert')         ||
+        roles.includes('expert_pending') ||
+        expertStatus === 'approved'      ||
+        expertStatus === 'pending'       ||
         legacyRole   === 'expert';
       const resolvedRole = isExpert ? 'expert' : 'athlete';
 
@@ -362,7 +364,7 @@ if (loginForm) {
           syncEmailUser(user, name, 'expert');
           setLoading(false);
           showToast('Expert account created! Your application is under review.');
-          setTimeout(() => window.location.replace('../dashboard/dashboard.html'), 2200);
+          setTimeout(() => window.location.replace('../experts/expert-dashboard.html'), 2200);
         } else {
           await ZitlasDB.collection('users').doc(user.uid).set({
             uid: user.uid, email: user.email, name,
@@ -436,8 +438,10 @@ if (googleBtn) {
         const expertStatus = data.expert_status || '';
         const legacyRole  = data.role           || '';
         const isExpert    =
-          roles.includes('expert')    ||
-          expertStatus === 'approved' ||
+          roles.includes('expert')         ||
+          roles.includes('expert_pending') ||
+          expertStatus === 'approved'      ||
+          expertStatus === 'pending'       ||
           legacyRole   === 'expert';
         const resolvedRole = isExpert ? 'expert' : 'athlete';
 
@@ -486,6 +490,14 @@ if (skipBtn) {
    FIREBASE HELPERS
    ══════════════════════════════════════════════ */
 
+function _addToExpertsStorage(uid, email, name) {
+  var list = [];
+  try { list = JSON.parse(localStorage.getItem('zitlas_experts') || '[]'); } catch(_) {}
+  list = list.filter(function(e) { return e.id !== uid; });
+  list.push({ id: uid, name: name, email: email, role: 'expert', approved: true, rating: 0, specialization: 'General Fitness' });
+  localStorage.setItem('zitlas_experts', JSON.stringify(list));
+}
+
 function syncFirebaseUser(user, role) {
   const provider = (user.providerData && user.providerData[0])
     ? user.providerData[0].providerId : 'password';
@@ -509,6 +521,7 @@ function syncFirebaseUser(user, role) {
       name:  user.displayName    || '',
       role:  'expert',
     }));
+    _addToExpertsStorage(user.uid, user.email || '', user.displayName || '');
   }
 
   localStorage.setItem('zitlas_firebase_user', JSON.stringify({
@@ -542,6 +555,7 @@ function syncEmailUser(user, name, role) {
       name:  userName,
       role:  'expert',
     }));
+    _addToExpertsStorage(user.uid, user.email || '', userName);
   }
 
   localStorage.setItem('zitlas_firebase_user', JSON.stringify({

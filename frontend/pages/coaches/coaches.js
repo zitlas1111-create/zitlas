@@ -94,14 +94,15 @@ function renderNutritionistCard(n) {
 }
 
 function renderNoExpertsState() {
+  var isExpert = localStorage.getItem('zitlas_user_role') === 'expert';
   return `<div class="empty-state">
   <div class="empty-icon">🧑‍⚕️</div>
   <h3 class="empty-heading">No Experts Available</h3>
   <p class="empty-desc">Experts will appear here once approved by the ZITLAS team.</p>
-  <a href="../login/login.html" class="ask-btn" style="display:inline-flex;align-items:center;gap:6px;margin-top:12px;text-decoration:none;">
+  ${isExpert ? '' : `<a href="../login/login.html" class="ask-btn" style="display:inline-flex;align-items:center;gap:6px;margin-top:12px;text-decoration:none;">
     Become an Expert
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-  </a>
+  </a>`}
 </div>`;
 }
 
@@ -173,8 +174,33 @@ function _normalizeInitials(name) {
   return (name || 'EX').split(/\s+/).map(function(w){return w[0]||'';}).slice(0,2).join('').toUpperCase() || 'EX';
 }
 
+function _mergeLocalExperts() {
+  var stored = [];
+  try { stored = JSON.parse(localStorage.getItem('zitlas_experts') || '[]'); } catch(_) {}
+  stored.forEach(function(e) {
+    if (!e.id || _expertsData.find(function(x) { return x.id === e.id; })) return;
+    _expertsData.push({
+      id:         e.id,
+      name:       e.name || 'Expert',
+      role:       e.specialization || 'Expert',
+      image:      '',
+      initials:   _normalizeInitials(e.name),
+      color:      'var(--primary)',
+      rating:     parseFloat(e.rating) || 5.0,
+      reviews:    0,
+      exp:        '1+',
+      fee:        0,
+      duration:   '20 Min',
+      available:  true,
+      specialties:[],
+      lang:       ['EN'],
+    });
+  });
+}
+
 function loadExpertsFromFirebase() {
   if (typeof ZitlasDB === 'undefined') {
+    _mergeLocalExperts();
     _loadingExperts = false;
     updateList();
     return;
@@ -203,10 +229,12 @@ function loadExpertsFromFirebase() {
           lang:       Array.isArray(d.languages)    ? d.languages   : ['EN'],
         });
       });
+      _mergeLocalExperts();
       _loadingExperts = false;
       updateList();
     })
     .catch(function() {
+      _mergeLocalExperts();
       _loadingExperts = false;
       updateList();
     });
