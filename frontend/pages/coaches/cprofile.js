@@ -2821,6 +2821,40 @@
     };
   }
 
+  function _findLocalExpert(expertId) {
+    var list = [];
+    try {
+      var _p = JSON.parse(localStorage.getItem('zitlas_experts'));
+      if (Array.isArray(_p)) list = _p;
+    } catch(_) {}
+    var e = list.find(function(x) { return String(x.id) === String(expertId); });
+    if (!e) return null;
+    var nameParts = (e.name || 'Expert').split(/\s+/);
+    return {
+      id:           e.id,
+      name:         e.name           || 'Expert',
+      firstName:    nameParts[0]     || 'Expert',
+      role:         e.specialization || e.role || 'Expert',
+      initials:     nameParts.map(function(w){ return w[0]||''; }).slice(0,2).join('').toUpperCase() || 'EX',
+      image:        e.image          || '',
+      colorAccent:  'var(--primary)',
+      rating:       parseFloat(e.rating) || 5.0,
+      reviewCount:  0,
+      experience:   '1+ yr',
+      fee:          parseInt(e.fee, 10)  || 0,
+      chatRate:     parseInt(e.fee, 10)  || 0,
+      callRate:     (parseInt(e.fee, 10) || 0) + 30,
+      about:        '',
+      quote:        '',
+      languages:    'EN',
+      expertise:    e.specialization ? [e.specialization] : [],
+      availability: { isAvailableToday: true, slots: [] },
+      stats:        [],
+      reviews:      [],
+      gallery:      [],
+    };
+  }
+
   function init() {
     loadTheme();
 
@@ -2828,7 +2862,7 @@
     if (_nb) document.documentElement.style.setProperty('--nav-height', (window.innerHeight - _nb.getBoundingClientRect().top) + 'px');
 
     var params   = new URLSearchParams(window.location.search);
-    var expertId = params.get('expertId') || params.get('id');
+    var expertId = params.get('expertId') || params.get('id') || localStorage.getItem('zitlas_expert_id');
 
     if (!expertId) {
       window.location.href = 'coaches.html';
@@ -2836,6 +2870,8 @@
     }
 
     if (typeof ZitlasDB === 'undefined') {
+      var _local = _findLocalExpert(expertId);
+      if (_local) { _initWithCoach(_local, params); return; }
       showToast('Could not connect to database. Please try again.');
       setTimeout(function() { window.location.href = 'coaches.html'; }, 1800);
       return;
@@ -2843,6 +2879,8 @@
 
     ZitlasDB.collection('experts').doc(expertId).get().then(function(doc) {
       if (!doc.exists) {
+        var _local = _findLocalExpert(expertId);
+        if (_local) { _initWithCoach(_local, params); return; }
         showToast('Expert profile not found.');
         setTimeout(function() { window.location.href = 'coaches.html'; }, 1800);
         return;

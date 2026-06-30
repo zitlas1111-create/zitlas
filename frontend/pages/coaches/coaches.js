@@ -176,7 +176,11 @@ function _normalizeInitials(name) {
 
 function _mergeLocalExperts() {
   var stored = [];
-  try { stored = JSON.parse(localStorage.getItem('zitlas_experts') || '[]'); } catch(_) {}
+  try {
+    var _p = JSON.parse(localStorage.getItem('zitlas_experts'));
+    if (Array.isArray(_p)) stored = _p;
+  } catch(_) {}
+  console.log('[EXPERTS]', stored);
   stored.forEach(function(e) {
     if (!e.id || _expertsData.find(function(x) { return x.id === e.id; })) return;
     _expertsData.push({
@@ -206,7 +210,6 @@ function loadExpertsFromFirebase() {
     return;
   }
   ZitlasDB.collection('experts')
-    .where('approved', '==', true)
     .get()
     .then(function(snapshot) {
       _expertsData = [];

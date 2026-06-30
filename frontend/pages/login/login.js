@@ -492,10 +492,17 @@ if (skipBtn) {
 
 function _addToExpertsStorage(uid, email, name) {
   var list = [];
-  try { list = JSON.parse(localStorage.getItem('zitlas_experts') || '[]'); } catch(_) {}
-  list = list.filter(function(e) { return e.id !== uid; });
-  list.push({ id: uid, name: name, email: email, role: 'expert', approved: true, rating: 0, specialization: 'General Fitness' });
+  try {
+    var _parsed = JSON.parse(localStorage.getItem('zitlas_experts'));
+    if (Array.isArray(_parsed)) list = _parsed;
+  } catch(_) {}
+  var expertProfile = { id: uid, name: name, email: email, role: 'expert', approved: true, rating: 0, specialization: 'General Fitness' };
+  console.log('[EXPERT SIGNUP]', expertProfile);
+  if (!list.some(function(e) { return e.id === uid; })) {
+    list.push(expertProfile);
+  }
   localStorage.setItem('zitlas_experts', JSON.stringify(list));
+  console.log('[EXPERTS]', list);
 }
 
 function syncFirebaseUser(user, role) {
