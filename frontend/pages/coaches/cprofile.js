@@ -2019,10 +2019,32 @@
 
     var _selectedType = null;
 
+    function _hasDietPlan() {
+      return !!(
+        localStorage.getItem('zitlas_diet_plan') ||
+        localStorage.getItem('zitlas_current_diet') ||
+        localStorage.getItem('zitlas_generated_diet') ||
+        localStorage.getItem('zitlas_meal_plan')
+      );
+    }
+
     function openSheet() {
       _selectedType = null;
       [optDiet, optWorkout].forEach(function(b) { if (b) b.classList.remove('selected'); });
       if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Send for Review →'; }
+
+      /* Disable diet option and show message when no plan exists */
+      if (optDiet) {
+        var hasDiet = _hasDietPlan();
+        optDiet.classList.toggle('vp-option--unavailable', !hasDiet);
+        var subEl = optDiet.querySelector('.vp-opt-sub');
+        if (subEl) {
+          subEl.textContent = hasDiet
+            ? 'Expert reviews your 7-day meal plan'
+            : 'No diet plan found. Generate your AI diet plan first.';
+        }
+      }
+
       var navbar = document.getElementById('zitlas-navbar');
       if (navbar) {
         var navOffset = window.innerHeight - navbar.getBoundingClientRect().top;
@@ -2060,6 +2082,10 @@
     [optDiet, optWorkout].forEach(function(btn) {
       if (!btn) return;
       btn.addEventListener('click', function() {
+        if (btn === optDiet && !_hasDietPlan()) {
+          showToast('No diet plan found. Generate your AI diet plan first.');
+          return;
+        }
         _selectedType = btn.dataset.type;
         [optDiet, optWorkout].forEach(function(b) { if (b) b.classList.remove('selected'); });
         btn.classList.add('selected');
@@ -2069,10 +2095,22 @@
 
     if (submitBtn) {
       submitBtn.addEventListener('click', function() {
+        console.log('SEND REVIEW CLICKED', { type: _selectedType });
         if (!_selectedType) return;
 
-        var ctx       = buildContextPackage();
-        var planData  = _selectedType === 'diet' ? ctx.diet_plan : ctx.workout_plan;
+        var ctx = buildContextPackage();
+        var planData;
+        if (_selectedType === 'diet') {
+          planData = ctx.diet_plan;
+          if (!planData) {
+            var _raw = localStorage.getItem('zitlas_current_diet') ||
+                       localStorage.getItem('zitlas_generated_diet') ||
+                       localStorage.getItem('zitlas_meal_plan');
+            try { planData = _raw ? JSON.parse(_raw) : null; } catch (_) { planData = null; }
+          }
+        } else {
+          planData = ctx.workout_plan;
+        }
         var planLabel = _selectedType === 'diet' ? 'diet' : 'workout';
 
         if (!planData) {
