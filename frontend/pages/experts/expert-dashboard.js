@@ -56,7 +56,8 @@ function getExpert() {
   try { fbu = JSON.parse(localStorage.getItem('zitlas_firebase_user') || '{}'); } catch (_) {}
   var n = (fbu.name || fbu.displayName || 'Expert').split(/\s+/);
   return {
-    id: 'expert', name: fbu.name || fbu.displayName || 'Expert',
+    id: (typeof ZitlasAuth !== 'undefined' && ZitlasAuth.currentUser) ? ZitlasAuth.currentUser.uid : (fbu.uid || ''),
+    name: fbu.name || fbu.displayName || 'Expert',
     firstName: n[0] || 'Expert', role: 'Expert',
     rating: '5.0', reviewCount: 0, experience: 'ZITLAS Expert',
     achievement: 'ZITLAS Expert', initials: 'EX',
@@ -802,7 +803,14 @@ function renderReviewsFromList(requests, expert) {
 
 /* Firestore onSnapshot + localStorage fallback */
 function listenForReviews(expert) {
-  console.log('[ZITLAS] listenForReviews — expert.id:', expert.id);
+  /* Always prefer the live Firebase uid — never trust a cached/computed id */
+  const currentUid = (typeof ZitlasAuth !== 'undefined' && ZitlasAuth.currentUser)
+    ? ZitlasAuth.currentUser.uid
+    : expert.id;
+  const queryId = currentUid || expert.id || '';
+
+  console.log('CURRENT UID', currentUid);
+  console.log('LOCAL EXPERT', expert);
 
   /*
    * Only use Firestore when there is an active Firebase authenticated session.
@@ -814,7 +822,7 @@ function listenForReviews(expert) {
     ZitlasAuth.currentUser !== null
   );
 
-  console.log('[ZITLAS] Firebase session active:', hasFirebaseSession);
+  console.log('[ZITLAS] Firebase session active:', hasFirebaseSession, '| queryId:', queryId);
 
   if (hasFirebaseSession && typeof ZitlasDB !== 'undefined') {
     console.log('[ZITLAS] Using Firestore listener for reviews');
@@ -822,7 +830,7 @@ function listenForReviews(expert) {
     try {
       /* No orderBy — avoids composite index requirement. We sort client-side below. */
       query = ZitlasDB.collection('review_requests')
-        .where('expertId', '==', expert.id);
+        .where('expertId', '==', queryId);
     } catch (err) {
       console.warn('[ZITLAS] Firestore query build failed, falling back:', err);
       fallbackLocalStorageReviews(expert);
@@ -838,7 +846,34 @@ function listenForReviews(expert) {
           var tb = b.submittedAt || b.createdAt || '';
           return tb > ta ? 1 : tb < ta ? -1 : 0;
         });
-      console.log('[ZITLAS] Firestore snapshot — loaded reviews:', requests.length, requests);
+      const pendingReviews = requests.filter(function(r) { return r.status === 'pending'; });
+      console.log('ALL REVIEWS', requests);
+      console.log('PENDING', pendingReviews);
+      console.log('[ZITLAS] Firestore snapshot — loaded reviews:', requests.length, '| pending:', pendingReviews.length);
+
+      /* Sync Firestore reviews into expert_plan_reviews so renderInbox() can find them */
+      if (requests.length) {
+        try {
+          var local = JSON.parse(localStorage.getItem('expert_plan_reviews') || '[]');
+          requests.forEach(function(req) {
+            if (!req.id) return;
+            var idx = local.findIndex(function(r) { return r.id === req.id; });
+            if (idx === -1) {
+              local.push(req);
+            } else {
+              /* Firestore status is authoritative for pending/rejected; keep expert-side statuses */
+              var localStatus = local[idx].status || '';
+              var keepLocal = localStatus === 'accepted' || localStatus === 'in_progress' ||
+                              localStatus === 'expert_reviewing' || localStatus === 'review_completed' ||
+                              localStatus === 'completed';
+              if (!keepLocal) local[idx].status = req.status;
+            }
+          });
+          localStorage.setItem('expert_plan_reviews', JSON.stringify(local));
+        } catch (_) {}
+        renderInbox(expert);
+      }
+
       renderReviewsFromList(requests, expert);
       renderChatsFromList(requests);
       updateDashboardStats(requests, expert);

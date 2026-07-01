@@ -702,28 +702,57 @@ Output valid JSON only — no extra text."""
         "Never generate fewer than 7 days."
     )
 
-    print(f"[DIET AI] {fitness_goal} prompt | Using GROQ_API_KEY_DIET")
-    result = await groq_service.chat(
-        user_message=prompt,
-        system_override=diet_system,
-        temperature=0.5,
-        max_tokens=4000,
-        json_mode=True,
-        groq_key_env="GROQ_API_KEY_DIET",
-        provider="groq_first",
-    )
-    parsed = _extract_json(result["reply"])
+    all_days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+    async def _call_diet_ai(extra_hint: str = "") -> tuple[dict | None, dict]:
+        _prompt = prompt + extra_hint
+        print(f"[DIET AI] {fitness_goal} prompt | Using GROQ_API_KEY_DIET")
+        _result = await groq_service.chat(
+            user_message=_prompt,
+            system_override=diet_system,
+            temperature=0.5,
+            max_tokens=4000,
+            json_mode=True,
+            groq_key_env="GROQ_API_KEY_DIET",
+            provider="groq_first",
+        )
+        return _extract_json(_result["reply"]), _result
+
+    parsed, result = await _call_diet_ai()
+
+    # ── Retry once if AI returned fewer than 7 days ──────────────────────────
+    if not parsed or not isinstance(parsed.get("days"), list) or len(parsed["days"]) < 7:
+        existing_days = [d.get("day", "") for d in (parsed or {}).get("days", [])]
+        missing = [d for d in all_days if d not in existing_days]
+        print(f"[DIET AI] WARNING: only got {len(existing_days)} days ({existing_days}), missing: {missing}. Retrying.")
+        retry_hint = (
+            f"\n\nCRITICAL: Your previous response was missing these days: {missing}. "
+            f"You MUST include ALL 7 days: Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday. "
+            f"Return the complete plan — do not omit any day."
+        )
+        parsed_retry, result_retry = await _call_diet_ai(retry_hint)
+        if parsed_retry and isinstance(parsed_retry.get("days"), list) and len(parsed_retry["days"]) >= len((parsed or {}).get("days", [])):
+            parsed, result = parsed_retry, result_retry
+            print(f"[DIET AI] Retry succeeded — got {len(parsed['days'])} days")
+        else:
+            print(f"[DIET AI] Retry did not improve day count — using auto-pad")
+
+    # ── Auto-pad any still-missing days (copy last day as template) ──────────
     if parsed and isinstance(parsed.get("days"), list):
         days = parsed["days"]
-        all_days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
         present = {d.get("day", "") for d in days}
         for day_name in all_days:
             if day_name not in present:
-                # Copy the last day as a template and rename it
-                template = dict(days[-1]) if days else {"day": day_name, "theme": "Balanced Day", "total_calories": parsed.get("daily_calories_target", 1600), "total_protein_g": parsed.get("daily_protein_target_g", 90), "meals": []}
+                template = dict(days[-1]) if days else {
+                    "day": day_name, "theme": "Balanced Day",
+                    "total_calories": parsed.get("daily_calories_target", 1600),
+                    "total_protein_g": parsed.get("daily_protein_target_g", 90),
+                    "meals": [],
+                }
+                template = dict(template)
                 template["day"] = day_name
                 days.append(template)
-                print(f"[DIET AI] WARNING: AI returned {len(present)} days — appended missing day: {day_name}")
+                print(f"[DIET AI] Auto-padded missing day: {day_name}")
         day_order = {d: i for i, d in enumerate(all_days)}
         parsed["days"] = sorted(days, key=lambda d: day_order.get(d.get("day", ""), 99))
         print(f"[DIET AI] Final day count: {len(parsed['days'])}")

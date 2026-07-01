@@ -30,7 +30,7 @@
   /* ── Helpers ────────────────────────────────────────────────────────────── */
 
   function _getExpertId() {
-    return (localStorage.getItem(EXPERT_ID_KEY) || '').toLowerCase().trim();
+    return (localStorage.getItem(EXPERT_ID_KEY) || '').trim();
   }
 
   function _computeInitials(name) {
@@ -155,6 +155,9 @@
     var m = Object.assign({}, base);
 
     if (!profile) return m;
+
+    /* Always carry the id through so downstream Firestore queries use the real uid */
+    if (profile.id) m.id = profile.id;
 
     if (profile.name) {
       m.name      = profile.name;
