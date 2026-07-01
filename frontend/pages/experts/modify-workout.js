@@ -230,6 +230,14 @@
         savedAt:              new Date().toISOString(),
       });
 
+      if (typeof ZitlasDB !== 'undefined') {
+        ZitlasDB.collection('review_requests').doc(reviewId).update({
+          reviewedWorkoutPlan:  edited,
+          workoutChangeHistory: history,
+          savedAt:              new Date().toISOString(),
+        }).catch(function (e) { console.warn('[MODIFY-WORKOUT] Firestore save sync failed:', e); });
+      }
+
       showToast('Changes saved!');
       saveBtn.style.display     = 'none';
       completeBtn.style.display = 'block';
@@ -237,16 +245,46 @@
 
     /* Complete Review */
     completeBtn.addEventListener('click', function () {
-      var expertName = (expert && expert.name) || 'Expert';
-      var convId     = (expert && expert.id) || '';
+      console.log('[COMPLETE REVIEW] button clicked');
+      var expertName  = (expert && expert.name) || 'Expert';
+      var expertId    = (expert && expert.id) || review.expertId || '';
+      var convId      = (expert && expert.id) || '';
       var athleteName = review.athleteName || review.userName || 'Athlete';
+      var nowIso      = new Date().toISOString();
+
+      var _latest = getReview(reviewId) || review;
 
       patchReview(reviewId, {
-        status:         'completed',
-        reviewedAt:     new Date().toISOString(),
-        expertName:     expertName,
-        athleteAccepted: false,
+        status:               'review_completed',
+        reviewedAt:           nowIso,
+        completedAt:          nowIso,
+        expertName:           expertName,
+        expertId:             expertId,
+        athleteAccepted:      false,
       });
+
+      if (typeof ZitlasDB !== 'undefined') {
+        var _fsPayload = {
+          status:               'review_completed',
+          reviewedAt:           nowIso,
+          completedAt:          nowIso,
+          expertName:           expertName,
+          expertId:             expertId,
+          reviewedWorkoutPlan:  _latest.reviewedWorkoutPlan  || null,
+          workoutChangeHistory: _latest.workoutChangeHistory || [],
+        };
+        console.log('[COMPLETE REVIEW] reviewId', reviewId);
+        console.log('[COMPLETE REVIEW] payload', _fsPayload);
+        console.log('[COMPLETE REVIEW] before firestore update');
+        ZitlasDB.collection('review_requests').doc(reviewId).update(_fsPayload)
+          .then(function () { console.log('[COMPLETE REVIEW] firestore update success'); })
+          .catch(function (err) {
+            console.error('[COMPLETE REVIEW] firestore update failed', err);
+            showToast('⚠️ Could not sync to server — athlete may not see this update.');
+          });
+      } else {
+        console.error('[COMPLETE REVIEW] ZitlasDB unavailable — completion saved to localStorage only');
+      }
 
       /* Append system message to chat */
       try {
@@ -264,7 +302,6 @@
         }
       } catch (_) {}
 
-      /* Flag dashboard to auto-open chat on return */
       try {
         sessionStorage.setItem('ed_open_chat', JSON.stringify({ convId: convId, athleteName: athleteName }));
       } catch (_) {}

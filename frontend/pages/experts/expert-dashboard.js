@@ -3727,6 +3727,7 @@ function initReviewTools(expert) {
     confirmBtn.addEventListener('click', function() {
       backdrop.style.display = 'none';
       if (!_edCurrentReview) return;
+      console.log('[COMPLETE REVIEW] button clicked');
       _prCompleteReviewFromChat(_edCurrentReview, expert);
     });
   }
@@ -3761,10 +3762,38 @@ function _prCompleteReviewFromChat(review, expert) {
     }
   }
 
-  all[idx].status      = 'completed';
-  all[idx].reviewedAt  = new Date().toISOString();
+  var _rcTs = new Date().toISOString();
+  all[idx].status      = 'review_completed';
+  all[idx].reviewedAt  = _rcTs;
+  all[idx].completedAt = _rcTs;
   all[idx].expertName  = expert.name;
+  all[idx].expertId    = expert.id;
   try { localStorage.setItem('expert_plan_reviews', JSON.stringify(all)); } catch (_) {}
+
+  /* Firestore write — ensures athlete's onSnapshot listener fires */
+  if (typeof ZitlasDB !== 'undefined') {
+    var _fsRev = all[idx];
+    var _fsPayload = {
+      status:      'review_completed',
+      reviewedAt:  _rcTs,
+      completedAt: _rcTs,
+      expertName:  expert.name,
+      expertId:    expert.id,
+    };
+    if (rtype === 'workout') {
+      _fsPayload.reviewedWorkoutPlan  = _fsRev.reviewedWorkoutPlan  || null;
+      _fsPayload.workoutChangeHistory = _fsRev.workoutChangeHistory || [];
+    } else {
+      _fsPayload.reviewedDietPlan  = _fsRev.reviewedDietPlan  || null;
+      _fsPayload.mealChangeHistory = _fsRev.mealChangeHistory || [];
+    }
+    console.log('[COMPLETE REVIEW] reviewId', fresh.id);
+    console.log('[COMPLETE REVIEW] payload', _fsPayload);
+    console.log('[COMPLETE REVIEW] before firestore update');
+    ZitlasDB.collection('review_requests').doc(fresh.id).update(_fsPayload)
+      .then(function() { console.log('[COMPLETE REVIEW] firestore update success'); })
+      .catch(function(err) { console.error('[COMPLETE REVIEW] firestore update failed', err); });
+  }
 
   /* Send completion message in chat */
   var convId    = fresh.chatId || expert.id;
