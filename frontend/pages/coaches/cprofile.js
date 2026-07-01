@@ -1850,6 +1850,23 @@
      VERIFY PLAN — status-aware button + bottom sheet
   ══════════════════════════════════════════ */
 
+  /*
+   * Canonical review statuses (athlete-side mirror of expert-dashboard):
+   *   pending          — submitted, waiting for expert
+   *   in_progress      — expert has opened/accepted
+   *   review_completed — expert finished, plan delivered
+   *   rejected         — expert rejected
+   */
+  function _normalizeStatus(status) {
+    switch (status) {
+      case 'accepted':
+      case 'expert_reviewing': return 'in_progress';
+      case 'completed':
+      case 'reviewed':         return 'review_completed';
+      default:                 return status || 'pending';
+    }
+  }
+
   /* SVG icons shared between updateVerifyBtnState and the button */
   var VP_SVG = {
     check:   '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
@@ -1909,21 +1926,28 @@
 
     var st = review.status;
     btn.dataset.vpStatus = st;
+    console.log('[REVIEW] button state', st);
 
     if (st === 'pending') {
       btn.disabled  = true;
       btn.className = 'cp-cta cp-cta--verify cp-cta--vp-pending';
       btn.innerHTML = VP_SVG.clock + ' Verification Pending';
     } else if (st === 'accepted') {
+      /* backward-compat: existing production reviews may have status='accepted' */
       btn.className = 'cp-cta cp-cta--verify cp-cta--vp-accepted';
       btn.innerHTML = VP_SVG.chat + ' Chat with Expert';
+    } else if (st === 'in_progress' || st === 'expert_reviewing') {
+      btn.disabled  = true;
+      btn.className = 'cp-cta cp-cta--verify cp-cta--vp-pending';
+      btn.innerHTML = VP_SVG.clock + ' Under Review';
     } else if (st === 'completed' || st === 'review_completed') {
-      /* Completed in any form → orange "Review Again" so user can immediately re-verify */
-      btn.className = 'cp-cta cp-cta--verify';
-      btn.innerHTML = VP_SVG.check + ' Review Again';
+      btn.disabled  = true;
+      btn.className = 'cp-cta cp-cta--verify cp-cta--vp-done';
+      btn.innerHTML = VP_SVG.check + ' Expert Reviewed';
     } else if (st === 'rejected') {
-      btn.className = 'cp-cta cp-cta--verify';
-      btn.innerHTML = VP_SVG.check + ' Verify Plan';
+      btn.disabled  = true;
+      btn.className = 'cp-cta cp-cta--verify cp-cta--vp-rejected';
+      btn.innerHTML = VP_SVG.clock + ' Review Rejected';
     } else {
       btn.disabled  = true;
       btn.className = 'cp-cta cp-cta--verify cp-cta--vp-pending';
@@ -2187,6 +2211,7 @@
           var firestoreReview = Object.assign({}, review, {
             serverTimestamp: firebase.firestore.FieldValue.serverTimestamp(),
           });
+          console.log('[REVIEW] created', review);
           console.log('[FIRESTORE] Writing review_requests/' + review.id);
           ZitlasDB.collection('review_requests').doc(review.id).set(firestoreReview)
             .then(function() { console.log('[FIRESTORE] review_requests write OK', review.id); })
@@ -2222,9 +2247,15 @@
           if (hasExpertMsg) {
             var all = JSON.parse(localStorage.getItem('expert_plan_reviews') || '[]');
             var idx = all.findIndex(function(r) { return r.id === review.id; });
-            if (idx !== -1 && all[idx].status === 'pending') {
-              all[idx].status = 'accepted';
+            if (idx !== -1 && _normalizeStatus(all[idx].status) === 'pending') {
+              all[idx].status = 'in_progress';
               localStorage.setItem('expert_plan_reviews', JSON.stringify(all));
+              /* Mirror to Firestore */
+              if (typeof ZitlasDB !== 'undefined') {
+                ZitlasDB.collection('review_requests').doc(review.id)
+                  .update({ status: 'in_progress' })
+                  .catch(function(e) { console.warn('[REVIEW] implicit in_progress write failed:', e); });
+              }
             }
           }
         } catch (_) {}
@@ -2233,6 +2264,76 @@
 
     /* Set initial button state on page load */
     updateVerifyBtnState(coach);
+
+    /* Listen for expert completing review in Firestore — single source of truth.
+       Syncs canonical status into expert_plan_reviews (cache) and auto-applies
+       the reviewed plan to zitlas_diet_plan / zitlas_workout_plan. */
+    if (typeof ZitlasDB !== 'undefined') {
+      var _reviewUid = _getMyUserId();
+      if (_reviewUid) {
+        ZitlasDB.collection('review_requests')
+          .where('userId', '==', _reviewUid)
+          .onSnapshot(function(snapshot) {
+            console.log('athlete reviews', snapshot.docs.map(function(d) { return d.data(); }));
+            var changed = false;
+            snapshot.docs.forEach(function(doc) {
+              var data = doc.data();
+              if (!data.id) return;
+
+              try {
+                var all = JSON.parse(localStorage.getItem('expert_plan_reviews') || '[]');
+                var idx = all.findIndex(function(r) { return r.id === data.id; });
+                var prevRaw = idx !== -1 ? (all[idx].status || '') : '';
+                var newRaw  = data.status || '';
+                /* Trigger plan auto-apply on either status value used for completion */
+                var wasCompleted = prevRaw === 'completed' || prevRaw === 'review_completed';
+                var isCompleted  = newRaw  === 'completed' || newRaw  === 'review_completed';
+                var justCompleted = !wasCompleted && isCompleted;
+
+                console.log('[REVIEW] athlete listener', data.id, 'prev:', prevRaw, '→ new:', newRaw);
+                console.log('status', newRaw);
+                if (isCompleted) console.log('firestore review after completion', data);
+
+                /* Merge Firestore data into cache; preserve raw status (no normalization) */
+                var _merged = Object.assign({}, idx !== -1 ? all[idx] : {}, data);
+                if (idx === -1) {
+                  all.push(_merged);
+                } else {
+                  all[idx] = _merged;
+                }
+                localStorage.setItem('expert_plan_reviews', JSON.stringify(all));
+
+                console.log('zitlas_workout_plan', JSON.parse(localStorage.getItem('zitlas_workout_plan')));
+                console.log('zitlas_diet_plan',    JSON.parse(localStorage.getItem('zitlas_diet_plan')));
+                changed = true;
+
+                /* Auto-apply expert plan to source-of-truth keys on first completion */
+                if (justCompleted) {
+                  var _rtype = _merged.reviewType || _merged.planReviewType || 'diet';
+                  if (_rtype === 'workout' && (_merged.reviewedWorkoutPlan || _merged.planData)) {
+                    try {
+                      console.log('build workout input', _merged);
+                      var _wSt = _buildWorkoutStorageFromReview(_merged);
+                      _cpSaveWorkoutStorage(_wSt);
+                      console.log('[REVIEW] workout applied');
+                    } catch (e) { console.warn('[REVIEW] workout auto-apply failed', e); }
+                  } else if (_rtype !== 'workout' && (_merged.reviewedDietPlan || _merged.planData)) {
+                    try {
+                      console.log('build diet input', _merged);
+                      var _dSt = _buildDietStorageFromReview(_merged);
+                      _cpSaveDietStorage(_dSt);
+                      console.log('[REVIEW] diet applied');
+                    } catch (e) { console.warn('[REVIEW] diet auto-apply failed', e); }
+                  }
+                }
+              } catch (_) {}
+            });
+            if (changed) updateVerifyBtnState(coach);
+          }, function(err) {
+            console.warn('[REVIEW] athlete listener error:', err);
+          });
+      }
+    }
   }
 
   /* ══════════════════════════════════════════

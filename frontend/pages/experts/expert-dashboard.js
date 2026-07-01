@@ -78,6 +78,25 @@ let _edChatConversationId = null;  /* active expert chat overlay conversation */
 let _edCurrentReview      = null;  /* review linked to the currently open chat */
 let _prInboxActiveTab     = 'pending'; /* which inbox tab is visible */
 
+/*
+ * Canonical status values:
+ *   pending          — submitted, waiting for expert
+ *   in_progress      — expert has opened/accepted
+ *   review_completed — expert finished, plan delivered
+ *   rejected         — expert rejected
+ *
+ * Legacy values are migrated on read — never written going forward.
+ */
+function _normalizeStatus(status) {
+  switch (status) {
+    case 'accepted':
+    case 'expert_reviewing': return 'in_progress';
+    case 'completed':
+    case 'reviewed':         return 'review_completed';
+    default:                 return status || 'pending';
+  }
+}
+
 function chatLoadAll() {
   try { return JSON.parse(localStorage.getItem('zitlas_chats') || '{}'); } catch(_) { return {}; }
 }
@@ -847,32 +866,38 @@ function listenForReviews(expert) {
           return tb > ta ? 1 : tb < ta ? -1 : 0;
         });
       const pendingReviews = requests.filter(function(r) { return r.status === 'pending'; });
-      console.log('ALL REVIEWS', requests);
-      console.log('PENDING', pendingReviews);
+      console.log('firebase uid', ZitlasAuth && ZitlasAuth.currentUser ? ZitlasAuth.currentUser.uid : 'none');
+      try { console.log('profile id', JSON.parse(localStorage.getItem('zitlas_expert_profile') || 'null')?.id); } catch(_) {}
+      console.log('reviews in firestore', requests);
+      console.log('filtered reviews', getPlanReviews(queryId));
       console.log('[ZITLAS] Firestore snapshot — loaded reviews:', requests.length, '| pending:', pendingReviews.length);
 
-      /* Sync Firestore reviews into expert_plan_reviews so renderInbox() can find them */
+      /* Sync Firestore reviews into expert_plan_reviews (cache).
+         Always stamp expertId from live Firebase UID so getPlanReviews() filter matches.
+         Normalize status to canonical values on the way in. */
       try {
         var local = JSON.parse(localStorage.getItem('expert_plan_reviews') || '[]');
         requests.forEach(function(req) {
           if (!req.id) return;
+          var canonicalStatus = _normalizeStatus(req.status);
           var idx = local.findIndex(function(r) { return r.id === req.id; });
           if (idx === -1) {
-            local.push(req);
+            local.push(Object.assign({}, req, { expertId: queryId, status: canonicalStatus }));
           } else {
-            /* Firestore status is authoritative for pending/rejected; keep expert-side statuses */
-            var localStatus = local[idx].status || '';
-            var keepLocal = localStatus === 'accepted' || localStatus === 'in_progress' ||
-                            localStatus === 'expert_reviewing' || localStatus === 'review_completed' ||
-                            localStatus === 'completed';
-            if (!keepLocal) local[idx].status = req.status;
+            /* Firestore is authoritative for all status transitions */
+            local[idx] = Object.assign({}, local[idx], req, {
+              expertId: queryId,
+              status:   canonicalStatus,
+            });
           }
         });
         localStorage.setItem('expert_plan_reviews', JSON.stringify(local));
+        console.log('[REVIEW] fetched', requests.length, 'reviews; pending:', pendingReviews.length);
       } catch (_) {}
 
-      /* renderInbox owns prInboxList and is tab-aware — always call it after the sync */
-      renderInbox(expert);
+      /* renderInbox owns prInboxList — always call it after sync.
+         Pass queryId so getPlanReviews always uses the live Firebase UID. */
+      renderInbox(expert, queryId);
       renderChatsFromList(requests);
       updateDashboardStats(requests, expert);
     }, function(err) {
@@ -2277,7 +2302,17 @@ function initLogout() {
 function getPlanReviews(expertId) {
   try {
     var all = JSON.parse(localStorage.getItem('expert_plan_reviews') || '[]');
-    return all.filter(function(r) { return !r.expertId || r.expertId === expertId; });
+    console.log('[getPlanReviews] expertId', expertId);
+    if (all.length) {
+      console.log('[getPlanReviews] review', all[0]);
+      console.log('[getPlanReviews] review.expertId',  all[0].expertId);
+      console.log('[getPlanReviews] review.expert_id', all[0].expert_id);
+      console.log('[getPlanReviews] review.expertUid', all[0].expertUid);
+    }
+    return all.filter(function(r) {
+      var rid = r.expertId || r.expert_id || r.expertUid || '';
+      return !rid || rid === expertId;
+    });
   } catch (_) { return []; }
 }
 
@@ -3006,7 +3041,7 @@ function buildWorkoutChangeHistory(origPlan, newPlan, expertName) {
   return history;
 }
 
-function savePlanEdits(reviewId, card, expert) {
+async function savePlanEdits(reviewId, card, expert) {
   var all = [];
   try { all = JSON.parse(localStorage.getItem('expert_plan_reviews') || '[]'); } catch (_) {}
   var idx = all.findIndex(function(r) { return r.id === reviewId; });
@@ -3047,6 +3082,10 @@ function savePlanEdits(reviewId, card, expert) {
     _rev.mealChangeHistory = mealChangeHistory;
   }
 
+  console.log('reviewId', reviewId);
+  console.log('review', _rev);
+  console.log('status before update', _rev.status);
+
   _rev.status      = 'review_completed';
   _rev.reviewedAt  = new Date().toISOString();
   _rev.completedAt = new Date().toISOString();
@@ -3054,6 +3093,32 @@ function savePlanEdits(reviewId, card, expert) {
   _rev.expertName  = expert.name;
 
   try { localStorage.setItem('expert_plan_reviews', JSON.stringify(all)); } catch (_) {}
+
+  /* Sync completed review to Firestore so athlete's device can pick up the update */
+  if (typeof ZitlasDB !== 'undefined') {
+    var _fsUpdate = {
+      status:      'review_completed',
+      reviewedAt:  _rev.reviewedAt,
+      completedAt: _rev.completedAt,
+      expertId:    _rev.expertId,
+      expertName:  _rev.expertName,
+    };
+    if (_isWorkoutReview) {
+      _fsUpdate.reviewedWorkoutPlan  = _rev.reviewedWorkoutPlan  || null;
+      _fsUpdate.workoutChangeHistory = _rev.workoutChangeHistory || [];
+    } else {
+      _fsUpdate.reviewedDietPlan  = _rev.reviewedDietPlan  || null;
+      _fsUpdate.mealChangeHistory = _rev.mealChangeHistory || [];
+    }
+    console.log('writing to firestore...');
+    try {
+      await ZitlasDB.collection('review_requests').doc(reviewId).update(_fsUpdate);
+      console.log('firestore update success');
+      console.log('[REVIEW] completed', reviewId);
+    } catch (e) {
+      console.warn('[ZITLAS] Firestore review update failed:', e);
+    }
+  }
   var _updatedReview = (JSON.parse(localStorage.getItem('expert_plan_reviews') || '[]') || []).find(function(r) { return r.id === reviewId; }) || null;
   console.log("REVIEW AFTER SAVE", _updatedReview);
   console.log("[STORED REVIEW] reviewedWorkoutPlan present:", !!(_updatedReview && _updatedReview.reviewedWorkoutPlan));
@@ -3273,7 +3338,7 @@ function initPlanReviewCardInteractions(card, review, expert) {
           savePlanEdits(prId, card, expert);
         }
 
-        _cRev.status      = 'completed';
+        _cRev.status      = 'review_completed';
         _cRev.reviewedAt  = new Date().toISOString();
         _cRev.completedAt = new Date().toISOString();
         _cRev.expertId    = expert.id;
@@ -3281,16 +3346,32 @@ function initPlanReviewCardInteractions(card, review, expert) {
 
         try { localStorage.setItem('expert_plan_reviews', JSON.stringify(_cAllRevs)); } catch (_e) {}
         var _cUpdated = _cAllRevs[_cIdx];
-        console.log("REVIEW AFTER SAVE", _cUpdated);
+        console.log('[REVIEW] completed (workout path)', prId);
         console.log("[STORED] reviewedWorkoutPlan present:", !!(_cUpdated && _cUpdated.reviewedWorkoutPlan));
         console.log("[STORED] workoutChangeHistory length:", _cUpdated && _cUpdated.workoutChangeHistory ? _cUpdated.workoutChangeHistory.length : 0);
+
+        /* Sync review_completed to Firestore so athlete listener fires */
+        if (typeof ZitlasDB !== 'undefined' && _cUpdated) {
+          var _wFsUpdate = {
+            status:               'review_completed',
+            reviewedAt:           _cRev.reviewedAt,
+            completedAt:          _cRev.completedAt,
+            expertId:             _cRev.expertId,
+            expertName:           _cRev.expertName,
+            reviewedWorkoutPlan:  _cRev.reviewedWorkoutPlan  || null,
+            workoutChangeHistory: _cRev.workoutChangeHistory || [],
+          };
+          ZitlasDB.collection('review_requests').doc(prId).update(_wFsUpdate)
+            .then(function() { console.log('[REVIEW] Firestore workout review_completed OK', prId); })
+            .catch(function(e) { console.warn('[REVIEW] Firestore workout update failed:', e); });
+        }
       }
 
       var _cBadge = card.querySelector('.erc-badge');
       if (_cBadge) { _cBadge.textContent = 'Completed'; _cBadge.className = 'erc-badge status-completed'; }
       var _cActions = card.querySelector('.erc-actions');
       if (_cActions) _cActions.innerHTML = '<span class="erc-approved-stamp">✅ Review Sent to Athlete</span>';
-      card.dataset.prStatus = 'completed';
+      card.dataset.prStatus = 'review_completed';
       edShowToast('✅ Review saved — athlete will be notified.');
     }
 
@@ -3360,7 +3441,12 @@ function initPrSuggestModal() {
       var ctx   = _prSuggestCtx;
       if (!ctx.reviewId) return;
 
-      savePlanReviewStatus(ctx.reviewId, 'completed', { expertNotes: notes || null });
+      savePlanReviewStatus(ctx.reviewId, 'review_completed', { expertNotes: notes || null });
+      if (typeof ZitlasDB !== 'undefined') {
+        ZitlasDB.collection('review_requests').doc(ctx.reviewId)
+          .update({ status: 'review_completed', expertNotes: notes || null, completedAt: new Date().toISOString() })
+          .catch(function(e) { console.warn('[REVIEW] suggest-complete Firestore write failed:', e); });
+      }
 
       if (ctx.card) {
         var badge = ctx.card.querySelector('.erc-badge');
@@ -3396,17 +3482,24 @@ function initPrSuggestModal() {
    REVIEWS INBOX — tab-based, chat-first
    ══════════════════════════════════════════════ */
 
-function renderInbox(expert) {
+function renderInbox(expert, expertUid) {
   var list = document.getElementById('prInboxList');
   if (!list) return;
 
-  var reviews = getPlanReviews(expert.id);
+  /* Prefer live Firebase UID; fall back to expert.id from profile */
+  var _eid = expertUid ||
+    (typeof ZitlasAuth !== 'undefined' && ZitlasAuth.currentUser ? ZitlasAuth.currentUser.uid : null) ||
+    expert.id;
 
-  /* Bucket by display-tab */
-  var pending    = reviews.filter(function(r) { return !r.status || r.status === 'pending'; });
-  var inProgress = reviews.filter(function(r) { return r.status === 'accepted' || r.status === 'in_progress' || r.status === 'expert_reviewing'; });
+  var reviews = getPlanReviews(_eid);
+  console.log('[REVIEW] rendering', reviews.length, 'reviews for', _eid);
+
+  /* Normalize legacy statuses and bucket by canonical values */
+  var pending    = reviews.filter(function(r) { return _normalizeStatus(r.status) === 'pending'; });
+  var inProgress = reviews.filter(function(r) { return _normalizeStatus(r.status) === 'in_progress'; });
   var completed  = reviews.filter(function(r) {
-    return r.status === 'completed' || r.status === 'review_completed' || r.status === 'rejected';
+    var s = _normalizeStatus(r.status);
+    return s === 'review_completed' || s === 'rejected';
   });
 
   /* Update tab badges */
@@ -3551,12 +3644,22 @@ function _prBuildInboxCard(review, expert) {
 function _prAcceptReview(reviewId, review, expert) {
   var rtype  = review.reviewType || review.planReviewType || 'diet';
   var convId = expert.id;
+  var _now   = new Date().toISOString();
 
   savePlanReviewStatus(reviewId, 'in_progress', {
-    acceptedAt: new Date().toISOString(),
+    acceptedAt: _now,
     expertId:   expert.id,
     chatId:     convId,
   });
+
+  /* Write to Firestore so athlete's listener sees in_progress immediately */
+  if (typeof ZitlasDB !== 'undefined') {
+    ZitlasDB.collection('review_requests').doc(reviewId)
+      .update({ status: 'in_progress', acceptedAt: _now, expertId: expert.id })
+      .catch(function(e) { console.warn('[REVIEW] in_progress Firestore write failed:', e); });
+  }
+
+  console.log('[REVIEW] accepted', reviewId, '→ in_progress');
 
   /* Persist expert object so modify page can read it without re-importing EXPERT_DB */
   try { sessionStorage.setItem('zitlas_modify_expert', JSON.stringify(expert)); } catch (_) {}
@@ -3569,6 +3672,14 @@ function _prAcceptReview(reviewId, review, expert) {
 
 function _prRejectReview(reviewId, review, expert) {
   savePlanReviewStatus(reviewId, 'rejected');
+
+  if (typeof ZitlasDB !== 'undefined') {
+    ZitlasDB.collection('review_requests').doc(reviewId)
+      .update({ status: 'rejected', rejectedAt: new Date().toISOString() })
+      .catch(function(e) { console.warn('[REVIEW] rejected Firestore write failed:', e); });
+  }
+
+  console.log('[REVIEW] rejected', reviewId);
   edShowToast('Review rejected.');
   renderInbox(expert);
 }
