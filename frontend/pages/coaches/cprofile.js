@@ -2164,8 +2164,11 @@
           },
           status:      'pending',
           createdAt:   new Date().toISOString(),
+          submittedAt: new Date().toISOString(),
           completedAt: null,
         };
+
+        console.log('[REVIEW REQUEST]', review);
 
         /* Only remove currently-pending requests to avoid duplicates.
            Completed/rejected reviews are kept as permanent history. */
@@ -2178,6 +2181,19 @@
         });
         existing.unshift(review);
         try { localStorage.setItem('expert_plan_reviews', JSON.stringify(existing)); } catch (_) {}
+
+        /* Write to Firestore so the expert's dashboard inbox receives it */
+        if (typeof ZitlasDB !== 'undefined') {
+          var firestoreReview = Object.assign({}, review, {
+            serverTimestamp: firebase.firestore.FieldValue.serverTimestamp(),
+          });
+          console.log('[FIRESTORE] Writing review_requests/' + review.id);
+          ZitlasDB.collection('review_requests').doc(review.id).set(firestoreReview)
+            .then(function() { console.log('[FIRESTORE] review_requests write OK', review.id); })
+            .catch(function(e) { console.error('[FIRESTORE] review_requests write FAILED', e); });
+        } else {
+          console.warn('[FIRESTORE] ZitlasDB not available — review saved to localStorage only');
+        }
 
         submitBtn.textContent = 'Sent ✓';
         submitBtn.disabled    = true;

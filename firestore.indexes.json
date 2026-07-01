@@ -1,0 +1,21 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "review_requests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "expertId",    "order": "ASCENDING"  },
+        { "fieldPath": "submittedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "review_requests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "expertId",  "order": "ASCENDING"  },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

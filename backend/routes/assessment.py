@@ -695,17 +695,39 @@ LIVING SITUATION NOTE: {'Hostel/canteen foods — keep suggestions mess-friendly
 Generate a complete 7-day {goal_label} diet plan. Hit {calc['weight_loss_calories_kcal']} kcal and {calc['protein_target_g']}g protein EVERY day.
 Output valid JSON only — no extra text."""
 
+    # Explicitly enumerate all 7 days so the model never stops at 5
+    prompt += (
+        "\n\nYou MUST generate exactly 7 day objects in the 'days' array: "
+        "Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday. "
+        "Never generate fewer than 7 days."
+    )
+
     print(f"[DIET AI] {fitness_goal} prompt | Using GROQ_API_KEY_DIET")
     result = await groq_service.chat(
         user_message=prompt,
         system_override=diet_system,
         temperature=0.5,
-        max_tokens=2500,
+        max_tokens=4000,
         json_mode=True,
         groq_key_env="GROQ_API_KEY_DIET",
         provider="groq_first",
     )
-    return _extract_json(result["reply"]), result
+    parsed = _extract_json(result["reply"])
+    if parsed and isinstance(parsed.get("days"), list):
+        days = parsed["days"]
+        all_days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        present = {d.get("day", "") for d in days}
+        for day_name in all_days:
+            if day_name not in present:
+                # Copy the last day as a template and rename it
+                template = dict(days[-1]) if days else {"day": day_name, "theme": "Balanced Day", "total_calories": parsed.get("daily_calories_target", 1600), "total_protein_g": parsed.get("daily_protein_target_g", 90), "meals": []}
+                template["day"] = day_name
+                days.append(template)
+                print(f"[DIET AI] WARNING: AI returned {len(present)} days — appended missing day: {day_name}")
+        day_order = {d: i for i, d in enumerate(all_days)}
+        parsed["days"] = sorted(days, key=lambda d: day_order.get(d.get("day", ""), 99))
+        print(f"[DIET AI] Final day count: {len(parsed['days'])}")
+    return parsed, result
 
 
 async def _generate_workout_plan(
@@ -871,12 +893,18 @@ CRITICAL — FOLLOW THESE RULES OR THE PLAN WILL BE REJECTED:
 Generate a complete 7-day {goal_label} workout plan. All exercises must suit {data.workout_preference} setting.
 Output valid JSON only — no extra text."""
 
+    prompt += (
+        "\n\nYou MUST generate exactly 7 day objects in the 'weekly_plan' array: "
+        "Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday. "
+        "Never generate fewer than 7 days."
+    )
+
     print(f"[WORKOUT AI] {fitness_goal} prompt | Using GROQ_API_KEY")
     result = await groq_service.chat(
         user_message=prompt,
         system_override=workout_system,
         temperature=0.5,
-        max_tokens=2500,
+        max_tokens=4000,
         json_mode=True,
         provider="groq_first",
     )

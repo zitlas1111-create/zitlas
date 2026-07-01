@@ -820,9 +820,9 @@ function listenForReviews(expert) {
     console.log('[ZITLAS] Using Firestore listener for reviews');
     let query;
     try {
+      /* No orderBy — avoids composite index requirement. We sort client-side below. */
       query = ZitlasDB.collection('review_requests')
-        .where('expertId', '==', expert.id)
-        .orderBy('submittedAt', 'desc');
+        .where('expertId', '==', expert.id);
     } catch (err) {
       console.warn('[ZITLAS] Firestore query build failed, falling back:', err);
       fallbackLocalStorageReviews(expert);
@@ -830,7 +830,14 @@ function listenForReviews(expert) {
     }
 
     query.onSnapshot(function(snapshot) {
-      const requests = snapshot.docs.map(function(doc) { return doc.data(); });
+      const requests = snapshot.docs
+        .map(function(doc) { return doc.data(); })
+        .sort(function(a, b) {
+          /* Sort newest-first using submittedAt or createdAt */
+          var ta = a.submittedAt || a.createdAt || '';
+          var tb = b.submittedAt || b.createdAt || '';
+          return tb > ta ? 1 : tb < ta ? -1 : 0;
+        });
       console.log('[ZITLAS] Firestore snapshot — loaded reviews:', requests.length, requests);
       renderReviewsFromList(requests, expert);
       renderChatsFromList(requests);
