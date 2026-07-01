@@ -738,7 +738,7 @@ function initFilterTabs() {
 }
 
 function applyFilter() {
-  var wrap = document.getElementById('reviewsListWrap');
+  var wrap = document.getElementById('reviewsListWrap') || document.getElementById('prInboxList');
   if (!wrap) return;
   wrap.querySelectorAll('.ed-review-card').forEach(function(card) {
     var status = card.dataset.status || '';
@@ -774,9 +774,9 @@ function updateDashboardStats(requests, expert) {
    ══════════════════════════════════════════════ */
 
 function renderReviewsFromList(requests, expert) {
-  const wrap  = document.getElementById('reviewsListWrap');
+  const wrap  = document.getElementById('reviewsListWrap') || document.getElementById('prInboxList');
   const empty = document.getElementById('reviewsEmpty');
-  if (!wrap) return;
+  if (!wrap) { console.error('[ZITLAS] No reviews container found (reviewsListWrap, prInboxList)'); return; }
 
   /* Cache latest request to localStorage so expert-review.html can read it */
   if (requests.length > 0) {
@@ -852,29 +852,27 @@ function listenForReviews(expert) {
       console.log('[ZITLAS] Firestore snapshot — loaded reviews:', requests.length, '| pending:', pendingReviews.length);
 
       /* Sync Firestore reviews into expert_plan_reviews so renderInbox() can find them */
-      if (requests.length) {
-        try {
-          var local = JSON.parse(localStorage.getItem('expert_plan_reviews') || '[]');
-          requests.forEach(function(req) {
-            if (!req.id) return;
-            var idx = local.findIndex(function(r) { return r.id === req.id; });
-            if (idx === -1) {
-              local.push(req);
-            } else {
-              /* Firestore status is authoritative for pending/rejected; keep expert-side statuses */
-              var localStatus = local[idx].status || '';
-              var keepLocal = localStatus === 'accepted' || localStatus === 'in_progress' ||
-                              localStatus === 'expert_reviewing' || localStatus === 'review_completed' ||
-                              localStatus === 'completed';
-              if (!keepLocal) local[idx].status = req.status;
-            }
-          });
-          localStorage.setItem('expert_plan_reviews', JSON.stringify(local));
-        } catch (_) {}
-        renderInbox(expert);
-      }
+      try {
+        var local = JSON.parse(localStorage.getItem('expert_plan_reviews') || '[]');
+        requests.forEach(function(req) {
+          if (!req.id) return;
+          var idx = local.findIndex(function(r) { return r.id === req.id; });
+          if (idx === -1) {
+            local.push(req);
+          } else {
+            /* Firestore status is authoritative for pending/rejected; keep expert-side statuses */
+            var localStatus = local[idx].status || '';
+            var keepLocal = localStatus === 'accepted' || localStatus === 'in_progress' ||
+                            localStatus === 'expert_reviewing' || localStatus === 'review_completed' ||
+                            localStatus === 'completed';
+            if (!keepLocal) local[idx].status = req.status;
+          }
+        });
+        localStorage.setItem('expert_plan_reviews', JSON.stringify(local));
+      } catch (_) {}
 
-      renderReviewsFromList(requests, expert);
+      /* renderInbox owns prInboxList and is tab-aware — always call it after the sync */
+      renderInbox(expert);
       renderChatsFromList(requests);
       updateDashboardStats(requests, expert);
     }, function(err) {
