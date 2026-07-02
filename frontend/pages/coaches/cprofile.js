@@ -997,8 +997,8 @@
     try {
       var all  = JSON.parse(localStorage.getItem('zitlas_chats') || '{}');
       var conv = all[conversationId];
-      if (!conv) return;
-      if (conv.messages && conv.messages.some(function(m) { return m.type === 'review_packet'; })) return;
+      if (!conv) return null;
+      if (conv.messages && conv.messages.some(function(m) { return m.type === 'review_packet'; })) return null;
       var packet = {
         id:             'msg_review_' + Date.now(),
         conversationId: conversationId,
@@ -1010,7 +1010,8 @@
       localStorage.setItem('zitlas_chats', JSON.stringify(all));
       console.log('[ZITLAS] Review packet injected into conversation:', packet.id);
       console.log('[ZITLAS] Athlete Review Packet', packet.payload);
-    } catch(e) { console.error('[ZITLAS] persistReviewPacket failed:', e); }
+      return packet;
+    } catch(e) { console.error('[ZITLAS] persistReviewPacket failed:', e); return null; }
   }
 
   function persistChatMessage(conversationId, senderType, text, imageUrl) {
@@ -1123,6 +1124,45 @@
         const question = (document.getElementById('userQuestion')?.value || '').trim();
         const ctx = buildContextPackage();
         closeModal();
+
+        /* buildSystemMessage() below only renders a LOCAL preview bubble —
+           "Diet Plan Attached" text with no data behind it. Persist a real
+           review_packet message (same shape/renderer as the formal "Send for
+           Review" flow) so the expert actually receives the attached plan,
+           assessment, and SWOT data instead of plain text. */
+        if (ctx.diet_plan || ctx.workout_plan || ctx.assessment || ctx.swot) {
+          let athleteName = 'Athlete';
+          try {
+            const fbUser = JSON.parse(localStorage.getItem('zitlas_firebase_user') || 'null');
+            if (fbUser && fbUser.name) athleteName = fbUser.name;
+          } catch (_) {}
+
+          const chatPacketRequest = {
+            id:           'REQ_CHAT_' + Date.now(),
+            athlete_name: athleteName,
+            expertId:     coach.id,
+            expertName:   coach.name,
+            expertRole:   coach.role,
+            expertImg:    coach.image,
+            submittedAt:  new Date().toISOString(),
+            note:         question,
+            context: {
+              assessment:   ctx.assessment,
+              calculations: ctx.calculations,
+              swot:         ctx.swot,
+              diet_plan:    ctx.diet_plan,
+              workout_plan: ctx.workout_plan,
+              survey:       ctx.survey,
+            },
+          };
+
+          const chatConvId = ensureConversation(coach.id, coach.name);
+          const packet = persistReviewPacket(chatConvId, chatPacketRequest);
+          if (packet) {
+            _cpSyncChatMessageToFirestore(chatConvId, getAthleteId(), coach.id, packet);
+          }
+        }
+
         openChatOverlay(question, ctx, 'chat', coach);
       });
     }
@@ -1173,55 +1213,9 @@
 
     /* Load persisted chat messages (text messages only, not the context cards above) */
     if (coach) {
-      const conversationId = ensureConversation(coach.id, coach.name);
-      const conv = loadConversation(conversationId);
-      if (conv && conv.messages && conv.messages.length) {
-        console.log('Conversation Loaded', conv);
-        /* Only show messages AFTER the athlete's clear point (if any) */
-        var hiddenCutoff = conv.hiddenForAthlete || null;
-        var prevMsg = null;
-        var prevDay = null;
-        conv.messages.forEach(function(msg) {
-          /* Skip messages at or before the clear timestamp */
-          if (hiddenCutoff && msg.timestamp && msg.timestamp <= hiddenCutoff) return;
-          /* Review packet — render full context cards */
-          if (msg.type === 'review_packet') {
-            var pld  = msg.payload || {};
-            var pCtx = pld.context || {};
-            var pCoach = { id: pld.expertId, name: pld.expertName, fee: pld.fee };
-            container.appendChild(createCaseFileSummary(pCtx, pld.note, pCoach));
-            if (pCtx.assessment || pCtx.calculations) container.appendChild(createFitnessCard(pCtx));
-            if (pCtx.swot)         container.appendChild(createSwotChatCard(pCtx));
-            if (pCtx.diet_plan)    container.appendChild(createDietPlanChatCard(pCtx.diet_plan));
-            if (pCtx.workout_plan) container.appendChild(createWorkoutPlanChatCard(pCtx.workout_plan));
-            wireReviewChatInteractions(container);
-            console.log('[ZITLAS] Athlete Review Packet', pld);
-            prevMsg = null;
-            return;
-          }
-
-          var msgDay = msg.timestamp ? new Date(msg.timestamp).toDateString() : null;
-          if (msgDay && msgDay !== prevDay) {
-            container.appendChild(buildZcDaySep(msg.timestamp));
-            prevDay = msgDay;
-          }
-          var grouped = zcIsGrouped(prevMsg, msg);
-          var el = msg.senderType === 'athlete'
-            ? createUserMsg(msg.text, msg.timestamp, grouped, msg.imageUrl)
-            : createExpertReplyMsg(msg.text, conv.expertName, msg.timestamp, grouped, msg.imageUrl);
-          el.dataset.msgId = msg.id;
-          container.appendChild(el);
-          prevMsg = msg;
-        });
-
-        /* If everything was filtered out, show the cleared state */
-        if (!container.children.length) {
-          var clearedEl = document.createElement('div');
-          clearedEl.className = 'zc-empty';
-          clearedEl.textContent = 'Chat cleared. New messages will appear here.';
-          container.appendChild(clearedEl);
-        }
-      }
+      renderConversationMessages(container, coach);
+      startChatMessagesListener(coach);
+      startIncomingCallListener(coach);
     }
 
     /* Hide the bottom navbar so chat is truly full-screen */
@@ -1236,6 +1230,215 @@
       const input = document.getElementById('chatInput');
       if (input) input.focus();
     }, 380);
+  }
+
+  /* Renders conv.messages (persisted text/image/review-packet messages) into
+     the given container. Shared by the initial chat-open render and by the
+     realtime Firestore listener so an incoming message re-renders identically. */
+  function renderConversationMessages(container, coach) {
+    const conversationId = ensureConversation(coach.id, coach.name);
+    const conv = loadConversation(conversationId);
+    container.innerHTML = '';
+    if (!conv || !conv.messages || !conv.messages.length) return;
+
+    console.log('Conversation Loaded', conv);
+    var hiddenCutoff = conv.hiddenForAthlete || null;
+    var prevMsg = null;
+    var prevDay = null;
+    conv.messages.forEach(function(msg) {
+      /* Skip messages at or before the clear timestamp */
+      if (hiddenCutoff && msg.timestamp && msg.timestamp <= hiddenCutoff) return;
+      /* Review packet — render full context cards */
+      if (msg.type === 'review_packet') {
+        var pld  = msg.payload || {};
+        var pCtx = pld.context || {};
+        var pCoach = { id: pld.expertId, name: pld.expertName, fee: pld.fee };
+        container.appendChild(createCaseFileSummary(pCtx, pld.note, pCoach));
+        if (pCtx.assessment || pCtx.calculations) container.appendChild(createFitnessCard(pCtx));
+        if (pCtx.swot)         container.appendChild(createSwotChatCard(pCtx));
+        if (pCtx.diet_plan)    container.appendChild(createDietPlanChatCard(pCtx.diet_plan));
+        if (pCtx.workout_plan) container.appendChild(createWorkoutPlanChatCard(pCtx.workout_plan));
+        wireReviewChatInteractions(container);
+        console.log('[ZITLAS] Athlete Review Packet', pld);
+        prevMsg = null;
+        return;
+      }
+
+      var msgDay = msg.timestamp ? new Date(msg.timestamp).toDateString() : null;
+      if (msgDay && msgDay !== prevDay) {
+        container.appendChild(buildZcDaySep(msg.timestamp));
+        prevDay = msgDay;
+      }
+      var grouped = zcIsGrouped(prevMsg, msg);
+      var el = msg.senderType === 'athlete'
+        ? createUserMsg(msg.text, msg.timestamp, grouped, msg.imageUrl)
+        : createExpertReplyMsg(msg.text, conv.expertName, msg.timestamp, grouped, msg.imageUrl);
+      el.dataset.msgId = msg.id;
+      container.appendChild(el);
+      prevMsg = msg;
+    });
+
+    /* If everything was filtered out, show the cleared state */
+    if (!container.children.length) {
+      var clearedEl = document.createElement('div');
+      clearedEl.className = 'zc-empty';
+      clearedEl.textContent = 'Chat cleared. New messages will appear here.';
+      container.appendChild(clearedEl);
+    }
+  }
+
+  /* ══════════════════════════════════════════
+     REALTIME CHAT — Firestore is the source of truth for cross-device
+     delivery. localStorage remains the render cache; this listener keeps
+     it in sync so a message sent from the expert's device appears here
+     without a refresh.
+  ══════════════════════════════════════════ */
+  var _chatMsgListenerConvId = null;
+
+  function startChatMessagesListener(coach) {
+    if (typeof ZitlasDB === 'undefined' || !coach) return;
+    var conversationId = getConversationId(coach.id);
+    if (_chatMsgListenerConvId === conversationId) return; /* already listening */
+    _chatMsgListenerConvId = conversationId;
+
+    ZitlasDB.collection('chat_rooms').doc(conversationId).collection('messages')
+      .orderBy('timestamp')
+      .onSnapshot(function(snapshot) {
+        console.log('[CHAT] snapshot received', snapshot.size, 'messages for', conversationId);
+        var incoming = snapshot.docs.map(function(d) { return d.data(); });
+
+        var all = {};
+        try { all = JSON.parse(localStorage.getItem('zitlas_chats') || '{}'); } catch(_) {}
+        if (!all[conversationId]) return; /* conversation not initialized locally yet */
+
+        var localMsgs = all[conversationId].messages || [];
+        var localIds  = {};
+        localMsgs.forEach(function(m) { localIds[m.id] = true; });
+
+        var added = false;
+        incoming.forEach(function(m) {
+          if (m.id && !localIds[m.id]) {
+            localMsgs.push(m);
+            localIds[m.id] = true;
+            added = true;
+          }
+        });
+        if (!added) return;
+
+        localMsgs.sort(function(a, b) { return (a.timestamp || '') < (b.timestamp || '') ? -1 : 1; });
+        all[conversationId].messages = localMsgs;
+        var last = localMsgs[localMsgs.length - 1];
+        if (last) {
+          all[conversationId].lastMessage   = last.text || '';
+          all[conversationId].lastMessageAt = last.timestamp;
+        }
+        try { localStorage.setItem('zitlas_chats', JSON.stringify(all)); } catch(_) {}
+
+        /* Re-render only if this conversation's chat is currently open */
+        var overlay = document.getElementById('chatOverlay');
+        if (overlay && overlay.classList.contains('open') && _currentChatCoach && _currentChatCoach.id === coach.id) {
+          var container = document.getElementById('chatMessages');
+          if (container) {
+            renderConversationMessages(container, coach);
+            container.scrollTop = container.scrollHeight;
+          }
+        }
+      }, function(err) {
+        console.error('[CHAT] messages listener error', err);
+      });
+  }
+
+  /* ══════════════════════════════════════════
+     VOICE CALL (WebRTC via assets/js/webrtc-call.js)
+  ══════════════════════════════════════════ */
+  var _callSession           = null;  /* active ZitlasCall session handle, or null */
+  var _pendingIncomingCall   = null;  /* {callId, chatId, callerId, offer}, or null */
+  var _incomingCallListenerConvId = null;
+
+  function startIncomingCallListener(coach) {
+    if (typeof ZitlasDB === 'undefined' || typeof ZitlasCall === 'undefined' || !coach) return;
+    var conversationId = getConversationId(coach.id);
+    if (_incomingCallListenerConvId === conversationId) return; /* already listening */
+    _incomingCallListenerConvId = conversationId;
+
+    ZitlasCall.listenForIncomingCalls({
+      db: ZitlasDB, chatId: conversationId, myUid: getAthleteId(),
+      onIncomingCall: function(callInfo) {
+        if (_callSession || _pendingIncomingCall) return; /* already on a call */
+        _pendingIncomingCall = callInfo;
+        var sub = document.getElementById('callIncomingSub');
+        if (sub) sub.textContent = (coach.name || 'Your coach') + ' is calling you.';
+        var backdrop = document.getElementById('callIncomingBackdrop');
+        if (backdrop) backdrop.classList.add('open');
+      },
+    });
+  }
+
+  function _startOutgoingCall(coach) {
+    var chatId = getConversationId(coach.id);
+    console.log('[CALL] current uid', getAthleteId());
+    console.log('[CALL] other uid', coach.id);
+    console.log('[CALL] chatId', chatId);
+    _callSession = ZitlasCall.startCall({
+      db: ZitlasDB, chatId: chatId, myUid: getAthleteId(), otherUid: coach.id,
+      onRemoteStream: function(stream) {
+        var audioEl = document.getElementById('callRemoteAudio');
+        if (audioEl) audioEl.srcObject = stream;
+      },
+      onStateChange: function(state) {
+        console.log('[CALL] state', state);
+        if (state === 'accepted' || state === 'connected') {
+          var title = document.getElementById('callActiveTitle');
+          var sub   = document.getElementById('callActiveSub');
+          if (title) title.textContent = 'On Call';
+          if (sub)   sub.textContent   = coach.name || 'Connected';
+        } else if (state === 'rejected' || state === 'ended' || state === 'failed') {
+          _endCallUI();
+        }
+      },
+    });
+    var callBtn = document.getElementById('chatCallBtn');
+    if (callBtn) { callBtn.classList.add('zc-call-btn--calling'); callBtn.setAttribute('aria-label', 'End call'); }
+    var title = document.getElementById('callActiveTitle');
+    var sub   = document.getElementById('callActiveSub');
+    if (title) title.textContent = 'Calling…';
+    if (sub)   sub.textContent   = 'Waiting for ' + (coach.name || 'your coach') + ' to answer.';
+    var backdrop = document.getElementById('callActiveBackdrop');
+    if (backdrop) backdrop.classList.add('open');
+  }
+
+  function _acceptIncomingCall(callInfo) {
+    document.getElementById('callIncomingBackdrop').classList.remove('open');
+    _pendingIncomingCall = null;
+    _callSession = ZitlasCall.answerCall({
+      db: ZitlasDB, chatId: callInfo.chatId, callId: callInfo.callId, myUid: getAthleteId(), offer: callInfo.offer,
+      onRemoteStream: function(stream) {
+        var audioEl = document.getElementById('callRemoteAudio');
+        if (audioEl) audioEl.srcObject = stream;
+      },
+      onStateChange: function(state) {
+        console.log('[CALL] state', state);
+        if (state === 'ended' || state === 'failed') _endCallUI();
+      },
+    });
+    var callBtn = document.getElementById('chatCallBtn');
+    if (callBtn) { callBtn.classList.add('zc-call-btn--calling'); callBtn.setAttribute('aria-label', 'End call'); }
+    var title = document.getElementById('callActiveTitle');
+    var sub   = document.getElementById('callActiveSub');
+    if (title) title.textContent = 'On Call';
+    if (sub)   sub.textContent   = 'Connected';
+    var backdrop = document.getElementById('callActiveBackdrop');
+    if (backdrop) backdrop.classList.add('open');
+  }
+
+  function _endCallUI() {
+    _callSession = null;
+    var callBtn = document.getElementById('chatCallBtn');
+    if (callBtn) { callBtn.classList.remove('zc-call-btn--calling'); callBtn.setAttribute('aria-label', 'Voice call'); }
+    var backdrop = document.getElementById('callActiveBackdrop');
+    if (backdrop) backdrop.classList.remove('open');
+    var audioEl = document.getElementById('callRemoteAudio');
+    if (audioEl) audioEl.srcObject = null;
   }
 
   /* ══════════════════════════════════════════
@@ -2485,26 +2688,48 @@
       });
     }
 
-    /* ── 📞 Call button (WebRTC-ready stub) ── */
+    /* ── 📞 Call button — WebRTC voice call, signaled via Firestore
+       (see assets/js/webrtc-call.js). STUN-only: no TURN server configured,
+       so calls may fail to connect audio across restrictive NATs/firewalls
+       even though signaling (ringing/accepted) succeeds. ── */
     var callBtn = document.getElementById('chatCallBtn');
-    var _callActive = false;
     if (callBtn) {
       callBtn.addEventListener('click', function() {
-        if (_callActive) {
-          /* End call */
-          _callActive = false;
-          callBtn.classList.remove('zc-call-btn--calling');
-          callBtn.setAttribute('aria-label', 'Voice call');
+        if (_callSession) {
           console.log('[CALL] Athlete ended call with', _currentChatCoach ? _currentChatCoach.name : 'coach');
-          /* TODO: hangup WebRTC peer connection */
+          _callSession.hangup();
+          _endCallUI();
         } else {
-          /* Initiate call */
-          _callActive = true;
-          callBtn.classList.add('zc-call-btn--calling');
-          callBtn.setAttribute('aria-label', 'End call');
-          console.log('[CALL] Athlete calling', _currentChatCoach ? _currentChatCoach.name : 'coach');
-          /* TODO: initiate WebRTC offer → signal via zitlas_chats or Firestore */
+          if (!_currentChatCoach || typeof ZitlasDB === 'undefined' || typeof ZitlasCall === 'undefined') return;
+          console.log('[CALL] Athlete calling', _currentChatCoach.name);
+          _startOutgoingCall(_currentChatCoach);
         }
+      });
+    }
+
+    var callHangupBtn = document.getElementById('callHangupBtn');
+    if (callHangupBtn) {
+      callHangupBtn.addEventListener('click', function() {
+        if (_callSession) _callSession.hangup();
+        _endCallUI();
+      });
+    }
+
+    var callAcceptBtn  = document.getElementById('callAcceptBtn');
+    var callDeclineBtn = document.getElementById('callDeclineBtn');
+    if (callAcceptBtn) {
+      callAcceptBtn.addEventListener('click', function() {
+        if (!_pendingIncomingCall) return;
+        _acceptIncomingCall(_pendingIncomingCall);
+      });
+    }
+    if (callDeclineBtn) {
+      callDeclineBtn.addEventListener('click', function() {
+        if (_pendingIncomingCall && typeof ZitlasDB !== 'undefined') {
+          ZitlasCall.declineCall({ db: ZitlasDB, chatId: _pendingIncomingCall.chatId, callId: _pendingIncomingCall.callId });
+        }
+        _pendingIncomingCall = null;
+        document.getElementById('callIncomingBackdrop').classList.remove('open');
       });
     }
 

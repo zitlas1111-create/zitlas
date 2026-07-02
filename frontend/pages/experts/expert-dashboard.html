@@ -12,6 +12,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
   <script src="../../assets/js/firebase-config.js"></script>
+  <script src="../../assets/js/webrtc-call.js"></script>
 </head>
 <body>
 
@@ -519,6 +520,30 @@
       </div>
     </div>
   </div>
+
+  <!-- ══ VOICE CALL — outgoing/active state ═════════════════════════════ -->
+  <div class="zc-confirm-backdrop" id="edCallActiveBackdrop">
+    <div class="zc-confirm-modal">
+      <p class="zc-confirm-title" id="edCallActiveTitle">Calling…</p>
+      <p class="zc-confirm-sub" id="edCallActiveSub">Waiting for the athlete to answer.</p>
+      <div class="zc-confirm-actions">
+        <button class="zc-confirm-ok" id="edCallHangupBtn">Hang Up</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ VOICE CALL — incoming call ══════════════════════════════════════ -->
+  <div class="zc-confirm-backdrop" id="edCallIncomingBackdrop">
+    <div class="zc-confirm-modal">
+      <p class="zc-confirm-title">📞 Incoming Call</p>
+      <p class="zc-confirm-sub" id="edCallIncomingSub">An athlete is calling you.</p>
+      <div class="zc-confirm-actions">
+        <button class="zc-confirm-cancel" id="edCallDeclineBtn">Decline</button>
+        <button class="zc-confirm-ok" id="edCallAcceptBtn">Accept</button>
+      </div>
+    </div>
+  </div>
+  <audio id="edCallRemoteAudio" autoplay playsinline></audio>
 
   <script src="../../assets/js/expert-profile.js"></script>
   <script src="expert-dashboard.js"></script>

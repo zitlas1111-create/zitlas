@@ -38,3 +38,9 @@ var ZitlasDB   = firebase.firestore();
 
 /* Persist login across tabs and page reloads */
 ZitlasAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+
+/* Diagnostic — confirms every page is talking to the same Firebase app/project.
+   Compare projectId across the athlete and expert consoles when debugging sync issues. */
+console.log('[FIREBASE] app options', firebase.app().options);
+console.log('[FIREBASE] apps', firebase.apps);
+console.log('[FIREBASE] firestore instance', ZitlasDB);

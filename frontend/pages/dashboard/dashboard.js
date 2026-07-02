@@ -198,6 +198,23 @@
     ['lifestyle_data', 'nutrition_scores', 'nutrition_swot', 'nutrition_recommendations', 'nutrition_bottleneck', 'nutrition_assessment', 'nutrition_weekly_plan'].forEach(k => localStorage.removeItem(k));
     /* User profile + SWOT */
     ['athlete_profile', 'athlete_summary', 'overall_score', 'athlete_tier', 'development_priority', 'zitlas_swot'].forEach(k => localStorage.removeItem(k));
+    /* Assessment/fitness-snapshot data (BMI, TDEE, calorie + protein targets) and the
+       generated diet/workout plans + their metadata — all scoped to the goal being
+       reset. These are the exact keys ai-coach.js's saveToLocalStorage() writes when
+       a plan is generated (dashboard/ai-coach/ai-coach.js:2029-2058); Reset Goal must
+       clear the same set or stale BMI/calories/plans survive alongside a "no goal set"
+       dashboard state. */
+    ['zitlas_calculations', 'zitlas_assessment', 'zitlas_diet_plan', 'zitlas_workout_plan',
+     'zitlas_sources', 'zitlas_plan_generated_at', 'zitlas_plan_id',
+    ].forEach(k => localStorage.removeItem(k));
+    /* Expert review cycle is tied to the plan/goal it was submitted against — same
+       list ai-coach.js already clears when a new plan is generated (ai-coach.js:2086-2091). */
+    ['zitlas_expert_review', 'zitlas_plan_versions', 'zitlas_review_request',
+     'expert_plan_reviews', 'expert_review', 'expert_diet_override', 'reviewed_diet_plan',
+     'modifiedBy', 'expertApproval', 'review_request',
+     'expertDiet', 'expertOverride', 'dietOverride', 'reviewStatus',
+     'expertReviewedPlan', 'approvedPlan', 'expertWorkoutOverride',
+    ].forEach(k => localStorage.removeItem(k));
   }
 
   function calcDaysLeft(endDateStr) {

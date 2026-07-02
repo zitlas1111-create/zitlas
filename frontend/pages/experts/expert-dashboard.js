@@ -1096,6 +1096,22 @@ function openExpertChat(conversationId, athleteName) {
   /* Hide the review banner — we show the packet inline in messages instead */
   populateReviewBanner(null);
 
+  renderExpertChatMessages(msgWrap, conversationId);
+  startExpertChatMessagesListener(conversationId);
+  startExpertIncomingCallListener(conversationId, conv ? conv.athleteId : null, name);
+
+  overlay.classList.add('open');
+  document.body.style.overflow = 'hidden';
+  msgWrap.scrollTop = msgWrap.scrollHeight;
+
+  const input = document.getElementById('edChatInput');
+  if (input) setTimeout(function() { input.focus(); }, 280);
+}
+
+/* Renders conv.messages into msgWrap. Shared by the initial chat-open
+   render and by the realtime Firestore listener below. */
+function renderExpertChatMessages(msgWrap, conversationId) {
+  const conv = chatGetConversation(conversationId);
   msgWrap.innerHTML = '';
 
   if (conv && conv.messages && conv.messages.length) {
@@ -1139,13 +1155,160 @@ function openExpertChat(conversationId, athleteName) {
     emptyEl.textContent = 'No messages yet. The athlete will see your reply instantly.';
     msgWrap.appendChild(emptyEl);
   }
+}
 
-  overlay.classList.add('open');
-  document.body.style.overflow = 'hidden';
-  msgWrap.scrollTop = msgWrap.scrollHeight;
+/* ══════════════════════════════════════════════
+   REALTIME CHAT — Firestore is the source of truth for cross-device
+   delivery. localStorage remains the render cache; this listener keeps
+   it in sync so a message sent from the athlete's device appears here
+   without a refresh.
+   ══════════════════════════════════════════════ */
+var _edChatMsgListenerConvId = null;
 
-  const input = document.getElementById('edChatInput');
-  if (input) setTimeout(function() { input.focus(); }, 280);
+function startExpertChatMessagesListener(conversationId) {
+  if (typeof ZitlasDB === 'undefined' || !conversationId) return;
+  if (_edChatMsgListenerConvId === conversationId) return; /* already listening */
+  _edChatMsgListenerConvId = conversationId;
+
+  ZitlasDB.collection('chat_rooms').doc(conversationId).collection('messages')
+    .orderBy('timestamp')
+    .onSnapshot(function(snapshot) {
+      console.log('[CHAT] snapshot received', snapshot.size, 'messages for', conversationId);
+      var incoming = snapshot.docs.map(function(d) { return d.data(); });
+
+      var all  = chatLoadAll();
+      var conv = all[conversationId];
+      if (!conv) return; /* conversation not initialized locally yet */
+
+      var localMsgs = conv.messages || [];
+      var localIds  = {};
+      localMsgs.forEach(function(m) { localIds[m.id] = true; });
+
+      var added = false;
+      incoming.forEach(function(m) {
+        if (m.id && !localIds[m.id]) {
+          localMsgs.push(m);
+          localIds[m.id] = true;
+          added = true;
+        }
+      });
+      if (!added) return;
+
+      localMsgs.sort(function(a, b) { return (a.timestamp || '') < (b.timestamp || '') ? -1 : 1; });
+      conv.messages = localMsgs;
+      var last = localMsgs[localMsgs.length - 1];
+      if (last) {
+        conv.lastMessage   = last.text || '';
+        conv.lastMessageAt = last.timestamp;
+      }
+      chatSaveAll(all);
+
+      /* Re-render only if this conversation's chat is currently open */
+      var overlay = document.getElementById('edChatOverlay');
+      var msgWrap = document.getElementById('edChatMessages');
+      if (overlay && overlay.classList.contains('open') && _edChatConversationId === conversationId && msgWrap) {
+        renderExpertChatMessages(msgWrap, conversationId);
+        msgWrap.scrollTop = msgWrap.scrollHeight;
+      }
+    }, function(err) {
+      console.error('[CHAT] messages listener error', err);
+    });
+}
+
+/* ══════════════════════════════════════════════
+   VOICE CALL (WebRTC via assets/js/webrtc-call.js)
+   Scoped to whichever chat conversation is currently open — same
+   limitation as the athlete side: the expert must have this specific
+   chat open to receive a call from that athlete.
+   ══════════════════════════════════════════════ */
+var _edCallSession               = null;
+var _edPendingIncomingCall       = null;
+var _edIncomingCallListenerConvId = null;
+
+function startExpertIncomingCallListener(conversationId, athleteId, athleteName) {
+  if (typeof ZitlasDB === 'undefined' || typeof ZitlasCall === 'undefined' || !conversationId || !athleteId) return;
+  if (_edIncomingCallListenerConvId === conversationId) return; /* already listening */
+  _edIncomingCallListenerConvId = conversationId;
+
+  ZitlasCall.listenForIncomingCalls({
+    db: ZitlasDB, chatId: conversationId, myUid: _currentExpert ? _currentExpert.id : '',
+    onIncomingCall: function(callInfo) {
+      if (_edCallSession || _edPendingIncomingCall) return; /* already on a call */
+      _edPendingIncomingCall = callInfo;
+      var sub = document.getElementById('edCallIncomingSub');
+      if (sub) sub.textContent = (athleteName || 'The athlete') + ' is calling you.';
+      var backdrop = document.getElementById('edCallIncomingBackdrop');
+      if (backdrop) backdrop.classList.add('open');
+    },
+  });
+}
+
+function _edStartOutgoingCall(chatId, athleteId, athleteName) {
+  var myUid = _currentExpert ? _currentExpert.id : '';
+  console.log('[CALL] current uid', myUid);
+  console.log('[CALL] other uid', athleteId);
+  console.log('[CALL] chatId', chatId);
+  _edCallSession = ZitlasCall.startCall({
+    db: ZitlasDB, chatId: chatId, myUid: myUid, otherUid: athleteId,
+    onRemoteStream: function(stream) {
+      var audioEl = document.getElementById('edCallRemoteAudio');
+      if (audioEl) audioEl.srcObject = stream;
+    },
+    onStateChange: function(state) {
+      console.log('[CALL] state', state);
+      if (state === 'accepted' || state === 'connected') {
+        var title = document.getElementById('edCallActiveTitle');
+        var sub   = document.getElementById('edCallActiveSub');
+        if (title) title.textContent = 'On Call';
+        if (sub)   sub.textContent   = athleteName || 'Connected';
+      } else if (state === 'rejected' || state === 'ended' || state === 'failed') {
+        _edEndCallUI();
+      }
+    },
+  });
+  var callBtn = document.getElementById('edChatCallBtn');
+  if (callBtn) { callBtn.classList.add('zc-call-btn--calling'); callBtn.setAttribute('aria-label', 'End call'); }
+  var title = document.getElementById('edCallActiveTitle');
+  var sub   = document.getElementById('edCallActiveSub');
+  if (title) title.textContent = 'Calling…';
+  if (sub)   sub.textContent   = 'Waiting for ' + (athleteName || 'the athlete') + ' to answer.';
+  var backdrop = document.getElementById('edCallActiveBackdrop');
+  if (backdrop) backdrop.classList.add('open');
+}
+
+function _edAcceptIncomingCall(callInfo) {
+  document.getElementById('edCallIncomingBackdrop').classList.remove('open');
+  _edPendingIncomingCall = null;
+  _edCallSession = ZitlasCall.answerCall({
+    db: ZitlasDB, chatId: callInfo.chatId, callId: callInfo.callId,
+    myUid: _currentExpert ? _currentExpert.id : '', offer: callInfo.offer,
+    onRemoteStream: function(stream) {
+      var audioEl = document.getElementById('edCallRemoteAudio');
+      if (audioEl) audioEl.srcObject = stream;
+    },
+    onStateChange: function(state) {
+      console.log('[CALL] state', state);
+      if (state === 'ended' || state === 'failed') _edEndCallUI();
+    },
+  });
+  var callBtn = document.getElementById('edChatCallBtn');
+  if (callBtn) { callBtn.classList.add('zc-call-btn--calling'); callBtn.setAttribute('aria-label', 'End call'); }
+  var title = document.getElementById('edCallActiveTitle');
+  var sub   = document.getElementById('edCallActiveSub');
+  if (title) title.textContent = 'On Call';
+  if (sub)   sub.textContent   = 'Connected';
+  var backdrop = document.getElementById('edCallActiveBackdrop');
+  if (backdrop) backdrop.classList.add('open');
+}
+
+function _edEndCallUI() {
+  _edCallSession = null;
+  var callBtn = document.getElementById('edChatCallBtn');
+  if (callBtn) { callBtn.classList.remove('zc-call-btn--calling'); callBtn.setAttribute('aria-label', 'Voice call'); }
+  var backdrop = document.getElementById('edCallActiveBackdrop');
+  if (backdrop) backdrop.classList.remove('open');
+  var audioEl = document.getElementById('edCallRemoteAudio');
+  if (audioEl) audioEl.srcObject = null;
 }
 
 /* ══════════════════════════════════════════════
@@ -1608,24 +1771,50 @@ function initExpertChatOverlay() {
     });
   }
 
-  /* ── 📞 Call button (WebRTC-ready stub) ── */
+  /* ── 📞 Call button — WebRTC voice call, signaled via Firestore
+     (see assets/js/webrtc-call.js). STUN-only: no TURN server configured,
+     so calls may fail to connect audio across restrictive NATs/firewalls
+     even though signaling (ringing/accepted) succeeds. ── */
   var edCallBtn = document.getElementById('edChatCallBtn');
-  var _edCallActive = false;
   if (edCallBtn) {
     edCallBtn.addEventListener('click', function() {
-      if (_edCallActive) {
-        _edCallActive = false;
-        edCallBtn.classList.remove('zc-call-btn--calling');
-        edCallBtn.setAttribute('aria-label', 'Voice call');
+      if (_edCallSession) {
         console.log('[CALL] Expert ended call for', _edChatConversationId);
-        /* TODO: hangup WebRTC peer connection */
+        _edCallSession.hangup();
+        _edEndCallUI();
       } else {
-        _edCallActive = true;
-        edCallBtn.classList.add('zc-call-btn--calling');
-        edCallBtn.setAttribute('aria-label', 'End call');
+        if (!_edChatConversationId || typeof ZitlasDB === 'undefined' || typeof ZitlasCall === 'undefined') return;
+        var conv = chatGetConversation(_edChatConversationId);
+        if (!conv || !conv.athleteId) return;
         console.log('[CALL] Expert calling athlete on', _edChatConversationId);
-        /* TODO: initiate WebRTC offer → signal via zitlas_chats or Firestore */
+        _edStartOutgoingCall(_edChatConversationId, conv.athleteId, conv.athleteName);
       }
+    });
+  }
+
+  var edCallHangupBtn = document.getElementById('edCallHangupBtn');
+  if (edCallHangupBtn) {
+    edCallHangupBtn.addEventListener('click', function() {
+      if (_edCallSession) _edCallSession.hangup();
+      _edEndCallUI();
+    });
+  }
+
+  var edCallAcceptBtn  = document.getElementById('edCallAcceptBtn');
+  var edCallDeclineBtn = document.getElementById('edCallDeclineBtn');
+  if (edCallAcceptBtn) {
+    edCallAcceptBtn.addEventListener('click', function() {
+      if (!_edPendingIncomingCall) return;
+      _edAcceptIncomingCall(_edPendingIncomingCall);
+    });
+  }
+  if (edCallDeclineBtn) {
+    edCallDeclineBtn.addEventListener('click', function() {
+      if (_edPendingIncomingCall && typeof ZitlasDB !== 'undefined') {
+        ZitlasCall.declineCall({ db: ZitlasDB, chatId: _edPendingIncomingCall.chatId, callId: _edPendingIncomingCall.callId });
+      }
+      _edPendingIncomingCall = null;
+      document.getElementById('edCallIncomingBackdrop').classList.remove('open');
     });
   }
 
