@@ -61,6 +61,7 @@
       isEnded: function () { return ended; },
       cleanup: cleanup,
       hangup: function () {
+        console.log('[CALL] call ended');
         callRef.update({ status: 'ended' }).catch(function (err) {
           console.error('[CALL] failed to write ended status', err);
         });
@@ -84,10 +85,12 @@
       }
     };
     pc.ontrack = function (e) {
+      console.log('[CALL] remote stream received');
       if (opts.onRemoteStream) opts.onRemoteStream(e.streams[0]);
     };
     pc.onconnectionstatechange = function () {
       console.log('[CALL] connection state (caller)', pc.connectionState);
+      if (pc.connectionState === 'connected') console.log('[CALL] call connected');
       if (opts.onStateChange) opts.onStateChange(pc.connectionState);
       if (pc.connectionState === 'failed' || pc.connectionState === 'closed') session.cleanup();
     };
@@ -97,6 +100,7 @@
         session.setLocalStream(stream);
         if (opts.onLocalStream) opts.onLocalStream(stream);
         stream.getTracks().forEach(function (t) { pc.addTrack(t, stream); });
+        console.log('[CALL] creating offer');
         return pc.createOffer();
       })
       .then(function (offer) { return pc.setLocalDescription(offer).then(function () { return offer; }); })
@@ -114,6 +118,8 @@
         });
       })
       .then(function () {
+        /* Offer is in Firestore — the other side can now ring */
+        if (opts.onStateChange) opts.onStateChange('ringing');
         session.setUnsubCallDoc(callRef.onSnapshot(function (doc) {
           var data = doc.data();
           if (!data) return;
@@ -130,7 +136,7 @@
             return;
           }
           if (data.answer && !pc.currentRemoteDescription) {
-            console.log('[CALL] applying answer', callId);
+            console.log('[CALL] received answer', callId);
             pc.setRemoteDescription(new RTCSessionDescription(data.answer))
               .then(function () { if (opts.onStateChange) opts.onStateChange('accepted'); })
               .catch(function (err) { console.error('[CALL] setRemoteDescription(answer) failed', err); });
@@ -172,7 +178,7 @@
               console.log('[CALL] ignoring stale ringing call', change.doc.id);
               return;
             }
-            console.log('[CALL] incoming call', data);
+            console.log('[CALL] incoming call detected', data);
             if (opts.onIncomingCall) {
               opts.onIncomingCall({
                 callId:   data.callId || change.doc.id,
@@ -182,6 +188,13 @@
               });
             }
           }
+          /* A doc leaving the status=='ringing' query means the caller hung
+             up (or the call was answered elsewhere) — let the UI dismiss a
+             still-ringing incoming popup instead of ringing forever. */
+          if (change.type === 'removed') {
+            console.log('[CALL] ringing call withdrawn', change.doc.id);
+            if (opts.onCallCancelled) opts.onCallCancelled(change.doc.id);
+          }
         });
       }, function (err) { console.error('[CALL] incoming-call listener error', err); });
   }
@@ -189,6 +202,7 @@
   /* ── Callee side: accept an incoming call ── */
   function answerCall(opts) {
     var db = opts.db, chatId = opts.chatId, callId = opts.callId, offer = opts.offer;
+    console.log('[CALL] received offer', callId);
     var callRef = _callDocRef(db, chatId, callId);
     var pc = new RTCPeerConnection(ICE_SERVERS);
     var session = _makeSession(pc, callRef);
@@ -200,10 +214,12 @@
       }
     };
     pc.ontrack = function (e) {
+      console.log('[CALL] remote stream received');
       if (opts.onRemoteStream) opts.onRemoteStream(e.streams[0]);
     };
     pc.onconnectionstatechange = function () {
       console.log('[CALL] connection state (callee)', pc.connectionState);
+      if (pc.connectionState === 'connected') console.log('[CALL] call connected');
       if (opts.onStateChange) opts.onStateChange(pc.connectionState);
       if (pc.connectionState === 'failed' || pc.connectionState === 'closed') session.cleanup();
     };
@@ -215,7 +231,7 @@
         stream.getTracks().forEach(function (t) { pc.addTrack(t, stream); });
         return pc.setRemoteDescription(new RTCSessionDescription(offer));
       })
-      .then(function () { return pc.createAnswer(); })
+      .then(function () { console.log('[CALL] creating answer'); return pc.createAnswer(); })
       .then(function (answer) { return pc.setLocalDescription(answer).then(function () { return answer; }); })
       .then(function (answer) {
         console.log('[CALL] writing answer', { chatId: chatId, callId: callId });

@@ -1338,80 +1338,107 @@ function startExpertIncomingCallListener(conversationId, athleteId, athleteName)
     onIncomingCall: function(callInfo) {
       if (_edCallSession || _edPendingIncomingCall) return; /* already on a call */
       _edPendingIncomingCall = callInfo;
-      var sub = document.getElementById('edCallIncomingSub');
-      if (sub) sub.textContent = (athleteName || 'The athlete') + ' is calling you.';
-      var backdrop = document.getElementById('edCallIncomingBackdrop');
-      if (backdrop) backdrop.classList.add('open');
+      ZitlasCallUI.showIncoming({
+        name:  athleteName || 'Athlete',
+        role:  'Athlete',
+        photo: null,
+        onAccept: function() {
+          if (_edPendingIncomingCall) _edAcceptIncomingCall(_edPendingIncomingCall);
+        },
+        onReject: function() {
+          if (_edPendingIncomingCall) {
+            ZitlasCall.declineCall({ db: ZitlasDB, chatId: _edPendingIncomingCall.chatId, callId: _edPendingIncomingCall.callId });
+          }
+          _edPendingIncomingCall = null;
+          ZitlasCallUI.close();
+        },
+      });
+    },
+    onCallCancelled: function(callId) {
+      /* Caller hung up while still ringing — dismiss the popup */
+      if (_edPendingIncomingCall && _edPendingIncomingCall.callId === callId) {
+        _edPendingIncomingCall = null;
+        ZitlasCallUI.close({ message: 'Call ended' });
+      }
     },
   });
 }
 
 function _edStartOutgoingCall(chatId, athleteId, athleteName) {
-  var myUid = _currentExpert ? _currentExpert.id : '';
+  var myUid = (typeof ZitlasAuth !== 'undefined' && ZitlasAuth.currentUser)
+    ? ZitlasAuth.currentUser.uid
+    : (_currentExpert ? _currentExpert.id : '');
   console.log('[CALL] current uid', myUid);
   console.log('[CALL] other uid', athleteId);
   console.log('[CALL] chatId', chatId);
+
+  ZitlasCallUI.showOutgoing({
+    name:  athleteName || 'Athlete',
+    role:  'Athlete',
+    photo: null,
+    onHangup: function() {
+      if (_edCallSession) _edCallSession.hangup();
+      ZitlasCallUI.close({ message: 'Call ended' });
+      _edEndCallUI();
+    },
+  });
+
   _edCallSession = ZitlasCall.startCall({
     db: ZitlasDB, chatId: chatId, myUid: myUid, otherUid: athleteId,
-    onRemoteStream: function(stream) {
-      var audioEl = document.getElementById('edCallRemoteAudio');
-      if (audioEl) audioEl.srcObject = stream;
-    },
-    onStateChange: function(state) {
+    onLocalStream:  function(stream) { ZitlasCallUI.setLocalStream(stream); },
+    onRemoteStream: function(stream) { ZitlasCallUI.setRemoteStream(stream); },
+    onStateChange:  function(state) {
       console.log('[CALL] state', state);
-      if (state === 'accepted' || state === 'connected') {
-        var title = document.getElementById('edCallActiveTitle');
-        var sub   = document.getElementById('edCallActiveSub');
-        if (title) title.textContent = 'On Call';
-        if (sub)   sub.textContent   = athleteName || 'Connected';
-      } else if (state === 'rejected' || state === 'ended' || state === 'failed') {
+      if      (state === 'ringing')      ZitlasCallUI.setStatus('Ringing…');
+      else if (state === 'accepted')     ZitlasCallUI.setStatus('Connecting…');
+      else if (state === 'connecting')   ZitlasCallUI.setStatus('Connecting…');
+      else if (state === 'connected')    ZitlasCallUI.setConnected();
+      else if (state === 'disconnected') ZitlasCallUI.setStatus('Reconnecting…');
+      else if (state === 'rejected')     { ZitlasCallUI.close({ message: 'Call declined' }); _edEndCallUI(); }
+      else if (state === 'ended' || state === 'failed' || state === 'closed') {
+        ZitlasCallUI.close({ message: state === 'failed' ? 'Could not connect' : 'Call ended' });
         _edEndCallUI();
       }
     },
   });
   var callBtn = document.getElementById('edChatCallBtn');
   if (callBtn) { callBtn.classList.add('zc-call-btn--calling'); callBtn.setAttribute('aria-label', 'End call'); }
-  var title = document.getElementById('edCallActiveTitle');
-  var sub   = document.getElementById('edCallActiveSub');
-  if (title) title.textContent = 'Calling…';
-  if (sub)   sub.textContent   = 'Waiting for ' + (athleteName || 'the athlete') + ' to answer.';
-  var backdrop = document.getElementById('edCallActiveBackdrop');
-  if (backdrop) backdrop.classList.add('open');
 }
 
 function _edAcceptIncomingCall(callInfo) {
-  document.getElementById('edCallIncomingBackdrop').classList.remove('open');
   _edPendingIncomingCall = null;
+  ZitlasCallUI.setActive('Connecting…');
   _edCallSession = ZitlasCall.answerCall({
     db: ZitlasDB, chatId: callInfo.chatId, callId: callInfo.callId,
-    myUid: _currentExpert ? _currentExpert.id : '', offer: callInfo.offer,
-    onRemoteStream: function(stream) {
-      var audioEl = document.getElementById('edCallRemoteAudio');
-      if (audioEl) audioEl.srcObject = stream;
-    },
-    onStateChange: function(state) {
+    myUid: (typeof ZitlasAuth !== 'undefined' && ZitlasAuth.currentUser) ? ZitlasAuth.currentUser.uid : (_currentExpert ? _currentExpert.id : ''),
+    offer: callInfo.offer,
+    onLocalStream:  function(stream) { ZitlasCallUI.setLocalStream(stream); },
+    onRemoteStream: function(stream) { ZitlasCallUI.setRemoteStream(stream); },
+    onStateChange:  function(state) {
       console.log('[CALL] state', state);
-      if (state === 'ended' || state === 'failed') _edEndCallUI();
+      if      (state === 'connecting')   ZitlasCallUI.setStatus('Connecting…');
+      else if (state === 'connected')    ZitlasCallUI.setConnected();
+      else if (state === 'disconnected') ZitlasCallUI.setStatus('Reconnecting…');
+      else if (state === 'ended' || state === 'failed' || state === 'closed') {
+        ZitlasCallUI.close({ message: state === 'failed' ? 'Could not connect' : 'Call ended' });
+        _edEndCallUI();
+      }
     },
+  });
+  /* Wire the End button for the now-active call */
+  ZitlasCallUI.setHangup(function() {
+    if (_edCallSession) _edCallSession.hangup();
+    ZitlasCallUI.close({ message: 'Call ended' });
+    _edEndCallUI();
   });
   var callBtn = document.getElementById('edChatCallBtn');
   if (callBtn) { callBtn.classList.add('zc-call-btn--calling'); callBtn.setAttribute('aria-label', 'End call'); }
-  var title = document.getElementById('edCallActiveTitle');
-  var sub   = document.getElementById('edCallActiveSub');
-  if (title) title.textContent = 'On Call';
-  if (sub)   sub.textContent   = 'Connected';
-  var backdrop = document.getElementById('edCallActiveBackdrop');
-  if (backdrop) backdrop.classList.add('open');
 }
 
 function _edEndCallUI() {
   _edCallSession = null;
   var callBtn = document.getElementById('edChatCallBtn');
   if (callBtn) { callBtn.classList.remove('zc-call-btn--calling'); callBtn.setAttribute('aria-label', 'Voice call'); }
-  var backdrop = document.getElementById('edCallActiveBackdrop');
-  if (backdrop) backdrop.classList.remove('open');
-  var audioEl = document.getElementById('edCallRemoteAudio');
-  if (audioEl) audioEl.srcObject = null;
 }
 
 /* ══════════════════════════════════════════════
@@ -1881,9 +1908,11 @@ function initExpertChatOverlay() {
   var edCallBtn = document.getElementById('edChatCallBtn');
   if (edCallBtn) {
     edCallBtn.addEventListener('click', function() {
+      console.log('[CALL] button clicked');
       if (_edCallSession) {
         console.log('[CALL] Expert ended call for', _edChatConversationId);
         _edCallSession.hangup();
+        ZitlasCallUI.close({ message: 'Call ended' });
         _edEndCallUI();
       } else {
         if (!_edChatConversationId || typeof ZitlasDB === 'undefined' || typeof ZitlasCall === 'undefined') return;
@@ -1895,31 +1924,8 @@ function initExpertChatOverlay() {
     });
   }
 
-  var edCallHangupBtn = document.getElementById('edCallHangupBtn');
-  if (edCallHangupBtn) {
-    edCallHangupBtn.addEventListener('click', function() {
-      if (_edCallSession) _edCallSession.hangup();
-      _edEndCallUI();
-    });
-  }
-
-  var edCallAcceptBtn  = document.getElementById('edCallAcceptBtn');
-  var edCallDeclineBtn = document.getElementById('edCallDeclineBtn');
-  if (edCallAcceptBtn) {
-    edCallAcceptBtn.addEventListener('click', function() {
-      if (!_edPendingIncomingCall) return;
-      _edAcceptIncomingCall(_edPendingIncomingCall);
-    });
-  }
-  if (edCallDeclineBtn) {
-    edCallDeclineBtn.addEventListener('click', function() {
-      if (_edPendingIncomingCall && typeof ZitlasDB !== 'undefined') {
-        ZitlasCall.declineCall({ db: ZitlasDB, chatId: _edPendingIncomingCall.chatId, callId: _edPendingIncomingCall.callId });
-      }
-      _edPendingIncomingCall = null;
-      document.getElementById('edCallIncomingBackdrop').classList.remove('open');
-    });
-  }
+  /* Accept/Decline/Hangup are owned by ZitlasCallUI (assets/js/call-ui.js);
+     callbacks are wired in startExpertIncomingCallListener / _edStartOutgoingCall. */
 
   /* Send */
   function expertSend() {
