@@ -222,6 +222,26 @@
     return (mealName || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '_');
   }
 
+  /* Expert review save flow has two producers (expert-dashboard.js's editor,
+     which is array-based, and modify-diet.js, which used to save an object
+     keyed by meal name). Normalize to array here so the athlete-side accept
+     flow works for both current data and any review saved before the
+     modify-diet.js fix. */
+  function _mealsToArray(meals) {
+    if (Array.isArray(meals)) return meals;
+    if (meals && typeof meals === 'object') return Object.values(meals);
+    return [];
+  }
+
+  function _findMealByKey(meals, mealKey) {
+    var arr = _mealsToArray(meals);
+    for (var i = 0; i < arr.length; i++) {
+      var m = arr[i];
+      if ((m._mealKey || _mealKey(m.meal_name || m.name)) === mealKey) return m;
+    }
+    return null;
+  }
+
   function isNewDietSchema(obj) {
     return !!(obj && obj.originalDietPlan && obj.currentDietPlan);
   }
@@ -1976,16 +1996,23 @@
        - Creates entries for meals missed by mealChangeHistory (history empty or key mismatch)
        - Fixes entries where newFoods arrived empty from history (reviewedDietPlan is authoritative for foods) */
     if (review.reviewedDietPlan) {
-      var _revDays  = review.reviewedDietPlan.days || [];
+      var reviewedPlan = review.reviewedDietPlan;
+      console.log('[REVIEWED PLAN]', reviewedPlan);
+      var _revDays  = reviewedPlan.days || [];
       var _origDays = _originalPlan ? (_originalPlan.days || []) : [];
       _revDays.forEach(function (revDay, dayIdx) {
-        (revDay.meals || []).forEach(function (revMeal, mealIdx) {
+        console.log('[DAY]', revDay);
+        console.log('[MEALS]', revDay.meals);
+        console.log('[TYPE]', typeof revDay.meals);
+        console.log('[IS ARRAY]', Array.isArray(revDay.meals));
+        var _revMealsArr = _mealsToArray(revDay.meals);
+        _revMealsArr.forEach(function (revMeal) {
           if (!revMeal._edited) return;
           var _mealName = revMeal.meal_name || revMeal.name || '';
           var _dk       = String(dayIdx);
-          var _mk       = _mealKey(_mealName);
+          var _mk       = revMeal._mealKey || _mealKey(_mealName);
           var _origDay  = _origDays[dayIdx];
-          var _origMeal = _origDay ? (_origDay.meals || [])[mealIdx] : null;
+          var _origMeal = _origDay ? _findMealByKey(_origDay.meals, _mk) : null;
           if (!_mods[_dk]) _mods[_dk] = {};
           if (!_mods[_dk][_mk]) {
             /* Entry not built from history — create it from _edited flag */
@@ -2268,14 +2295,14 @@
     if (pOrig) {
       var origDay = origDays[_dcActiveDay];
       pOrig.innerHTML = origDay
-        ? buildDcDayHTML(origDay.meals || [], null, false)
+        ? buildDcDayHTML(_mealsToArray(origDay.meals), null, false)
         : '<p class="dc-no-data">No data for this day.</p>';
     }
     if (pRev) {
       var revDay   = reviewedDays[_dcActiveDay];
       var origDay2 = origDays[_dcActiveDay];
       pRev.innerHTML = revDay
-        ? buildDcDayHTML(revDay.meals || [], origDay2 ? origDay2.meals : null, true)
+        ? buildDcDayHTML(_mealsToArray(revDay.meals), origDay2 ? _mealsToArray(origDay2.meals) : null, true)
         : '<p class="dc-no-data">No expert changes for this day.</p>';
     }
   }

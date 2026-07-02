@@ -1350,6 +1350,25 @@
     return (name || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '_');
   }
 
+  /* See diet.js's _mealsToArray — days[].meals is canonically an array,
+     but reviews saved by modify-diet.js before its schema fix stored an
+     object keyed by meal name. Normalize defensively so this listener
+     (which runs automatically on every Firestore snapshot) never throws. */
+  function _cpMealsToArray(meals) {
+    if (Array.isArray(meals)) return meals;
+    if (meals && typeof meals === 'object') return Object.values(meals);
+    return [];
+  }
+
+  function _cpFindMealByKey(meals, mealKey) {
+    var arr = _cpMealsToArray(meals);
+    for (var i = 0; i < arr.length; i++) {
+      var m = arr[i];
+      if ((m._mealKey || _cpMealKey(m.meal_name || m.name)) === mealKey) return m;
+    }
+    return null;
+  }
+
   function isNewDietSchema(obj) {
     return !!(obj && obj.originalDietPlan && obj.currentDietPlan);
   }
@@ -1395,16 +1414,23 @@
        Creates entries for meals missed by mealChangeHistory, and fixes empty newFoods
        from history entries (reviewedDietPlan is authoritative for what the expert changed). */
     if (review.reviewedDietPlan) {
-      var _revDays  = review.reviewedDietPlan.days || [];
+      var reviewedPlan = review.reviewedDietPlan;
+      console.log('[REVIEWED PLAN]', reviewedPlan);
+      var _revDays  = reviewedPlan.days || [];
       var _origDays = _originalPlan ? (_originalPlan.days || []) : [];
       _revDays.forEach(function (revDay, dayIdx) {
-        (revDay.meals || []).forEach(function (revMeal, mealIdx) {
+        console.log('[DAY]', revDay);
+        console.log('[MEALS]', revDay.meals);
+        console.log('[TYPE]', typeof revDay.meals);
+        console.log('[IS ARRAY]', Array.isArray(revDay.meals));
+        var _revMealsArr = _cpMealsToArray(revDay.meals);
+        _revMealsArr.forEach(function (revMeal) {
           if (!revMeal._edited) return;
           var _mealName = revMeal.meal_name || revMeal.name || '';
           var _dk       = String(dayIdx);
-          var _mk       = _cpMealKey(_mealName);
+          var _mk       = revMeal._mealKey || _cpMealKey(_mealName);
           var _origDay  = _origDays[dayIdx];
-          var _origMeal = _origDay ? (_origDay.meals || [])[mealIdx] : null;
+          var _origMeal = _origDay ? _cpFindMealByKey(_origDay.meals, _mk) : null;
           if (!_mods[_dk]) _mods[_dk] = {};
           if (!_mods[_dk][_mk]) {
             /* Entry not built from history — create from _edited flag */

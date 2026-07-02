@@ -58,6 +58,12 @@
     return key.replace(/_/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
   }
 
+  /* Mirrors diet.js's _mealKey() exactly — must produce identical keys so
+     the athlete-side accept flow can match meals by key. */
+  function _mealKeyOf(name) {
+    return (name || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '_');
+  }
+
   function showToast(msg) {
     var t = document.getElementById('mpToast');
     if (!t) return;
@@ -69,8 +75,19 @@
   /* ── Render ── */
 
   function getMealsFromDay(day) {
-    /* diet plan days have meals either as day.meals.breakfast or day.breakfast etc. */
+    /* Canonical schema (AI plan + expert-dashboard.js editor) stores
+       days[].meals as an ARRAY of meal objects, not an object keyed by
+       meal name. Normalize to a keyed object here for internal
+       rendering/diffing regardless of which shape the source data is in —
+       older reviews saved before this fix may still be object-shaped. */
     var meals = day.meals || day;
+    if (Array.isArray(meals)) {
+      var keyed = {};
+      meals.forEach(function (m) {
+        keyed[m._mealKey || _mealKeyOf(m.meal_name || m.name)] = m;
+      });
+      return keyed;
+    }
     return meals;
   }
 
@@ -177,12 +194,20 @@
         meals[mealKey] = Object.assign({}, origMeal, {
           meal_name: mealName,
           foods:     foods,
+          _mealKey:  mealKey,
           _edited:   edited ? true : undefined,
         });
         if (!edited) delete meals[mealKey]._edited;
       });
 
-      days.push(Object.assign({}, origDay, { day: dayLabel, meals: meals }));
+      /* Canonical schema: days[].meals is an ARRAY (matches the AI-generated
+         plan and expert-dashboard.js's editor) — not an object keyed by
+         meal name. This is what the athlete-side acceptExpertPlan() and
+         _buildDietStorageFromReview() expect; saving an object here was
+         the root cause of the "(revDay.meals || []).forEach is not a
+         function" crash on accept. */
+      var mealsArray = Object.keys(meals).map(function (k) { return meals[k]; });
+      days.push(Object.assign({}, origDay, { day: dayLabel, meals: mealsArray }));
     });
     return { days: days };
   }
@@ -192,25 +217,24 @@
   function buildHistory(editedPlan, expertName) {
     var history = [];
     editedPlan.days.forEach(function (newDay, di) {
-      var origDay   = origDays[di] || {};
-      var origMeals = getMealsFromDay(origDay);
-      var newMeals  = newDay.meals || {};
+      var origDay     = origDays[di] || {};
+      var origMeals   = getMealsFromDay(origDay);
+      var newMealsArr = Array.isArray(newDay.meals) ? newDay.meals : [];
 
-      Object.keys(newMeals).forEach(function (mealKey) {
-        var newMeal = newMeals[mealKey];
+      newMealsArr.forEach(function (newMeal) {
+        if (!newMeal._edited) return;
+        var mealKey  = newMeal._mealKey || _mealKeyOf(newMeal.meal_name);
         var origMeal = origMeals[mealKey] || {};
-        if (newMeal._edited) {
-          history.push({
-            dayIndex:   di,
-            dayName:    newDay.day || ('Day ' + (di + 1)),
-            mealKey:    mealKey,
-            mealName:   newMeal.meal_name || mealKeyName(mealKey),
-            modifiedBy: expertName || 'Expert',
-            modifiedAt: new Date().toISOString(),
-            oldMeal:    origMeal,
-            newMeal:    newMeal,
-          });
-        }
+        history.push({
+          dayIndex:   di,
+          dayName:    newDay.day || ('Day ' + (di + 1)),
+          mealKey:    mealKey,
+          mealName:   newMeal.meal_name || mealKeyName(mealKey),
+          modifiedBy: expertName || 'Expert',
+          modifiedAt: new Date().toISOString(),
+          oldMeal:    origMeal,
+          newMeal:    newMeal,
+        });
       });
     });
     return history;
