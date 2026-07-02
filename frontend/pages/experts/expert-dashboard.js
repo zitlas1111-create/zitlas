@@ -866,10 +866,12 @@ function listenForReviews(expert) {
           return tb > ta ? 1 : tb < ta ? -1 : 0;
         });
       const pendingReviews = requests.filter(function(r) { return r.status === 'pending'; });
-      console.log('firebase uid', ZitlasAuth && ZitlasAuth.currentUser ? ZitlasAuth.currentUser.uid : 'none');
-      try { console.log('profile id', JSON.parse(localStorage.getItem('zitlas_expert_profile') || 'null')?.id); } catch(_) {}
-      console.log('reviews in firestore', requests);
-      console.log('filtered reviews', getPlanReviews(queryId));
+      console.log('[REVIEWS] current expert uid', queryId);
+      console.log('[REVIEWS] snapshot loaded', requests.length);
+      requests.forEach(function(r) {
+        console.log('[REVIEWS] review document', r);
+        console.log('[REVIEWS] expertId in review', r.expertId);
+      });
       console.log('[ZITLAS] Firestore snapshot — loaded reviews:', requests.length, '| pending:', pendingReviews.length);
 
       /* Sync Firestore reviews into expert_plan_reviews (cache).
@@ -1850,6 +1852,78 @@ let _epPhotoDataUrl        = undefined; /* undefined = no change; null = remove;
 let _epIsOnline            = true;
 let _epEditListenersAdded  = false;
 
+/* ── Identity cache sync: experts/{uid} → localStorage ──
+   Runs on every dashboard load. Firestore fields always win; locally
+   edited fields that haven't synced yet survive only for the same uid.
+   A cache belonging to a different uid is cleared outright. */
+function syncExpertIdentityCaches(uid, expertData) {
+  var cachedUid = (localStorage.getItem('zitlas_expert_id') || '').trim();
+  var cache = null;
+  try { cache = JSON.parse(localStorage.getItem('zitlas_expert_profile') || 'null'); } catch (_) {}
+  console.log('[EXPERT CACHE]', cache);
+
+  var cacheUidMismatch =
+    (cachedUid && cachedUid !== uid) ||
+    (cache && cache.id && cache.id !== uid) ||
+    (cache && cache.uid && cache.uid !== uid);
+  if (cacheUidMismatch) {
+    console.log('[ZITLAS] stale expert cache (uid mismatch) — clearing', { cachedUid: cachedUid, authUid: uid });
+    ['zitlas_expert_profile', 'zitlas_experts', 'zitlas_expert_id'].forEach(function (k) { localStorage.removeItem(k); });
+    cache = null;
+  }
+
+  localStorage.setItem('zitlas_expert_id', uid);
+
+  /* Map experts/{uid} → canonical zitlas_expert_profile schema */
+  var base = (cache && typeof cache === 'object') ? cache : {};
+  var prof = Object.assign({
+    name: '', initials: 'EX', specialization: '', title: '', bio: '', quote: '',
+    sessions: '0', clients: '0', successRate: '0%', experience: '0+',
+    reviewFee: 0, sessionDuration: 20, status: 'online', profilePhoto: null,
+    colorAccent: 'var(--primary)', rating: '5.0', reviewCount: 0,
+  }, base, { id: uid });
+  delete prof.uid; delete prof.email; delete prof.role; /* strip login.js legacy-schema keys */
+
+  if (expertData) {
+    if (expertData.name)                  prof.name            = expertData.name;
+    var _spec = expertData.specialization || expertData.speciality;
+    if (_spec)                            prof.specialization  = _spec;
+    if (expertData.title)                 prof.title           = expertData.title;
+    if (expertData.bio)                   prof.bio             = expertData.bio;
+    if (expertData.quote)                 prof.quote           = expertData.quote;
+    if (expertData.sessions)              prof.sessions        = expertData.sessions;
+    if (expertData.clients)               prof.clients         = expertData.clients;
+    if (expertData.successRate)           prof.successRate     = expertData.successRate;
+    if (expertData.experience)            prof.experience      = expertData.experience;
+    if (expertData.fee !== undefined)     prof.reviewFee       = expertData.fee;
+    if (expertData.sessionDuration)       prof.sessionDuration = expertData.sessionDuration;
+    if (expertData.status)                prof.status          = expertData.status;
+    var _photo = expertData.profilePhoto || expertData.photo;
+    if (_photo)                           prof.profilePhoto    = _photo;
+    if (expertData.rating)                prof.rating          = String(expertData.rating);
+    if (expertData.reviews !== undefined) prof.reviewCount     = expertData.reviews;
+  }
+  if (prof.name) {
+    prof.initials = prof.name.split(/\s+/).map(function (p) { return p[0] || ''; }).slice(0, 2).join('').toUpperCase() || 'EX';
+  }
+  try { localStorage.setItem('zitlas_expert_profile', JSON.stringify(prof)); } catch (_) {}
+
+  /* zitlas_experts — overwrite this device's marketplace cache with fresh data */
+  try {
+    localStorage.setItem('zitlas_experts', JSON.stringify([{
+      id:             uid,
+      name:           prof.name || 'Expert',
+      email:          (expertData && expertData.email) || '',
+      role:           'expert',
+      approved:       !!(expertData && expertData.approved),
+      rating:         (expertData && expertData.rating) || 0,
+      specialization: prof.specialization || '',
+    }]));
+  } catch (_) {}
+
+  return prof;
+}
+
 function loadProfile(baseExpert) {
   /* Prefer the canonical ZitlasExpertProfile helper (loaded from expert-profile.js) */
   if (window.ZitlasExpertProfile) {
@@ -2014,7 +2088,36 @@ function saveProfile() {
 
   if (window.ZitlasExpertProfile) {
     ZitlasExpertProfile.save(canonicalUpdates); /* also dispatches expertProfileUpdated */
-  } else {
+  }
+
+  /* Mirror edits to experts/{uid} — the single source of truth — so the
+     coaches marketplace and cprofile render the same identity */
+  if (typeof ZitlasDB !== 'undefined' && typeof ZitlasAuth !== 'undefined' && ZitlasAuth.currentUser) {
+    const _fsProfile = {
+      name:            nameVal,
+      specialization:  _epGetVal('epFieldRole')     || '',
+      title:           _epGetVal('epFieldTitle')    || '',
+      bio:             _epGetVal('epFieldAbout')    || '',
+      quote:           _epGetVal('epFieldQuote')    || '',
+      experience:      _epGetVal('epFieldYears')    || '',
+      sessions:        _epGetVal('epFieldSessions') || '',
+      clients:         _epGetVal('epFieldClients')  || '',
+      successRate:     successVal                   || '',
+      fee:             feeRaw !== '' ? Math.round(Number(feeRaw)) : (expert.fee || 0),
+      sessionDuration: durationNum,
+      status:          _epIsOnline ? 'online' : 'offline',
+      updatedAt:       new Date().toISOString(),
+    };
+    /* Firestore doc cap is 1MB — skip oversized base64 photos */
+    if (photoVal === null) _fsProfile.profilePhoto = '';
+    else if (typeof photoVal === 'string' && photoVal.length < 900000) _fsProfile.profilePhoto = photoVal;
+    ZitlasDB.collection('experts').doc(ZitlasAuth.currentUser.uid)
+      .set(_fsProfile, { merge: true })
+      .then(function () { console.log('[ZITLAS] experts/{uid} profile synced'); })
+      .catch(function (e) { console.warn('[ZITLAS] experts/{uid} profile sync failed:', e); });
+  }
+
+  if (!window.ZitlasExpertProfile) {
     /* Fallback: old schema */
     try {
       localStorage.setItem('zitlas_expert_profile', JSON.stringify({
@@ -2469,17 +2572,16 @@ function _deaClearLocalStorage(uid) {
 function getPlanReviews(expertId) {
   try {
     var all = JSON.parse(localStorage.getItem('expert_plan_reviews') || '[]');
-    console.log('[getPlanReviews] expertId', expertId);
-    if (all.length) {
-      console.log('[getPlanReviews] review', all[0]);
-      console.log('[getPlanReviews] review.expertId',  all[0].expertId);
-      console.log('[getPlanReviews] review.expert_id', all[0].expert_id);
-      console.log('[getPlanReviews] review.expertUid', all[0].expertUid);
-    }
-    return all.filter(function(r) {
+    console.log('[REVIEWS] current expert uid', expertId);
+    /* UID-only exact match. Legacy field names (expert_id/expertUid) are
+       read for old cached docs, but a review with NO expertId never
+       matches — anything else leaks reviews across experts. */
+    var filteredReviews = all.filter(function(r) {
       var rid = r.expertId || r.expert_id || r.expertUid || '';
-      return !rid || rid === expertId;
+      return rid === expertId;
     });
+    console.log('[REVIEWS] filtered reviews', filteredReviews);
+    return filteredReviews;
   } catch (_) { return []; }
 }
 
@@ -4134,7 +4236,10 @@ function _initInboxTabs(expert) {
 
       /* Firebase user exists — verify role in Firestore */
       try {
-        const doc = await ZitlasDB.collection('users').doc(firebaseUser.uid).get();
+        const uid = firebaseUser.uid;
+        console.log('[AUTH UID]', uid);
+
+        const doc = await ZitlasDB.collection('users').doc(uid).get();
 
         if (!doc.exists) {
           /* Auth user but no Firestore doc (e.g. deleted) */
@@ -4143,6 +4248,7 @@ function _initInboxTabs(expert) {
         }
 
         const data = doc.data();
+        console.log('[USER DOC]', data);
 
         const _roles       = Array.isArray(data.roles) ? data.roles : [];
         const _expertStatus = data.expert_status || '';
@@ -4159,20 +4265,56 @@ function _initInboxTabs(expert) {
           return;
         }
 
-        /* Sync localStorage for rest-of-app compatibility */
-        localStorage.setItem('zitlas_token',     'firebase_' + firebaseUser.uid);
+        /* ── IDENTITY: experts/{uid} is the single source of truth.
+           users/{uid} is only consulted for the role check above. ── */
+        let expertData = null;
+        try {
+          const eDoc = await ZitlasDB.collection('experts').doc(uid).get();
+          expertData = eDoc.exists ? eDoc.data() : null;
+        } catch (eFetchErr) {
+          console.warn('[ZITLAS] experts/{uid} fetch failed:', eFetchErr);
+        }
+        console.log('[EXPERT DOC]', expertData);
+
+        /* Heal accounts that predate the experts collection */
+        if (!expertData) {
+          expertData = {
+            uid:      uid,
+            email:    firebaseUser.email || data.email || '',
+            name:     data.name || firebaseUser.displayName || 'Expert',
+            role:     'expert',
+            speciality: '',
+            photo:    data.photo || firebaseUser.photoURL || '',
+            verified: false, approved: false, rating: 0, reviews: 0,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+          };
+          try { await ZitlasDB.collection('experts').doc(uid).set(expertData, { merge: true }); } catch (_) {}
+        }
+
+        /* Overwrite localStorage caches with fresh Firestore truth;
+           clears any stale cache left behind by a different uid */
+        syncExpertIdentityCaches(uid, expertData);
+
+        /* Sync localStorage for rest-of-app compatibility.
+           Name comes from experts/{uid} — never displayName/users doc. */
+        localStorage.setItem('zitlas_token',     'firebase_' + uid);
         localStorage.setItem('zitlas_user_role', 'expert');
         localStorage.setItem('zitlas_firebase_user', JSON.stringify({
-          uid:   firebaseUser.uid,
-          name:  firebaseUser.displayName || data.name,
+          uid:   uid,
+          name:  expertData.name || firebaseUser.displayName || data.name,
           email: firebaseUser.email,
-          photo: firebaseUser.photoURL    || data.photo_url || null,
+          photo: expertData.profilePhoto || expertData.photo || firebaseUser.photoURL || null,
           role:  'expert',
         }));
 
-        /* Build expert profile from Firebase user */
+        /* Build expert profile from Firebase user, then let experts/{uid} win */
         const expert = buildExpertFromFirebase(firebaseUser, data);
-        if (firebaseUser.photoURL) expert.photo = firebaseUser.photoURL;
+        if (expertData.name) {
+          expert.name      = expertData.name;
+          expert.firstName = expertData.name.split(/\s+/)[0] || expert.firstName;
+          expert.initials  = expertData.name.split(/\s+/).map(function (p) { return p[0] || ''; }).slice(0, 2).join('').toUpperCase() || expert.initials;
+        }
+        if (expertData.profilePhoto || expertData.photo) expert.photo = expertData.profilePhoto || expertData.photo;
 
         renderAll(expert);
 

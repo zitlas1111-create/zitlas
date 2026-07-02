@@ -533,7 +533,8 @@ if (skipBtn) {
 
 function _clearAuthLocalStorage() {
   ['zitlas_user','zitlas_user_role','zitlas_expert_profile','zitlas_expert_id',
-   'zitlas_firebase_user','zitlas_token','loggedIn','currentUser','user'
+   'zitlas_firebase_user','zitlas_token','loggedIn','currentUser','user',
+   'zitlas_experts'
   ].forEach(function(k) { localStorage.removeItem(k); });
   console.log('[LOCAL STORAGE CLEARED]');
 }
@@ -573,11 +574,12 @@ function syncFirebaseUser(user, role) {
 
   if (role === 'expert') {
     localStorage.setItem('zitlas_expert_id', user.uid);
+    /* Transient seed only — expert-dashboard init overwrites this with
+       fresh experts/{uid} Firestore data on load. `id` must be present
+       so downstream uid-match guards work. */
     localStorage.setItem('zitlas_expert_profile', JSON.stringify({
-      uid:   user.uid,
-      email: user.email          || '',
+      id:    user.uid,
       name:  user.displayName    || '',
-      role:  'expert',
     }));
     _addToExpertsStorage(user.uid, user.email || '', user.displayName || '');
   }
@@ -610,11 +612,12 @@ function syncEmailUser(user, name, role) {
 
   if (role === 'expert') {
     localStorage.setItem('zitlas_expert_id', user.uid);
+    /* Transient seed only — expert-dashboard init overwrites this with
+       fresh experts/{uid} Firestore data on load. `id` must be present
+       so downstream uid-match guards work. */
     localStorage.setItem('zitlas_expert_profile', JSON.stringify({
-      uid:   user.uid,
-      email: user.email || '',
+      id:    user.uid,
       name:  userName,
-      role:  'expert',
     }));
     _addToExpertsStorage(user.uid, user.email || '', userName);
   }

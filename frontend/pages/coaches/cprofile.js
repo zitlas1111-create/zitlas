@@ -1876,6 +1876,10 @@
   };
 
   function _getMyUserId() {
+    /* Live Firebase session is authoritative — cached uid can be stale */
+    if (typeof ZitlasAuth !== 'undefined' && ZitlasAuth.currentUser) {
+      return ZitlasAuth.currentUser.uid;
+    }
     var uid = null;
     try {
       var fbUser = JSON.parse(localStorage.getItem('zitlas_firebase_user') || 'null');
@@ -2119,7 +2123,8 @@
 
     if (submitBtn) {
       submitBtn.addEventListener('click', function() {
-        console.log('SEND REVIEW CLICKED', { type: _selectedType });
+        console.log('[VERIFY] button clicked');
+        console.log('[VERIFY] selected expert', { id: coach.id, name: coach.name });
         if (!_selectedType) return;
 
         var ctx = buildContextPackage();
@@ -2192,7 +2197,7 @@
           completedAt: null,
         };
 
-        console.log('[REVIEW REQUEST]', review);
+        console.log('[VERIFY] payload', review);
 
         /* Only remove currently-pending requests to avoid duplicates.
            Completed/rejected reviews are kept as permanent history. */
@@ -2211,11 +2216,13 @@
           var firestoreReview = Object.assign({}, review, {
             serverTimestamp: firebase.firestore.FieldValue.serverTimestamp(),
           });
-          console.log('[REVIEW] created', review);
           console.log('[FIRESTORE] Writing review_requests/' + review.id);
           ZitlasDB.collection('review_requests').doc(review.id).set(firestoreReview)
-            .then(function() { console.log('[FIRESTORE] review_requests write OK', review.id); })
-            .catch(function(e) { console.error('[FIRESTORE] review_requests write FAILED', e); });
+            .then(function() { console.log('[VERIFY] review document created', review.id); })
+            .catch(function(e) {
+              console.error('[FIRESTORE] review_requests write FAILED', e);
+              showToast('Could not send review request — please check your connection and try again.');
+            });
         } else {
           console.warn('[FIRESTORE] ZitlasDB not available — review saved to localStorage only');
         }
@@ -3036,8 +3043,10 @@
 
     ZitlasDB.collection('experts').doc(expertId).get().then(function(doc) {
       if (!doc.exists) {
-        var _local = _findLocalExpert(expertId);
-        if (_local) { _initWithCoach(_local, params); return; }
+        /* Expert definitively does not exist in Firestore — do NOT fall
+           back to the local zitlas_experts cache. A review sent to a
+           nonexistent uid is a black hole (no dashboard ever queries it). */
+        console.warn('[EXPERT PROFILE] experts/' + expertId + ' not found — stale link or deleted expert');
         showToast('Expert profile not found.');
         setTimeout(function() { window.location.href = 'coaches.html'; }, 1800);
         return;

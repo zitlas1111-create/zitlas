@@ -232,7 +232,10 @@ function loadExpertsFromFirebase() {
           lang:       Array.isArray(d.languages)    ? d.languages   : ['EN'],
         });
       });
-      _mergeLocalExperts();
+      /* Firestore is the single source of truth for the expert list.
+         The zitlas_experts localStorage cache is only merged when
+         Firestore is unreachable — merging it here resurrects stale or
+         deleted experts, and reviews sent to them are never received. */
       _loadingExperts = false;
       updateList();
     })
