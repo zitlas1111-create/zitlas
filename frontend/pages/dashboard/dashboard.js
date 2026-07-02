@@ -187,34 +187,47 @@
     localStorage.removeItem(GOAL_KEY);
   }
 
+  /* Removes EVERYTHING tied to the user's generated fitness profile so the
+     app behaves like a brand-new user after Reset Goal. Deliberately keeps:
+     identity/session (zitlas_user, zitlas_token, zitlas_firebase_user, …),
+     chat history (zitlas_chats), wallet, theme, and streak — those belong
+     to the account, not to the goal being reset. */
+  function clearAllGoalData() {
+    const keys = [
+      /* Core survey + goal data */
+      GOAL_KEY, SURVEY_KEY, SURVEY_PROG, ROADMAP_KEY, RECOMMEND_KEY,
+      /* Brain 1 (Mental) */
+      'mental_scores', 'mental_swot', 'mental_recommendations', 'mental_assessment',
+      /* Brain 2 (Physical) */
+      'physical_scores', 'physical_swot', 'physical_recommendations', 'physical_bottleneck', 'physical_assessment',
+      /* Lifestyle & Brain 3 (Nutrition) */
+      'lifestyle_data', 'nutrition_scores', 'nutrition_swot', 'nutrition_recommendations',
+      'nutrition_bottleneck', 'nutrition_assessment', 'nutrition_weekly_plan',
+      /* User profile + SWOT */
+      'athlete_profile', 'athlete_summary', 'overall_score', 'athlete_tier', 'development_priority', 'zitlas_swot',
+      /* Fitness snapshot (BMI/TDEE/calorie/protein targets) + assessment —
+         written by ai-coach.js saveToLocalStorage() on plan generation */
+      'zitlas_calculations', 'zitlas_assessment',
+      /* Generated plans + metadata (incl. legacy plan-source fallback keys
+         still read by cprofile.js) */
+      'zitlas_diet_plan', 'zitlas_workout_plan', 'zitlas_current_diet',
+      'zitlas_generated_diet', 'zitlas_meal_plan', 'zitlas_meal_swap_history',
+      'zitlas_sources', 'zitlas_plan_generated_at', 'zitlas_plan_id',
+      /* Expert review cycle — tied to the plan being discarded (same list
+         ai-coach.js clears when a new plan is generated) */
+      'zitlas_expert_review', 'zitlas_plan_versions', 'zitlas_review_request',
+      'expert_plan_reviews', 'expert_review', 'expert_diet_override', 'reviewed_diet_plan',
+      'modifiedBy', 'expertApproval', 'review_request',
+      'expertDiet', 'expertOverride', 'dietOverride', 'reviewStatus',
+      'expertReviewedPlan', 'approvedPlan', 'expertWorkoutOverride',
+    ];
+    keys.forEach(k => localStorage.removeItem(k));
+    console.log('[GOAL] clearAllGoalData — cleared', keys.length, 'keys; remaining zitlas_* keys:',
+      Object.keys(localStorage).filter(k => k.startsWith('zitlas_')));
+  }
+
   function clearAllSurveyData() {
-    /* Core survey + goal data */
-    [GOAL_KEY, SURVEY_KEY, SURVEY_PROG, ROADMAP_KEY, RECOMMEND_KEY].forEach(k => localStorage.removeItem(k));
-    /* Brain 1 (Mental) */
-    ['mental_scores', 'mental_swot', 'mental_recommendations', 'mental_assessment'].forEach(k => localStorage.removeItem(k));
-    /* Brain 2 (Physical) */
-    ['physical_scores', 'physical_swot', 'physical_recommendations', 'physical_bottleneck', 'physical_assessment'].forEach(k => localStorage.removeItem(k));
-    /* Lifestyle & Brain 3 (Nutrition) */
-    ['lifestyle_data', 'nutrition_scores', 'nutrition_swot', 'nutrition_recommendations', 'nutrition_bottleneck', 'nutrition_assessment', 'nutrition_weekly_plan'].forEach(k => localStorage.removeItem(k));
-    /* User profile + SWOT */
-    ['athlete_profile', 'athlete_summary', 'overall_score', 'athlete_tier', 'development_priority', 'zitlas_swot'].forEach(k => localStorage.removeItem(k));
-    /* Assessment/fitness-snapshot data (BMI, TDEE, calorie + protein targets) and the
-       generated diet/workout plans + their metadata — all scoped to the goal being
-       reset. These are the exact keys ai-coach.js's saveToLocalStorage() writes when
-       a plan is generated (dashboard/ai-coach/ai-coach.js:2029-2058); Reset Goal must
-       clear the same set or stale BMI/calories/plans survive alongside a "no goal set"
-       dashboard state. */
-    ['zitlas_calculations', 'zitlas_assessment', 'zitlas_diet_plan', 'zitlas_workout_plan',
-     'zitlas_sources', 'zitlas_plan_generated_at', 'zitlas_plan_id',
-    ].forEach(k => localStorage.removeItem(k));
-    /* Expert review cycle is tied to the plan/goal it was submitted against — same
-       list ai-coach.js already clears when a new plan is generated (ai-coach.js:2086-2091). */
-    ['zitlas_expert_review', 'zitlas_plan_versions', 'zitlas_review_request',
-     'expert_plan_reviews', 'expert_review', 'expert_diet_override', 'reviewed_diet_plan',
-     'modifiedBy', 'expertApproval', 'review_request',
-     'expertDiet', 'expertOverride', 'dietOverride', 'reviewStatus',
-     'expertReviewedPlan', 'approvedPlan', 'expertWorkoutOverride',
-    ].forEach(k => localStorage.removeItem(k));
+    clearAllGoalData();
   }
 
   function calcDaysLeft(endDateStr) {

@@ -165,6 +165,13 @@
         snap.docChanges().forEach(function (change) {
           if (change.type === 'added') {
             var data = change.doc.data();
+            /* Ignore stale ringing docs (caller closed the browser without
+               hanging up) — only ring for offers created in the last 60s. */
+            var createdMs = (data.createdAt && data.createdAt.toMillis) ? data.createdAt.toMillis() : null;
+            if (createdMs && (Date.now() - createdMs) > 60000) {
+              console.log('[CALL] ignoring stale ringing call', change.doc.id);
+              return;
+            }
             console.log('[CALL] incoming call', data);
             if (opts.onIncomingCall) {
               opts.onIncomingCall({

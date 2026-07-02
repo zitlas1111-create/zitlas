@@ -163,12 +163,20 @@ function _edSyncChatMessageToFirestore(chatId, currentUid, otherUid, payload) {
   console.log('[CHAT] payload', payload);
   console.log('[CHAT] before firestore write');
   var participants = [currentUid, otherUid].filter(Boolean);
+  var conv = chatGetConversation(chatId) || {};
   ZitlasDB.collection('chat_rooms').doc(chatId).set({
-    participants: participants,
-    updatedAt:    firebase.firestore.FieldValue.serverTimestamp(),
+    participants:  participants,
+    athleteId:     conv.athleteId   || otherUid || '',
+    athleteName:   conv.athleteName || 'Athlete',
+    expertId:      conv.expertId    || currentUid || '',
+    expertName:    conv.expertName  || (_currentExpert ? _currentExpert.name : 'Expert'),
+    lastMessage:   payload.text || '',
+    lastMessageAt: payload.timestamp || new Date().toISOString(),
+    updatedAt:     firebase.firestore.FieldValue.serverTimestamp(),
   }, { merge: true })
     .then(function() {
-      return ZitlasDB.collection('chat_rooms').doc(chatId).collection('messages').add(payload);
+      /* doc(payload.id) not add() — idempotent re-sync, no duplicates */
+      return ZitlasDB.collection('chat_rooms').doc(chatId).collection('messages').doc(payload.id).set(payload);
     })
     .then(function() { console.log('[CHAT] firestore write success'); })
     .catch(function(err) { console.error('[CHAT] firestore write failed', err); });
@@ -1163,12 +1171,12 @@ function renderExpertChatMessages(msgWrap, conversationId) {
    it in sync so a message sent from the athlete's device appears here
    without a refresh.
    ══════════════════════════════════════════════ */
-var _edChatMsgListenerConvId = null;
+var _edChatMsgListeners = {};  /* conversationId → true once a listener is attached */
 
 function startExpertChatMessagesListener(conversationId) {
   if (typeof ZitlasDB === 'undefined' || !conversationId) return;
-  if (_edChatMsgListenerConvId === conversationId) return; /* already listening */
-  _edChatMsgListenerConvId = conversationId;
+  if (_edChatMsgListeners[conversationId]) return; /* already listening */
+  _edChatMsgListeners[conversationId] = true;
 
   ZitlasDB.collection('chat_rooms').doc(conversationId).collection('messages')
     .orderBy('timestamp')
@@ -1178,7 +1186,22 @@ function startExpertChatMessagesListener(conversationId) {
 
       var all  = chatLoadAll();
       var conv = all[conversationId];
-      if (!conv) return; /* conversation not initialized locally yet */
+      if (!conv) {
+        /* Conversation was started on the athlete's device — it has never
+           existed in this browser's localStorage. Seed it so messages have
+           somewhere to land; metadata is refined by listenForChatRooms. */
+        conv = all[conversationId] = {
+          conversationId: conversationId,
+          athleteId:      '',
+          athleteName:    'Athlete',
+          expertId:       (typeof ZitlasAuth !== 'undefined' && ZitlasAuth.currentUser) ? ZitlasAuth.currentUser.uid : '',
+          expertName:     _currentExpert ? _currentExpert.name : 'Expert',
+          messages:       [],
+          lastMessage:    '',
+          lastMessageAt:  null,
+          unreadByExpert: 0,
+        };
+      }
 
       var localMsgs = conv.messages || [];
       var localIds  = {};
@@ -1198,12 +1221,15 @@ function startExpertChatMessagesListener(conversationId) {
       conv.messages = localMsgs;
       var last = localMsgs[localMsgs.length - 1];
       if (last) {
-        conv.lastMessage   = last.text || '';
+        conv.lastMessage   = last.type === 'review_packet' ? '📋 Plan review packet' : (last.text || '');
         conv.lastMessageAt = last.timestamp;
       }
       chatSaveAll(all);
 
-      /* Re-render only if this conversation's chat is currently open */
+      /* Keep the Client Chats inbox previews live */
+      renderChatsFromList([]);
+
+      /* Re-render the thread only if this conversation's chat is currently open */
       var overlay = document.getElementById('edChatOverlay');
       var msgWrap = document.getElementById('edChatMessages');
       if (overlay && overlay.classList.contains('open') && _edChatConversationId === conversationId && msgWrap) {
@@ -1216,22 +1242,99 @@ function startExpertChatMessagesListener(conversationId) {
 }
 
 /* ══════════════════════════════════════════════
+   CHAT ROOM DISCOVERY — the fix for the empty Client Chats inbox.
+
+   A conversation started on the athlete's device exists only in THAT
+   browser's localStorage; this expert device has no local record of it,
+   so renderChatsFromList (which reads localStorage) rendered nothing and
+   no message/call listener was ever attached. This listener queries
+   chat_rooms by participant uid, seeds each room into localStorage, and
+   attaches the per-room message + incoming-call listeners — making
+   Firestore the source of truth for which conversations exist.
+   ══════════════════════════════════════════════ */
+function listenForChatRooms(expert) {
+  if (typeof ZitlasDB === 'undefined') return;
+  var uid = (typeof ZitlasAuth !== 'undefined' && ZitlasAuth.currentUser)
+    ? ZitlasAuth.currentUser.uid
+    : (expert && expert.id);
+  if (!uid) return;
+  if (listenForChatRooms._attachedFor === uid) return; /* one listener per session */
+  listenForChatRooms._attachedFor = uid;
+
+  console.log('[CHAT] listening for chat_rooms where participants contains', uid);
+  ZitlasDB.collection('chat_rooms')
+    .where('participants', 'array-contains', uid)
+    .onSnapshot(function(snap) {
+      console.log('[CHAT] chat_rooms snapshot —', snap.size, 'room(s)');
+      var all = chatLoadAll();
+      var changed = false;
+
+      snap.docs.forEach(function(doc) {
+        var room   = doc.data();
+        var chatId = doc.id;
+        /* athleteId from room metadata; legacy rooms without it → parse
+           from the chat_<athleteId>_<expertId> id shape */
+        var athleteId = room.athleteId ||
+          chatId.replace(/^chat_/, '').replace(new RegExp('_' + uid + '$'), '');
+
+        if (!all[chatId]) {
+          all[chatId] = {
+            conversationId: chatId,
+            athleteId:      athleteId,
+            athleteName:    room.athleteName || 'Athlete',
+            expertId:       uid,
+            expertName:     room.expertName || (expert && expert.name) || 'Expert',
+            messages:       [],
+            lastMessage:    room.lastMessage   || '',
+            lastMessageAt:  room.lastMessageAt || null,
+            unreadByExpert: 0,
+          };
+          changed = true;
+          console.log('[CHAT] discovered new conversation', chatId, 'athlete:', all[chatId].athleteName);
+        } else {
+          /* Refresh metadata from Firestore truth */
+          if (room.athleteName && all[chatId].athleteName !== room.athleteName) { all[chatId].athleteName = room.athleteName; changed = true; }
+          if (!all[chatId].athleteId && athleteId) { all[chatId].athleteId = athleteId; changed = true; }
+          if (all[chatId].expertId !== uid) { all[chatId].expertId = uid; changed = true; }
+        }
+
+        /* Live message + incoming-call listeners for every discovered room —
+           NOT just the one currently open. This is what makes cross-device
+           delivery and the incoming-call popup work without the expert
+           having to already be inside the right chat. */
+        startExpertChatMessagesListener(chatId);
+        startExpertIncomingCallListener(chatId, all[chatId].athleteId, all[chatId].athleteName);
+      });
+
+      if (changed) chatSaveAll(all);
+      renderChatsFromList([]);
+    }, function(err) {
+      console.error('[CHAT] chat_rooms listener error', err);
+    });
+}
+
+/* ══════════════════════════════════════════════
    VOICE CALL (WebRTC via assets/js/webrtc-call.js)
    Scoped to whichever chat conversation is currently open — same
    limitation as the athlete side: the expert must have this specific
    chat open to receive a call from that athlete.
    ══════════════════════════════════════════════ */
-var _edCallSession               = null;
-var _edPendingIncomingCall       = null;
-var _edIncomingCallListenerConvId = null;
+var _edCallSession           = null;
+var _edPendingIncomingCall   = null;
+var _edIncomingCallListeners = {};  /* conversationId → true once attached */
 
 function startExpertIncomingCallListener(conversationId, athleteId, athleteName) {
-  if (typeof ZitlasDB === 'undefined' || typeof ZitlasCall === 'undefined' || !conversationId || !athleteId) return;
-  if (_edIncomingCallListenerConvId === conversationId) return; /* already listening */
-  _edIncomingCallListenerConvId = conversationId;
+  if (typeof ZitlasDB === 'undefined' || typeof ZitlasCall === 'undefined' || !conversationId) return;
+  if (_edIncomingCallListeners[conversationId]) return; /* already listening */
+  _edIncomingCallListeners[conversationId] = true;
+  console.log('[CALL] listening for incoming calls on', conversationId);
+
+  var myUid = (typeof ZitlasAuth !== 'undefined' && ZitlasAuth.currentUser)
+    ? ZitlasAuth.currentUser.uid
+    : (_currentExpert ? _currentExpert.id : '');
 
   ZitlasCall.listenForIncomingCalls({
-    db: ZitlasDB, chatId: conversationId, myUid: _currentExpert ? _currentExpert.id : '',
+    db: ZitlasDB, chatId: conversationId, myUid: myUid,
     onIncomingCall: function(callInfo) {
       if (_edCallSession || _edPendingIncomingCall) return; /* already on a call */
       _edPendingIncomingCall = callInfo;
@@ -4383,6 +4486,8 @@ function renderAll(baseExpert) {
   renderInbox(expert);
   /* Live reviews + chats + stats (Firestore or localStorage fallback) */
   listenForReviews(expert);
+  /* Discover chat conversations from Firestore (cross-device inbox + calls) */
+  listenForChatRooms(expert);
   /* Auto-open chat when returning from a modify page after completing review */
   _prCheckPendingChatOpen(expert);
 

@@ -399,6 +399,25 @@
     Object.keys(keys).forEach((k) => {
       try { ctx[k] = JSON.parse(localStorage.getItem(keys[k]) || 'null'); } catch(_) {}
     });
+
+    /* zitlas_diet_plan / zitlas_workout_plan are stored in the expert-
+       modification wrapper schema ({originalDietPlan, currentDietPlan, ...}).
+       Every chat/review card renderer (athlete AND expert side) expects the
+       flat plan with .days / .weekly_plan — attaching the wrapper is why
+       experts saw "Diet Plan Attached" with no actual meals inside. */
+    if (ctx.diet_plan && (ctx.diet_plan.currentDietPlan || ctx.diet_plan.originalDietPlan)) {
+      ctx.diet_plan = ctx.diet_plan.currentDietPlan || ctx.diet_plan.originalDietPlan;
+    }
+    if (ctx.workout_plan && (ctx.workout_plan.currentWorkoutPlan || ctx.workout_plan.originalWorkoutPlan)) {
+      ctx.workout_plan = ctx.workout_plan.currentWorkoutPlan || ctx.workout_plan.originalWorkoutPlan;
+    }
+    console.log('[ATTACHMENT] context package', {
+      assessment:   !!ctx.assessment,
+      calculations: !!ctx.calculations,
+      swot:         !!ctx.swot,
+      diet_days:    ctx.diet_plan && ctx.diet_plan.days ? ctx.diet_plan.days.length : 0,
+      workout_days: ctx.workout_plan ? ((ctx.workout_plan.weekly_plan || ctx.workout_plan.days || []).length) : 0,
+    });
     return ctx;
   }
 
@@ -1051,7 +1070,12 @@
 
   /* Mirrors every chat message into Firestore so the other participant's
      device (a different browser/localStorage) actually receives it.
-     localStorage above remains this device's read cache — untouched. */
+     localStorage above remains this device's read cache — untouched.
+
+     The room doc carries participant metadata (athleteId/Name, expertId/Name,
+     lastMessage) — that is what the expert dashboard's chat_rooms discovery
+     listener uses to build its Client Chats inbox on a device where the
+     conversation never existed in localStorage. */
   function _cpSyncChatMessageToFirestore(chatId, currentUid, otherUid, payload) {
     if (typeof ZitlasDB === 'undefined') {
       console.warn('[CHAT] ZitlasDB unavailable — message saved to localStorage only');
@@ -1063,12 +1087,22 @@
     console.log('[CHAT] payload', payload);
     console.log('[CHAT] before firestore write');
     var participants = [currentUid, otherUid].filter(Boolean);
-    ZitlasDB.collection('chat_rooms').doc(chatId).set({
-      participants: participants,
-      updatedAt:    firebase.firestore.FieldValue.serverTimestamp(),
-    }, { merge: true })
+    var conv = loadConversation(chatId) || {};
+    var roomDoc = {
+      participants:  participants,
+      athleteId:     conv.athleteId   || currentUid,
+      athleteName:   conv.athleteName || getAthleteName(),
+      expertId:      conv.expertId    || otherUid,
+      expertName:    conv.expertName  || (_currentChatCoach ? _currentChatCoach.name : 'Expert'),
+      lastMessage:   payload.type === 'review_packet' ? '📋 Plan review packet' : (payload.text || ''),
+      lastMessageAt: payload.timestamp || new Date().toISOString(),
+      updatedAt:     firebase.firestore.FieldValue.serverTimestamp(),
+    };
+    ZitlasDB.collection('chat_rooms').doc(chatId).set(roomDoc, { merge: true })
       .then(function() {
-        return ZitlasDB.collection('chat_rooms').doc(chatId).collection('messages').add(payload);
+        /* doc(payload.id) not add() — idempotent, so re-syncing the same
+           message (e.g. review packet re-shared) never creates duplicates */
+        return ZitlasDB.collection('chat_rooms').doc(chatId).collection('messages').doc(payload.id).set(payload);
       })
       .then(function() { console.log('[CHAT] firestore write success'); })
       .catch(function(err) { console.error('[CHAT] firestore write failed', err); });
@@ -1157,8 +1191,16 @@
           };
 
           const chatConvId = ensureConversation(coach.id, coach.name);
-          const packet = persistReviewPacket(chatConvId, chatPacketRequest);
+          let packet = persistReviewPacket(chatConvId, chatPacketRequest);
+          if (!packet) {
+            /* A packet already exists locally — it may predate Firestore
+               chat sync and never have left this device. Re-sync it; the
+               doc(id).set() write is idempotent so this can't duplicate. */
+            const conv = loadConversation(chatConvId);
+            packet = ((conv && conv.messages) || []).find(function(m) { return m.type === 'review_packet'; }) || null;
+          }
           if (packet) {
+            console.log('[ATTACHMENT] syncing review packet to Firestore', packet.id);
             _cpSyncChatMessageToFirestore(chatConvId, getAthleteId(), coach.id, packet);
           }
         }
@@ -1549,7 +1591,11 @@
 
         /* Inject the review packet as msg[0] of the conversation so both sides share it */
         var reviewConvId = ensureConversation(coach.id, coach.name);
-        persistReviewPacket(reviewConvId, request);
+        var _reviewPacket = persistReviewPacket(reviewConvId, request);
+        if (_reviewPacket) {
+          console.log('[ATTACHMENT] syncing review packet to Firestore', _reviewPacket.id);
+          _cpSyncChatMessageToFirestore(reviewConvId, getAthleteId(), coach.id, _reviewPacket);
+        }
 
         /* Also persist to Firestore for real-time cross-device sync */
         if (typeof ZitlasDB !== 'undefined') {
