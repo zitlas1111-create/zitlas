@@ -133,6 +133,7 @@ function chatSaveExpertReply(conversationId, expert, text, imageUrl) {
   conv.lastMessageAt = msg.timestamp;
   chatSaveAll(all);
   console.log('Message Sent', msg);
+  _edSyncChatMessageToFirestore(conversationId, expert.id, conv.athleteId, msg);
   return msg;
 }
 
@@ -145,6 +146,32 @@ function chatAppendMessage(conversationId, msg) {
   conv.lastMessage   = msg.text || '';
   conv.lastMessageAt = msg.timestamp || new Date().toISOString();
   chatSaveAll(all);
+  _edSyncChatMessageToFirestore(conversationId, conv.expertId, conv.athleteId, msg);
+}
+
+/* Mirrors every chat message into Firestore so the other participant's
+   device (a different browser/localStorage) actually receives it.
+   localStorage above remains this device's read cache — untouched. */
+function _edSyncChatMessageToFirestore(chatId, currentUid, otherUid, payload) {
+  if (typeof ZitlasDB === 'undefined') {
+    console.warn('[CHAT] ZitlasDB unavailable — message saved to localStorage only');
+    return;
+  }
+  console.log('[CHAT] current uid', currentUid);
+  console.log('[CHAT] other uid', otherUid);
+  console.log('[CHAT] chatId', chatId);
+  console.log('[CHAT] payload', payload);
+  console.log('[CHAT] before firestore write');
+  var participants = [currentUid, otherUid].filter(Boolean);
+  ZitlasDB.collection('chat_rooms').doc(chatId).set({
+    participants: participants,
+    updatedAt:    firebase.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true })
+    .then(function() {
+      return ZitlasDB.collection('chat_rooms').doc(chatId).collection('messages').add(payload);
+    })
+    .then(function() { console.log('[CHAT] firestore write success'); })
+    .catch(function(err) { console.error('[CHAT] firestore write failed', err); });
 }
 
 function chatClearUnread(conversationId) {

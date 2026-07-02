@@ -1027,12 +1027,14 @@
     };
     console.log("ATHLETE SAVING TO", conversationId);
     console.log("ATHLETE MESSAGE", msg);
+    var _otherUid = _currentChatCoach ? _currentChatCoach.id : null;
     try {
       var all = JSON.parse(localStorage.getItem('zitlas_chats') || '{}');
       if (!all[conversationId]) {
         console.warn("ATHLETE: conversation missing in localStorage for key", conversationId);
         return msg;
       }
+      _otherUid = all[conversationId].expertId || _otherUid;
       all[conversationId].messages.push(msg);
       all[conversationId].lastMessage    = text;
       all[conversationId].lastMessageAt  = msg.timestamp;
@@ -1042,7 +1044,33 @@
       localStorage.setItem('zitlas_chats', JSON.stringify(all));
     } catch(_) {}
     console.log('Message Sent', msg);
+    _cpSyncChatMessageToFirestore(conversationId, athleteId, _otherUid, msg);
     return msg;
+  }
+
+  /* Mirrors every chat message into Firestore so the other participant's
+     device (a different browser/localStorage) actually receives it.
+     localStorage above remains this device's read cache — untouched. */
+  function _cpSyncChatMessageToFirestore(chatId, currentUid, otherUid, payload) {
+    if (typeof ZitlasDB === 'undefined') {
+      console.warn('[CHAT] ZitlasDB unavailable — message saved to localStorage only');
+      return;
+    }
+    console.log('[CHAT] current uid', currentUid);
+    console.log('[CHAT] other uid', otherUid);
+    console.log('[CHAT] chatId', chatId);
+    console.log('[CHAT] payload', payload);
+    console.log('[CHAT] before firestore write');
+    var participants = [currentUid, otherUid].filter(Boolean);
+    ZitlasDB.collection('chat_rooms').doc(chatId).set({
+      participants: participants,
+      updatedAt:    firebase.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true })
+      .then(function() {
+        return ZitlasDB.collection('chat_rooms').doc(chatId).collection('messages').add(payload);
+      })
+      .then(function() { console.log('[CHAT] firestore write success'); })
+      .catch(function(err) { console.error('[CHAT] firestore write failed', err); });
   }
 
   /* ══════════════════════════════════════════
