@@ -890,6 +890,26 @@ a      { text-decoration: none; color: inherit; }
   color: #FF3B30;
 }
 
+.ed-delete-account-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 14px;
+  margin-top: 10px;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid transparent;
+  background: #FF3B30;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+  transition: background var(--transition), opacity var(--transition);
+}
+
+.ed-delete-account-btn:hover { background: #e0342b; }
+.ed-delete-account-btn:disabled { opacity: 0.55; pointer-events: none; }
+
 /* ══════════════════════════════════════════════
    EMPTY STATES
    ══════════════════════════════════════════════ */

@@ -2296,6 +2296,173 @@ function initLogout() {
 }
 
 /* ══════════════════════════════════════════════
+   PERMANENT ACCOUNT DELETION
+   ══════════════════════════════════════════════ */
+
+/* Reusable helper — batch-deletes every doc in `collectionName` where
+   `field` == `value`. Firestore caps a single batch at 500 writes, so
+   large result sets are chunked. Returns the number of docs deleted. */
+async function deleteCollectionWhere(collectionName, field, value) {
+  if (typeof ZitlasDB === 'undefined') return 0;
+  var snap = await ZitlasDB.collection(collectionName).where(field, '==', value).get();
+  if (snap.empty) return 0;
+  var docs = snap.docs;
+  for (var i = 0; i < docs.length; i += 450) {
+    var batch = ZitlasDB.batch();
+    docs.slice(i, i + 450).forEach(function (d) { batch.delete(d.ref); });
+    await batch.commit();
+  }
+  return docs.length;
+}
+
+var _deaInProgress = false;
+
+function initDeleteAccount() {
+  if (initDeleteAccount._wired) return;
+
+  var openBtn   = document.getElementById('edDeleteAccountBtn');
+  var backdrop1 = document.getElementById('edDeleteAccountBackdrop');
+  var cancel1   = document.getElementById('edDeleteAccountCancel');
+  var next1     = document.getElementById('edDeleteAccountNext');
+  var backdrop2 = document.getElementById('edDeleteAccountBackdrop2');
+  var cancel2   = document.getElementById('edDeleteAccountCancel2');
+  var confirm2  = document.getElementById('edDeleteAccountConfirm');
+  if (!openBtn || !backdrop1 || !backdrop2) return;
+  initDeleteAccount._wired = true;
+
+  openBtn.addEventListener('click', function () {
+    if (_deaInProgress) return;
+    backdrop1.classList.add('open');
+  });
+  cancel1.addEventListener('click', function () { backdrop1.classList.remove('open'); });
+  backdrop1.addEventListener('click', function (e) { if (e.target === backdrop1) backdrop1.classList.remove('open'); });
+
+  /* First confirmation → second confirmation */
+  next1.addEventListener('click', function () {
+    backdrop1.classList.remove('open');
+    backdrop2.classList.add('open');
+  });
+
+  cancel2.addEventListener('click', function () { backdrop2.classList.remove('open'); });
+  backdrop2.addEventListener('click', function (e) { if (e.target === backdrop2) backdrop2.classList.remove('open'); });
+
+  confirm2.addEventListener('click', function () {
+    if (_deaInProgress) return;
+    _deaDeleteAccountPermanently(backdrop2, confirm2, cancel2, openBtn);
+  });
+}
+
+async function _deaDeleteAccountPermanently(backdrop2, confirmBtn, cancelBtn, openBtn) {
+  var user = (typeof ZitlasAuth !== 'undefined') ? ZitlasAuth.currentUser : null;
+  if (!user) { edShowToast('Not signed in.'); return; }
+  var uid = user.uid;
+
+  _deaInProgress = true;
+  var origLabel = confirmBtn.textContent;
+  confirmBtn.textContent = 'Deleting account…';
+  confirmBtn.disabled = true;
+  cancelBtn.disabled = true;
+  openBtn.disabled = true;
+
+  console.log('[DELETE EXPERT] start', uid);
+
+  try {
+    /* Safety gate — verify Firestore truth (never the cached in-memory
+       profile) that this uid is really an expert account before touching
+       anything. Athletes never reach this page, but this is the real guard. */
+    var expertDoc = await ZitlasDB.collection('experts').doc(uid).get();
+    if (!expertDoc.exists || expertDoc.data().role !== 'expert') {
+      throw Object.assign(new Error('Not an expert account'), { code: 'zitlas/not-expert' });
+    }
+
+    console.log('[DELETE EXPERT] deleting reviews');
+    await deleteCollectionWhere('review_requests', 'expertId', uid);
+    await deleteCollectionWhere('expert_reviews', 'expertId', uid);
+
+    console.log('[DELETE EXPERT] deleting expert profile');
+    await ZitlasDB.collection('experts').doc(uid).delete();
+
+    /* users/{uid} is shared with the athlete side of the same account
+       (every expert signup also gets roles:['athlete', ...]) — strip the
+       expert role instead of deleting the whole doc so athlete data on
+       the same uid survives. Only a pure legacy expert-only doc (no
+       roles[] array, role === 'expert') is removed outright. */
+    var userRef  = ZitlasDB.collection('users').doc(uid);
+    var userSnap = await userRef.get();
+    if (userSnap.exists) {
+      var udata = userSnap.data() || {};
+      if (Array.isArray(udata.roles)) {
+        var roles = udata.roles.filter(function (r) { return r !== 'expert' && r !== 'expert_pending'; });
+        await userRef.update({ roles: roles, expert_status: 'none' });
+      } else if (udata.role === 'expert') {
+        await userRef.delete();
+      }
+    }
+
+    console.log('[DELETE EXPERT] deleting chats');
+    console.log('[DELETE EXPERT] deleting notifications');
+    /* No Firestore chats/notifications/availability/sessions/ratings
+       collections exist in this project's schema — chats live only in
+       the local zitlas_chats cache, cleared below. */
+
+    console.log('[DELETE EXPERT] deleting auth account');
+    await user.delete();
+
+    _deaClearLocalStorage(uid);
+
+    console.log('[DELETE EXPERT] success');
+    backdrop2.classList.remove('open');
+    edShowToast('Your expert account has been permanently deleted.');
+    setTimeout(function () { window.location.href = '../login/login.html'; }, 1200);
+  } catch (err) {
+    console.error('[DELETE EXPERT]', err);
+    if (err && err.code === 'auth/requires-recent-login') {
+      backdrop2.classList.remove('open');
+      alert('For security reasons, please log in again before deleting your account.');
+      try { await ZitlasAuth.signOut(); } catch (_) {}
+      window.location.href = '../login/login.html';
+      return;
+    }
+    edShowToast('Failed to delete account. Please try again.');
+    confirmBtn.textContent = origLabel;
+    confirmBtn.disabled = false;
+    cancelBtn.disabled = false;
+    openBtn.disabled = false;
+    _deaInProgress = false;
+  }
+}
+
+function _deaClearLocalStorage(uid) {
+  try {
+    var chats = JSON.parse(localStorage.getItem('zitlas_chats') || '{}');
+    if (chats && typeof chats === 'object') {
+      delete chats[uid];
+      localStorage.setItem('zitlas_chats', JSON.stringify(chats));
+    }
+  } catch (_) {}
+
+  try {
+    var reviews  = JSON.parse(localStorage.getItem('expert_plan_reviews') || '[]');
+    var filtered = reviews.filter(function (r) { return r.expertId !== uid; });
+    localStorage.setItem('expert_plan_reviews', JSON.stringify(filtered));
+  } catch (_) {}
+
+  ['zitlas_token', 'zitlas_user', 'user', 'zitlas_user_role', 'zitlas_expert_id',
+   'zitlas_firebase_user', 'loggedIn', 'zitlas_expert_profile', 'currentUser',
+   'zitlas_expert_applied', 'zitlas_experts'].forEach(function (k) { localStorage.removeItem(k); });
+
+  Object.keys(localStorage).forEach(function (k) {
+    if (k === 'expert_plan_reviews' || k === 'zitlas_chats') return; /* already handled above */
+    if (k.indexOf('expert_') === 0 || k.indexOf('zitlas_expert_') === 0) localStorage.removeItem(k);
+  });
+
+  try {
+    sessionStorage.removeItem('zitlas_guest');
+    sessionStorage.removeItem('zitlas_modify_expert');
+  } catch (_) {}
+}
+
+/* ══════════════════════════════════════════════
    PLAN REVIEWS (expert_plan_reviews)
    ══════════════════════════════════════════════ */
 
@@ -3891,7 +4058,9 @@ function renderAll(baseExpert) {
   initNavigation();
   initLogout();
   initEditProfile();
+  initDeleteAccount();
   initExpertChatOverlay();
+  initReviewTools(expert);
   _initInboxTabs(expert);
   renderInbox(expert);
   /* Live reviews + chats + stats (Firestore or localStorage fallback) */

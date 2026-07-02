@@ -206,6 +206,15 @@
           </svg>
           Logout
         </button>
+        <button class="ed-delete-account-btn" id="edDeleteAccountBtn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"/>
+            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+            <path d="M10 11v6"/><path d="M14 11v6"/>
+            <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/>
+          </svg>
+          Delete Account
+        </button>
       </div>
     </section>
 
@@ -474,6 +483,40 @@
         <button class="ep-btn-save" id="epModalSave" type="button">Save Changes</button>
       </div>
 
+    </div>
+  </div>
+
+  <!-- ════════════ DELETE ACCOUNT — STEP 1 (what will be removed) ════════════ -->
+  <div class="zc-confirm-backdrop" id="edDeleteAccountBackdrop">
+    <div class="zc-confirm-modal">
+      <p class="zc-confirm-title">⚠️ Delete Expert Account?</p>
+      <p class="zc-confirm-sub">
+        This action is permanent. Deleting your account will remove:
+        <br>• Expert profile
+        <br>• Reviews
+        <br>• Chats
+        <br>• Notifications
+        <br>• Availability
+        <br>• Ratings
+        <br>• All expert data
+        <br><br>This cannot be undone.
+      </p>
+      <div class="zc-confirm-actions">
+        <button class="zc-confirm-cancel" id="edDeleteAccountCancel">Cancel</button>
+        <button class="zc-confirm-ok" id="edDeleteAccountNext">Delete Permanently</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════ DELETE ACCOUNT — STEP 2 (final confirmation) ════════════ -->
+  <div class="zc-confirm-backdrop" id="edDeleteAccountBackdrop2">
+    <div class="zc-confirm-modal">
+      <p class="zc-confirm-title">Are you absolutely sure?</p>
+      <p class="zc-confirm-sub">This is your last chance to cancel. Your expert account and all associated data will be permanently deleted immediately.</p>
+      <div class="zc-confirm-actions">
+        <button class="zc-confirm-cancel" id="edDeleteAccountCancel2">Cancel</button>
+        <button class="zc-confirm-ok" id="edDeleteAccountConfirm">Yes, Delete Forever</button>
+      </div>
     </div>
   </div>
 
