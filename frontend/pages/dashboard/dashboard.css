@@ -66,6 +66,9 @@ html { font-size: 16px; -webkit-text-size-adjust: 100%; scroll-behavior: smooth;
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  /* homebg.png itself now comes from the shared .zitlas-premium-bg class
+     (assets/css/theme.css) applied on <body> — see that file for the image
+     rule. background-color here is just the fallback if the image fails. */
   background-color: var(--bg);
   color: var(--text);
   min-height: 100vh;
@@ -74,6 +77,23 @@ body {
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
   transition: background-color var(--transition), color var(--transition);
+}
+
+/* Floating glass cards over the photo background */
+.goal-card,
+.streak-card,
+.qs-card,
+.swot-widget-section {
+  background: rgba(255,255,255,0.88);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border-radius: 28px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.08);
+}
+
+/* Frosted sticky header so the photo scrolls beneath it */
+.dash-header {
+  background: rgba(244,247,237,0.85) !important;
 }
 
 button { font-family: inherit; cursor: pointer; border: none; background: none; outline: none; -webkit-tap-highlight-color: transparent; }

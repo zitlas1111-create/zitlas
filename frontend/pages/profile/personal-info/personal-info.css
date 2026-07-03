@@ -30,34 +30,12 @@
   --text-secondary: var(--text-secondary);
   --text-muted:     var(--text-muted);
 
-  --input-bg:  #0f0f0f;
+  --input-bg:  #FFFFFF;
   --icon-color: var(--text-secondary);
 
-  --shadow:      0 4px 24px rgba(var(--black-rgb),0.5);
-  --shadow-card: 0 2px 12px rgba(var(--black-rgb),0.4);
+  --shadow:      0 4px 24px rgba(var(--black-rgb),0.10);
+  --shadow-card: 0 2px 12px rgba(var(--black-rgb),0.08);
   --glow-focus:  0 0 0 3px rgba(var(--primary-rgb),0.15);
-}
-
-/* --- Light Theme --- */
-[data-theme="light"] {
-  --bg:            var(--text-primary);
-  --bg-secondary:  var(--text-primary);
-  --card:          var(--text-primary);
-  --card-hover:    #F8F8F8;
-  --border:        #E5E5E5;
-  --border-subtle: #EEEEEE;
-  --border-focus:  rgba(var(--primary-rgb),0.6);
-
-  --text-primary:   var(--bg-card);
-  --text-secondary: var(--text-muted);
-  --text-muted:     var(--text-muted);
-
-  --input-bg:   var(--text-primary);
-  --icon-color: var(--text-muted);
-
-  --shadow:      0 4px 24px rgba(var(--black-rgb),0.08);
-  --shadow-card: 0 2px 12px rgba(var(--black-rgb),0.06);
-  --glow-focus:  0 0 0 3px rgba(var(--primary-rgb),0.12);
 }
 
 /* --- Reset --- */
@@ -198,7 +176,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(var(--black-rgb),0.4);
+  box-shadow: 0 2px 8px rgba(var(--black-rgb),0.08);
   transition: transform var(--transition), background var(--transition);
 }
 .photo-edit-btn:hover { background: var(--accent-light); transform: scale(1.12); }

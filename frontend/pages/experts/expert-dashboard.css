@@ -57,7 +57,7 @@ a      { text-decoration: none; color: inherit; }
   align-items: center;
   justify-content: space-between;
   padding: 14px 16px;
-  background: rgba(10, 10, 10, 0.92);
+  background: rgba(255,255,255,0.92);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border);
@@ -1060,7 +1060,7 @@ a      { text-decoration: none; color: inherit; }
 .zc-overlay {
   position: fixed; inset: 0; z-index: 9999;
   display: none; flex-direction: column; overflow: hidden;
-  background: #060608;
+  background: var(--bg-primary);
 }
 .zc-overlay.open {
   display: flex;
@@ -1169,7 +1169,7 @@ a      { text-decoration: none; color: inherit; }
   flex: 1; overflow-y: auto; overflow-x: hidden;
   padding: 12px 14px 16px;
   display: flex; flex-direction: column; gap: 2px;
-  background: #060608;
+  background: var(--bg-primary);
   -webkit-overflow-scrolling: touch; scroll-behavior: smooth;
 }
 .zc-messages::-webkit-scrollbar { width: 3px; }
@@ -1290,7 +1290,7 @@ a      { text-decoration: none; color: inherit; }
   display: flex; align-items: flex-end; gap: 10px;
   padding: 12px 14px;
   padding-bottom: max(12px, env(safe-area-inset-bottom));
-  background: rgba(6,6,8,0.96);
+  background: rgba(255,255,255,0.94);
   border-top: 1px solid rgba(var(--white-rgb),0.06);
   backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
 }
@@ -1684,7 +1684,7 @@ a      { text-decoration: none; color: inherit; }
   opacity: 1;
 }
 .erc-modal-card {
-  background: #181818;
+  background: var(--bg-card-light);
   border: 1px solid var(--border);
   border-radius: 24px 24px 0 0;
   padding: 24px 20px 36px;
@@ -2216,7 +2216,7 @@ a      { text-decoration: none; color: inherit; }
   align-items: center;
   gap: 12px;
   padding: 13px 14px;
-  background: rgba(10,10,10,0.95);
+  background: rgba(255,255,255,0.94);
   border-bottom: 1px solid var(--border);
   backdrop-filter: blur(10px);
   flex-shrink: 0;

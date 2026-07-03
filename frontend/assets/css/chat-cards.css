@@ -49,12 +49,12 @@
 /* ── Avatar ── */
 .zc-av {
   width: 30px; height: 30px; border-radius: 50%;
-  background: linear-gradient(135deg, var(--bg-card-light), #282828);
-  border: 1.5px solid rgba(var(--white-rgb),0.1);
+  background: linear-gradient(135deg, #A9C46C, #6BA539);
+  border: 1.5px solid rgba(255,255,255,0.8);
   display: flex; align-items: center; justify-content: center;
-  font-size: 9px; font-weight: 800; color: rgba(var(--white-rgb),0.5);
+  font-size: 9px; font-weight: 800; color: #FFFFFF;
   flex-shrink: 0; align-self: flex-end;
-  box-shadow: 0 2px 8px rgba(var(--black-rgb),0.5);
+  box-shadow: 0 2px 8px rgba(30,41,59,0.15);
 }
 .zc-av-ghost { width: 30px; flex-shrink: 0; }
 
@@ -66,17 +66,18 @@
   font-size: 14px; line-height: 1.55;
   word-break: break-word; white-space: pre-wrap;
 }
+/* Incoming: soft leaf green. Outgoing: brand orange with white text
+   (literal #fff — --text-primary is ink on the light theme). */
 .zc-msg--in .zc-bbl {
-  background: rgba(var(--white-rgb),0.08);
-  border: 1px solid rgba(var(--white-rgb),0.12);
+  background: #EDF4DE;
+  border: 1px solid #DCE8C4;
   color: var(--text-primary);
-  box-shadow: 0 8px 24px rgba(var(--black-rgb),0.25), inset 0 1px 0 rgba(var(--white-rgb),0.1);
-  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 6px 18px rgba(30,41,59,0.06);
 }
 .zc-msg--out .zc-bbl {
-  background: linear-gradient(135deg, var(--primary) 0%, #E05500 100%);
-  color: var(--text-primary);
-  box-shadow: 0 4px 20px rgba(var(--primary-rgb),0.28), 0 2px 8px rgba(var(--black-rgb),0.3);
+  background: linear-gradient(135deg, var(--primary) 0%, #F57C00 100%);
+  color: #FFFFFF;
+  box-shadow: 0 6px 20px rgba(var(--primary-rgb),0.30);
 }
 .zc-msg--in.zc-msg--first    .zc-bbl { border-radius: 4px 22px 22px 22px; }
 .zc-msg--in.zc-msg--grouped  .zc-bbl { border-radius: 4px 22px 22px 4px; }
@@ -89,8 +90,8 @@
   position: absolute; bottom: 5px; right: 11px;
   font-size: 10px; font-weight: 500; white-space: nowrap; letter-spacing: 0.1px;
 }
-.zc-msg--in  .zc-bbl-ts { color: rgba(var(--white-rgb),0.45); }
-.zc-msg--out .zc-bbl-ts { color: rgba(var(--white-rgb),0.55); }
+.zc-msg--in  .zc-bbl-ts { color: rgba(30,41,59,0.45); }
+.zc-msg--out .zc-bbl-ts { color: rgba(255,255,255,0.85); }
 
 /* ── Typing indicator ── */
 .zc-typing {

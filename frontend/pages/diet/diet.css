@@ -2723,7 +2723,7 @@ img { display: block; max-width: 100%; }
 }
 
 .dc-card {
-  background: var(--card-bg, #1A1A2E);
+  background: var(--card-bg, #FFFFFF);
   border-radius: 22px 22px 0 0;
   width: 100%;
   max-width: 560px;

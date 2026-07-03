@@ -22,7 +22,7 @@
   --bg-secondary:  var(--bg-card);
   --card:          var(--bg-card);
   --card-hover:    var(--bg-card-light);
-  --card-active:   #1f1f1f;
+  --card-active:   var(--bg-card-light);
   --border:        var(--border);
   --border-subtle: var(--border);
 
@@ -31,40 +31,15 @@
   --text-muted:     var(--text-muted);
 
   --icon-color:  var(--text-secondary);
-  --shadow:      0 4px 24px rgba(var(--black-rgb),0.5);
-  --shadow-card: 0 2px 12px rgba(var(--black-rgb),0.4);
+  --shadow:      0 4px 24px rgba(var(--black-rgb),0.10);
+  --shadow-card: 0 2px 12px rgba(var(--black-rgb),0.08);
   --glow:        0 0 20px rgba(var(--primary-rgb),0.25);
 
-  --input-bg:     #0f0f0f;
+  --input-bg:     #FFFFFF;
   --input-border: var(--border);
   --input-focus:  var(--primary);
   --error-color:  #FF4D4D;
   --error-bg:     rgba(255, 77, 77, 0.08);
-}
-
-[data-theme="light"] {
-  --bg:            var(--text-primary);
-  --bg-secondary:  var(--text-primary);
-  --card:          var(--text-primary);
-  --card-hover:    #F8F8F8;
-  --card-active:   var(--text-primary);
-  --border:        #E5E5E5;
-  --border-subtle: #EEEEEE;
-
-  --text-primary:   var(--bg-card);
-  --text-secondary: var(--text-muted);
-  --text-muted:     var(--text-muted);
-
-  --icon-color:  var(--text-muted);
-  --shadow:      0 4px 24px rgba(var(--black-rgb),0.08);
-  --shadow-card: 0 2px 12px rgba(var(--black-rgb),0.06);
-  --glow:        0 0 20px rgba(var(--primary-rgb),0.18);
-
-  --input-bg:     var(--text-primary);
-  --input-border: #E0E0E0;
-  --input-focus:  var(--primary);
-  --error-color:  #D93025;
-  --error-bg:     rgba(217, 48, 37, 0.06);
 }
 
 /* --- Reset & Base --- */

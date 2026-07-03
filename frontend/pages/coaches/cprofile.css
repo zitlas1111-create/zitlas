@@ -66,7 +66,7 @@ img { display: block; max-width: 100%; }
   transition: background var(--transition), backdrop-filter var(--transition), box-shadow var(--transition);
 }
 .cp-header.scrolled {
-  background: rgba(10,10,10,.88);
+  background: rgba(255,255,255,0.90);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
   box-shadow: 0 1px 0 var(--border);
@@ -1062,7 +1062,7 @@ img { display: block; max-width: 100%; }
   position: fixed;
   bottom: 0; left: 0; right: 0;
   z-index: 850;
-  background: rgba(10,10,10,.95);
+  background: rgba(255,255,255,0.94);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
   border-top: 1px solid var(--border);

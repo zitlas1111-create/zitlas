@@ -12,8 +12,8 @@ html {
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-  background: #000;
-  color: #fff;
+  background: var(--bg-primary);
+  color: var(--text-primary);
   min-height: 100vh;
   min-height: 100dvh;
   padding-bottom: calc(90px + env(safe-area-inset-bottom, 0px));
@@ -56,19 +56,19 @@ button:focus-visible { outline: 2px solid #FF8C00; outline-offset: 2px; }
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: #111;
-  border: 1px solid #222;
-  color: #fff;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
   transition: background 0.18s, transform 0.18s;
 }
 
-.mb-back-btn:hover  { background: #1a1a1a; }
+.mb-back-btn:hover  { background: var(--bg-card-light); }
 .mb-back-btn:active { transform: scale(0.94); }
 
 .mb-header-title {
   font-size: 16px;
   font-weight: 800;
-  color: #fff;
+  color: var(--text-primary);
   letter-spacing: -0.2px;
 }
 
@@ -91,8 +91,8 @@ button:focus-visible { outline: 2px solid #FF8C00; outline-offset: 2px; }
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  background: #111;
-  border: 1px solid #222;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
   border-radius: 16px;
   padding: 14px 16px;
   margin-bottom: 20px;
@@ -122,7 +122,7 @@ button:focus-visible { outline: 2px solid #FF8C00; outline-offset: 2px; }
 .mb-cp-name {
   font-size: 18px;
   font-weight: 800;
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .mb-cp-status {
@@ -147,8 +147,8 @@ button:focus-visible { outline: 2px solid #FF8C00; outline-offset: 2px; }
 
 .mb-toggle {
   display: inline-flex;
-  background: #111;
-  border: 1px solid #222;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
   border-radius: 50px;
   padding: 4px;
   gap: 2px;
@@ -203,8 +203,8 @@ button:focus-visible { outline: 2px solid #FF8C00; outline-offset: 2px; }
 /* ── Base card ── */
 .mb-card {
   position: relative;
-  background: #111;
-  border: 1px solid #222;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
   border-radius: 20px;
   padding: 20px 20px 18px;
   overflow: hidden;
@@ -221,7 +221,7 @@ button:focus-visible { outline: 2px solid #FF8C00; outline-offset: 2px; }
 /* ── Premium card ── */
 .mb-card--premium {
   border-color: rgba(255,140,0,0.45);
-  background: linear-gradient(135deg, #111 0%, #1a1100 50%, #111 100%);
+  background: linear-gradient(135deg, #FFFFFF 0%, #FFF4DE 50%, #FFFFFF 100%);
   box-shadow: 0 0 0 1px rgba(255,140,0,0.12), 0 8px 40px rgba(255,140,0,0.10);
 }
 
@@ -270,7 +270,7 @@ button:focus-visible { outline: 2px solid #FF8C00; outline-offset: 2px; }
   flex-shrink: 0;
 }
 
-.mb-plan-icon-wrap--basic   { background: #1a1a1a; border: 1px solid #333; }
+.mb-plan-icon-wrap--basic   { background: var(--bg-card-light); border: 1px solid var(--border); }
 .mb-plan-icon-wrap--premium { background: rgba(255,140,0,0.12); border: 1px solid rgba(255,140,0,0.3); }
 
 .mb-plan-meta { flex: 1; min-width: 0; }
@@ -278,7 +278,7 @@ button:focus-visible { outline: 2px solid #FF8C00; outline-offset: 2px; }
 .mb-plan-name {
   font-size: 17px;
   font-weight: 800;
-  color: #fff;
+  color: var(--text-primary);
   margin-bottom: 3px;
 }
 
@@ -289,7 +289,7 @@ button:focus-visible { outline: 2px solid #FF8C00; outline-offset: 2px; }
 .mb-plan-price {
   font-size: 24px;
   font-weight: 900;
-  color: #fff;
+  color: var(--text-primary);
   letter-spacing: -0.5px;
 }
 
@@ -306,8 +306,8 @@ button:focus-visible { outline: 2px solid #FF8C00; outline-offset: 2px; }
   font-size: 11px;
   font-weight: 700;
   color: #9CA3AF;
-  background: #1a1a1a;
-  border: 1px solid #333;
+  background: var(--bg-card-light);
+  border: 1px solid var(--border);
   border-radius: 20px;
   padding: 4px 10px;
   flex-shrink: 0;
@@ -372,9 +372,9 @@ button:focus-visible { outline: 2px solid #FF8C00; outline-offset: 2px; }
 }
 
 .mb-action-btn--current {
-  background: #1a1a1a;
+  background: var(--bg-card-light);
   color: #6B7280;
-  border: 1px solid #333;
+  border: 1px solid var(--border);
   cursor: default;
 }
 
@@ -389,7 +389,7 @@ button:focus-visible { outline: 2px solid #FF8C00; outline-offset: 2px; }
 .mb-action-btn--upgrade:active { transform: scale(0.98); }
 
 .mb-action-btn--on-premium {
-  background: #1a1a1a;
+  background: var(--bg-card-light);
   color: #FF8C00;
   border: 1px solid rgba(255,140,0,0.3);
   cursor: default;
@@ -405,14 +405,14 @@ button:focus-visible { outline: 2px solid #FF8C00; outline-offset: 2px; }
 .mb-compare-title {
   font-size: 16px;
   font-weight: 800;
-  color: #fff;
+  color: var(--text-primary);
   margin-bottom: 12px;
 }
 
 .mb-table-scroll {
   overflow-x: auto;
   border-radius: 14px;
-  border: 1px solid #222;
+  border: 1px solid var(--border);
   -webkit-overflow-scrolling: touch;
 }
 
@@ -428,7 +428,7 @@ button:focus-visible { outline: 2px solid #FF8C00; outline-offset: 2px; }
   font-weight: 700;
   color: #9CA3AF;
   text-align: center;
-  background: #111;
+  background: var(--bg-card);
   border-bottom: 1px solid #222;
   letter-spacing: 0.3px;
   text-transform: uppercase;
@@ -447,7 +447,7 @@ button:focus-visible { outline: 2px solid #FF8C00; outline-offset: 2px; }
   color: #9CA3AF;
   text-align: center;
   border-bottom: 1px solid #1a1a1a;
-  background: #111;
+  background: var(--bg-card);
   vertical-align: middle;
 }
 
@@ -465,7 +465,7 @@ button:focus-visible { outline: 2px solid #FF8C00; outline-offset: 2px; }
 
 .mb-table tbody tr:last-child td { border-bottom: none; }
 
-.mb-table tbody tr:hover td { background: #141414; }
+.mb-table tbody tr:hover td { background: var(--bg-card-light); }
 
 /* =============================================
    FINE PRINT
@@ -487,9 +487,9 @@ button:focus-visible { outline: 2px solid #FF8C00; outline-offset: 2px; }
   bottom: calc(90px + env(safe-area-inset-bottom, 12px));
   left: 50%;
   transform: translateX(-50%) translateY(20px);
-  background: #1c1c1c;
-  color: #fff;
-  border: 1px solid #333;
+  background: var(--bg-card-light);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
   border-radius: 40px;
   padding: 10px 20px;
   font-size: 13px;

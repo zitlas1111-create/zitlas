@@ -1220,7 +1220,7 @@ body {
   -webkit-user-select: none;
   touch-action: none;
   border-radius: 16px;
-  background: #0d0d0d;
+  background: var(--bg-card-light);
   border: 1.5px solid var(--border);
 }
 .wheel-picker:focus {
@@ -1242,11 +1242,11 @@ body {
 }
 .wheel-fade-top {
   top: 0;
-  background: linear-gradient(to bottom, var(--bg-primary) 0%, rgba(10,10,10,0.88) 38%, transparent 100%);
+  background: linear-gradient(to bottom, var(--bg-primary) 0%, rgba(244,247,237,0.88) 38%, transparent 100%);
 }
 .wheel-fade-bottom {
   bottom: 0;
-  background: linear-gradient(to top, var(--bg-primary) 0%, rgba(10,10,10,0.88) 38%, transparent 100%);
+  background: linear-gradient(to top, var(--bg-primary) 0%, rgba(244,247,237,0.88) 38%, transparent 100%);
 }
 
 /* Selected-value highlight strip */

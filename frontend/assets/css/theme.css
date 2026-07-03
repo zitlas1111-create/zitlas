@@ -1,36 +1,53 @@
 /*
- * ZITLAS Official Brand Theme
+ * ZITLAS Official Brand Theme — Premium Fitness (single theme)
  * Global design tokens and utility classes for the fitness + AI coaching app.
+ *
+ * One theme only. Dark mode is removed: both data-theme values resolve to
+ * the same tokens below, so any legacy data-theme attribute is inert.
+ *
+ * Palette: soft olive ground, white floating cards, orange brand accent,
+ * leaf-green success. Psychology: fresh, calm, motivated, premium.
+ *
+ * NOTE on --white-rgb / --black-rgb: hundreds of legacy rules build glass
+ * surfaces as rgba(var(--white-rgb), 0.05-0.15) and text as
+ * rgba(var(--white-rgb), 0.3-0.6) — that only reads on a dark ground.
+ * On the light theme these tokens are deliberately remapped to slate ink
+ * so the same rules yield soft gray surfaces and readable secondary text.
+ * Use literal #fff when you truly mean white (e.g. text on orange).
  */
 
 :root,
 html,
 html[data-theme="dark"],
 html[data-theme="light"] {
-  --bg-primary: #000000;
-  --bg-card: #111111;
-  --bg-card-light: #171717;
+  --bg-primary: #F4F7ED;
+  --bg-card: #FFFFFF;
+  --bg-card-light: #F5F8EC;
 
-  --primary: #FF8C00;
-  --primary-hover: #FFA726;
-  --primary-dark: #E67E22;
-  --primary-rgb: 255,140,0;
+  --primary: #FF9800;
+  --primary-hover: #FB8C00;
+  --primary-dark: #EF6C00;
+  --primary-rgb: 255,152,0;
 
-  --success: #22C55E;
-  --success-dark: #16A34A;
-  --success-rgb: 34,197,94;
+  --success: #6BA539;
+  --success-dark: #578A2C;
+  --success-rgb: 107,165,57;
 
-  --ai-accent: #00C2FF;
-  --ai-rgb: 0,194,255;
+  --green-soft: #A9C46C;
+  --green-soft-rgb: 169,196,108;
 
-  --text-primary: #FFFFFF;
-  --text-secondary: #9CA3AF;
-  --text-muted: #6B7280;
-  --white-rgb: 255,255,255;
-  --black-rgb: 0,0,0;
+  --ai-accent: #0E9BB5;
+  --ai-rgb: 14,155,181;
 
-  --border: #222222;
-  --shadow: rgba(255,140,0,0.20);
+  --text-primary: #1E293B;
+  --text-secondary: #64748B;
+  --text-muted: #94A3B8;
+  /* Remapped for the light theme — see note above. */
+  --white-rgb: 30,41,59;
+  --black-rgb: 71,85,105;
+
+  --border: #E4EAD6;
+  --shadow: rgba(30,41,59,0.08);
 
   /* Compatibility aliases used by existing page styles. */
   --bg: var(--bg-primary);
@@ -49,14 +66,14 @@ html[data-theme="light"] {
   --accent-light: var(--primary-hover);
   --accent-hover: var(--primary-hover);
   --accent-dark: var(--primary-dark);
-  --accent-glow: rgba(255,140,0,0.20);
-  --accent-glow-s: rgba(255,140,0,0.10);
+  --accent-glow: rgba(255,152,0,0.18);
+  --accent-glow-s: rgba(255,152,0,0.10);
 
   --green: var(--success);
   --green-dark: var(--success-dark);
   --blue: var(--ai-accent);
   --cyan: var(--ai-accent);
-  --yellow: var(--primary-hover);
+  --yellow: #F0A82E;
 
   --text: var(--text-primary);
   --text-sec: var(--text-secondary);
@@ -65,16 +82,18 @@ html[data-theme="light"] {
   --text-3: var(--text-muted);
   --text-dim: var(--text-muted);
 
-  --radius: 22px;
-  --radius-md: 22px;
-  --radius-sm: 14px;
+  --radius: 24px;
+  --radius-md: 24px;
+  --radius-sm: 16px;
+  --radius-xs: 12px;
   --radius-lg: 28px;
-  --glow-focus: 0 0 0 3px rgba(255,140,0,0.18);
-  --button-shadow: 0 0 30px rgba(255,140,0,0.25);
+  --card-shadow: 0 10px 30px rgba(30,41,59,0.08);
+  --glow-focus: 0 0 0 3px rgba(255,152,0,0.20);
+  --button-shadow: 0 10px 26px rgba(255,152,0,0.28);
 }
 
 body {
-  background: var(--bg-primary);
+  background: linear-gradient(180deg, #F4F7ED 0%, #EEF3E3 100%) fixed;
   color: var(--text-primary);
 }
 
@@ -91,15 +110,35 @@ textarea:focus-visible {
 .text-primary { color: var(--primary) !important; }
 .text-ai { color: var(--ai-accent) !important; }
 
+/* ── Shared premium background (homebg.png) ──────────────────────────────
+   Applied to <body> on the 5 bottom-nav pages: dashboard, diet, weekly-plan,
+   coaches, profile. Path is relative to THIS file (assets/css/theme.css),
+   so it resolves correctly no matter which page/depth includes it — do not
+   copy this rule into a page-specific stylesheet with a different path.
+   A class selector (0,1,0) outranks the plain `body { background: var(--bg) }`
+   element selector (0,0,1) already in each page's own CSS, so this wins the
+   cascade regardless of load order without needing !important. */
+.zitlas-premium-bg {
+  background-image:
+    linear-gradient(rgba(244,247,237,0.78), rgba(244,247,237,0.88)),
+    url('../homebg.png');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  min-height: 100vh;
+}
+
 .bg-card {
   background: var(--bg-card) !important;
   border: 1px solid var(--border) !important;
-  border-radius: 22px !important;
+  border-radius: 24px !important;
+  box-shadow: var(--card-shadow) !important;
 }
 
 .btn-primary {
   background: var(--primary) !important;
-  color: var(--text-primary) !important;
+  color: #FFFFFF !important;
   border: 1px solid var(--primary) !important;
   box-shadow: var(--button-shadow) !important;
 }
@@ -110,22 +149,22 @@ textarea:focus-visible {
 }
 
 .badge-success {
-  background: rgba(34,197,94,0.12) !important;
-  color: var(--success) !important;
-  border: 1px solid rgba(34,197,94,0.28) !important;
+  background: rgba(107,165,57,0.12) !important;
+  color: var(--success-dark) !important;
+  border: 1px solid rgba(107,165,57,0.30) !important;
 }
 
 .badge-ai {
-  background: rgba(0,194,255,0.12) !important;
+  background: rgba(14,155,181,0.10) !important;
   color: var(--ai-accent) !important;
-  border: 1px solid rgba(0,194,255,0.28) !important;
+  border: 1px solid rgba(14,155,181,0.26) !important;
 }
 
 /* Common semantic hooks used across existing pages. */
 [class*="ai-badge"],
 [class*="badge--ai"],
 [class*="--ai"] {
-  --badge-bg: rgba(0,194,255,0.12);
+  --badge-bg: rgba(14,155,181,0.10);
   --badge-color: var(--ai-accent);
 }
 

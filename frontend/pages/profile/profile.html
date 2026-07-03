@@ -13,7 +13,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
   <script src="../../assets/js/firebase-config.js"></script>
 </head>
-<body>
+<body class="zitlas-premium-bg">
 
   <!-- TOP APP BAR -->
   <header class="app-bar">
@@ -92,15 +92,7 @@
             </span>
           </button>
 
-          <button class="settings-item" data-action="appearance" id="appearanceBtn">
-            <span class="settings-icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
-            </span>
-            <span class="settings-label" data-i18n="profile_appearance">Appearance</span>
-            <span class="settings-chevron">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-            </span>
-          </button>
+          <!-- Appearance/theme setting removed — ZITLAS uses one premium theme -->
 
           <button class="settings-item" data-action="language">
             <span class="settings-icon">
@@ -178,50 +170,8 @@
 
   </main>
 
-  <!-- APPEARANCE MODAL -->
-  <div class="modal-overlay" id="appearanceModal" role="dialog" aria-modal="true" aria-label="Appearance settings">
-    <div class="modal-card">
-      <div class="modal-header">
-        <h3 class="modal-title" data-i18n="appearance_title">Appearance</h3>
-        <button class="modal-close" id="modalClose" aria-label="Close">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
-      </div>
-      <p class="modal-subtitle" data-i18n="appearance_sub">Choose your preferred theme</p>
-      <div class="theme-options">
-        <button class="theme-option" data-theme="dark">
-          <div class="theme-preview theme-preview--dark">
-            <div class="tp-bar"></div>
-            <div class="tp-card"></div>
-          </div>
-          <span class="theme-option-label" data-i18n="theme_dark">Dark</span>
-          <span class="theme-check" id="check-dark">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-          </span>
-        </button>
-        <button class="theme-option" data-theme="light">
-          <div class="theme-preview theme-preview--light">
-            <div class="tp-bar"></div>
-            <div class="tp-card"></div>
-          </div>
-          <span class="theme-option-label" data-i18n="theme_light">Light</span>
-          <span class="theme-check" id="check-light">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-          </span>
-        </button>
-        <button class="theme-option" data-theme="system">
-          <div class="theme-preview theme-preview--system">
-            <div class="tp-bar"></div>
-            <div class="tp-card"></div>
-          </div>
-          <span class="theme-option-label" data-i18n="theme_system">System</span>
-          <span class="theme-check" id="check-system">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-          </span>
-        </button>
-      </div>
-    </div>
-  </div>
+  <!-- Appearance modal removed — ZITLAS uses one premium theme -->
+
 
   <!-- LANGUAGE MODAL -->
   <div class="modal-overlay" id="languageModal" role="dialog" aria-modal="true" aria-label="Language settings">

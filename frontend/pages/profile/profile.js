@@ -5,36 +5,15 @@
 (function () {
   'use strict';
 
-  /* ---- Theme Management ---- */
-  const THEME_KEY = 'zitlas_theme';
+  /* ---- Theme ----
+     ZITLAS uses ONE premium theme. Theme switching was removed; any stored
+     preference is cleared so legacy devices don't carry stale state. */
   const html = document.documentElement;
 
-  function getSystemTheme() {
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-  }
-
-  function applyTheme(preference) {
-    const resolved = preference === 'system' ? getSystemTheme() : preference;
-    html.setAttribute('data-theme', resolved);
-    updateThemeChecks(preference);
-  }
-
-  function saveTheme(preference) {
-    localStorage.setItem(THEME_KEY, preference);
-    applyTheme(preference);
-  }
-
   function loadTheme() {
-    const saved = localStorage.getItem(THEME_KEY) || 'dark';
-    applyTheme(saved);
-    return saved;
-  }
-
-  function updateThemeChecks(selected) {
-    ['dark', 'light', 'system'].forEach(t => {
-      const btn = document.querySelector(`.theme-option[data-theme="${t}"]`);
-      if (btn) btn.classList.toggle('selected', t === selected);
-    });
+    try { localStorage.removeItem('zitlas_theme'); } catch (_) {}
+    html.setAttribute('data-theme', 'dark'); /* attribute is inert — both values map to the single theme */
+    return 'dark';
   }
 
   /* ---- Modal Helpers ---- */
@@ -65,36 +44,8 @@
     toastTimer = setTimeout(() => toast.classList.remove('show'), duration);
   }
 
-  /* ---- Appearance Modal ---- */
-  function initAppearanceModal() {
-    const openBtn = document.getElementById('appearanceBtn');
-    const modal = document.getElementById('appearanceModal');
-    const closeBtn = document.getElementById('modalClose');
-    if (!openBtn || !modal || !closeBtn) return;
-
-    openBtn.addEventListener('click', () => {
-      updateThemeChecks(localStorage.getItem(THEME_KEY) || 'dark');
-      openModal(modal);
-    });
-
-    closeBtn.addEventListener('click', () => closeModal(modal));
-    modal.addEventListener('click', (e) => closeOnBackdrop(e, modal));
-    modal.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(modal); });
-
-    modal.querySelectorAll('.theme-option').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const chosen = btn.dataset.theme;
-        saveTheme(chosen);
-        const names = {
-          dark:   window.ZitlasLang ? ZitlasLang.t('theme_dark')   : 'Dark',
-          light:  window.ZitlasLang ? ZitlasLang.t('theme_light')  : 'Light',
-          system: window.ZitlasLang ? ZitlasLang.t('theme_system') : 'System',
-        };
-        showToast('Theme: ' + names[chosen]);
-        setTimeout(() => closeModal(modal), 420);
-      });
-    });
-  }
+  /* Appearance modal removed — ZITLAS uses one premium theme. */
+  function initAppearanceModal() {}
 
   /* ---- Language Modal ---- */
   function initLanguageModal() {
@@ -233,13 +184,8 @@
     });
   }
 
-  /* ---- System theme watcher ---- */
-  function initSystemThemeWatcher() {
-    const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    mq.addEventListener('change', () => {
-      if ((localStorage.getItem(THEME_KEY) || 'dark') === 'system') applyTheme('system');
-    });
-  }
+  /* System theme watcher removed — single theme, nothing to switch. */
+  function initSystemThemeWatcher() {}
 
   /* ---- Bottom nav ---- */
   function initNavItems() {
