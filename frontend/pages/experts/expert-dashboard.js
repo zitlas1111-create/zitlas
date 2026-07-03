@@ -280,8 +280,8 @@ function renderDashboard(expert) {
   if (epcExp)     epcExp.textContent = expert.experience.replace(' Experience', '');
 
   /* Stats initialised to zero; listenForReviews() updates them once data loads */
-  setText('statPending',  0);
-  setText('statMessages', 0);
+  setStatText('statPending',  'statPendingLabel',  0, 'Pending Reviews', "🎉 You're all caught up.");
+  setStatText('statMessages', 'statMessagesLabel', 0, 'New Messages',    'No new messages right now.');
   setText('statClients',  0);
   setText('statEarnings', '₹0');
 }
@@ -289,6 +289,19 @@ function renderDashboard(expert) {
 function setText(id, val) {
   const el = document.getElementById(id);
   if (el) el.textContent = val;
+}
+
+/* Premium empty state: replaces "0 / Pending Reviews" with a single warm
+   sentence instead of a bare zero. Purely presentational — does not change
+   what is counted, only how a zero result is displayed. */
+function setStatText(numId, labelId, count, defaultLabel, emptyMessage) {
+  const numEl   = document.getElementById(numId);
+  const labelEl = document.getElementById(labelId);
+  const card    = numEl ? numEl.closest('.ed-stat-card') : null;
+  const isEmpty = count === 0;
+  if (card) card.classList.toggle('ed-stat-card--empty', isEmpty);
+  if (numEl)   numEl.textContent = isEmpty ? '' : count;
+  if (labelEl) labelEl.textContent = isEmpty ? emptyMessage : defaultLabel;
 }
 
 /* ══════════════════════════════════════════════
@@ -811,7 +824,7 @@ function updateDashboardStats(requests, expert) {
   const approved = requests.filter(function(r) { return r.status === 'approved' || r.status === 'revised_plan_published'; });
   const earnings = approved.length * expert.fee;
 
-  setText('statPending',  pending.length);
+  setStatText('statPending', 'statPendingLabel', pending.length, 'Pending Reviews', "🎉 You're all caught up.");
   setText('statClients',  clients);
   setText('statEarnings', earnings > 0 ? '₹' + earnings : '₹0');
 
@@ -4121,7 +4134,7 @@ function renderInbox(expert, expertUid) {
     return r.status === 'review_completed' || r.status === 'completed' || r.status === 'approved';
   });
   var activeClients = reviews.filter(function(r) { return r.status !== 'rejected'; });
-  setText('statPending',  pending.length + inProgress.length);
+  setStatText('statPending', 'statPendingLabel', pending.length + inProgress.length, 'Pending Reviews', "🎉 You're all caught up.");
   setText('statClients',  activeClients.length);
   setText('statEarnings', doneBucket.length > 0 ? '₹' + (doneBucket.length * expert.fee) : '₹0');
 

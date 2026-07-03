@@ -79,16 +79,18 @@ body {
   transition: background-color var(--transition), color var(--transition);
 }
 
-/* Floating glass cards over the photo background */
+/* Floating glass cards over the photo background — the shared premium
+   recipe lives in theme.css (.zitlas-premium-bg pages); this keeps the
+   local list for dashboard-only sections. */
 .goal-card,
-.streak-card,
 .qs-card,
 .swot-widget-section {
-  background: rgba(255,255,255,0.88);
+  background: rgba(255,255,255,0.78);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
   border-radius: 28px;
-  box-shadow: 0 12px 40px rgba(0,0,0,0.08);
+  border: 1px solid rgba(255,255,255,0.6);
+  box-shadow: 0 15px 40px rgba(107,165,57,0.10), 0 8px 20px rgba(255,152,0,0.08);
 }
 
 /* Frosted sticky header so the photo scrolls beneath it */
@@ -190,15 +192,21 @@ a   { text-decoration: none; }
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+  /* Streak card removed — give the greeting room to breathe */
+  padding: 14px 4px 10px;
+  margin-bottom: 8px;
   animation: slide-up 0.4s ease both;
 }
 
 .greeting-left { flex: 1; }
 
+/* This section sits directly on the homebg.png photo (no card behind it) —
+   a soft halo keeps it legible now that the overlay is lighter. */
 .greeting-line {
   font-size: 14px;
   color: var(--text-sec);
   font-weight: 500;
+  text-shadow: 0 1px 6px rgba(244,247,237,0.85);
   transition: color var(--transition);
 }
 
@@ -209,12 +217,14 @@ a   { text-decoration: none; }
   letter-spacing: -0.3px;
   line-height: 1.15;
   margin: 2px 0 6px;
+  text-shadow: 0 1px 8px rgba(244,247,237,0.7);
   transition: color var(--transition);
 }
 
 .greeting-sub {
   font-size: 12.5px;
   color: var(--text-muted);
+  text-shadow: 0 1px 6px rgba(244,247,237,0.85);
   transition: color var(--transition);
 }
 

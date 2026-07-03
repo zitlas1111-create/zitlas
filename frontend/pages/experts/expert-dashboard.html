@@ -17,7 +17,7 @@
   <script src="../../assets/js/webrtc-call.js"></script>
   <script src="../../assets/js/call-ui.js"></script>
 </head>
-<body>
+<body class="zitlas-premium-bg">
 
   <!-- ════════════ HEADER ════════════ -->
   <header class="ed-header" id="edHeader">
@@ -55,7 +55,7 @@
         </div>
         <div class="epc-info">
           <h2 class="epc-name" id="epcName">Expert</h2>
-          <p class="epc-role" id="epcRole">Nutritionist</p>
+          <span class="epc-role-badge" id="epcRole">Nutritionist</span>
           <div class="epc-meta-row">
             <span class="epc-rating">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="var(--primary)" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
@@ -82,12 +82,12 @@
         <div class="ed-stat-card">
           <span class="ed-stat-icon">📋</span>
           <span class="ed-stat-num" id="statPending">0</span>
-          <span class="ed-stat-label">Pending Reviews</span>
+          <span class="ed-stat-label" id="statPendingLabel">Pending Reviews</span>
         </div>
         <div class="ed-stat-card">
           <span class="ed-stat-icon">💬</span>
           <span class="ed-stat-num" id="statMessages">0</span>
-          <span class="ed-stat-label">New Messages</span>
+          <span class="ed-stat-label" id="statMessagesLabel">New Messages</span>
         </div>
         <div class="ed-stat-card">
           <span class="ed-stat-icon">👥</span>

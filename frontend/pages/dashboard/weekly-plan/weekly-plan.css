@@ -401,10 +401,12 @@ body::before {
 
 .wp-schedule-hd-icon { font-size: 20px; }
 
+/* Sits directly on the homebg.png photo — soft halo for legibility. */
 .wp-schedule-title {
   font-size: 18px;
   font-weight: 900;
   color: var(--text);
+  text-shadow: 0 1px 8px rgba(244,247,237,0.7);
 }
 
 .wp-day-list {

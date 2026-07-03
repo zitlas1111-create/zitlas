@@ -46,7 +46,7 @@ html[data-theme="light"] {
   --white-rgb: 30,41,59;
   --black-rgb: 71,85,105;
 
-  --border: #E4EAD6;
+  --border: rgba(255,152,0,0.12);
   --shadow: rgba(30,41,59,0.08);
 
   /* Compatibility aliases used by existing page styles. */
@@ -120,7 +120,7 @@ textarea:focus-visible {
    cascade regardless of load order without needing !important. */
 .zitlas-premium-bg {
   background-image:
-    linear-gradient(rgba(244,247,237,0.78), rgba(244,247,237,0.88)),
+    linear-gradient(rgba(244,247,237,0.45), rgba(244,247,237,0.55)),
     url('../homebg.png');
   background-size: cover;
   background-position: center;
@@ -137,15 +137,16 @@ textarea:focus-visible {
 }
 
 .btn-primary {
-  background: var(--primary) !important;
+  background: linear-gradient(135deg, #FF9800, #FFA726) !important;
   color: #FFFFFF !important;
-  border: 1px solid var(--primary) !important;
-  box-shadow: var(--button-shadow) !important;
+  border: 1px solid transparent !important;
+  box-shadow: 0 10px 25px rgba(255,152,0,0.35) !important;
+  transition: transform 0.3s ease, box-shadow 0.3s ease !important;
 }
 
 .btn-primary:hover {
-  background: var(--primary-hover) !important;
-  border-color: var(--primary-hover) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 14px 30px rgba(255,152,0,0.40) !important;
 }
 
 .badge-success {
@@ -173,4 +174,86 @@ textarea:focus-visible {
 [class*="verified"],
 [class*="online"] {
   --state-color: var(--success);
+}
+
+/* ══════════════════════════════════════════════════════════
+   PREMIUM GLASS CARDS — scoped to the 5 photo-background pages
+   (body.zitlas-premium-bg). Descendant selectors (0,2,0) beat the
+   page stylesheets' single-class rules (0,1,0) regardless of load
+   order, so no !important is needed. One recipe, every main card:
+   floating, frosted, dual green/orange glow.
+   ══════════════════════════════════════════════════════════ */
+.zitlas-premium-bg .goal-card,
+.zitlas-premium-bg .qs-card,
+.zitlas-premium-bg .swot-widget-section,
+.zitlas-premium-bg .focus-card,
+.zitlas-premium-bg .diet-hydration-card,
+.zitlas-premium-bg .vn-section,
+.zitlas-premium-bg .plan-section,
+.zitlas-premium-bg .tip-card,
+.zitlas-premium-bg .consult-section,
+.zitlas-premium-bg .version-history-section,
+.zitlas-premium-bg .wp-hero,
+.zitlas-premium-bg .wp-day-card,
+.zitlas-premium-bg .nutri-card,
+.zitlas-premium-bg .profile-header,
+.zitlas-premium-bg .settings-list,
+.zitlas-premium-bg .quick-actions-list,
+.zitlas-premium-bg .logout-section {
+  background: rgba(255,255,255,0.78);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border-radius: 28px;
+  border: 1px solid rgba(255,255,255,0.6);
+  box-shadow: 0 15px 40px rgba(107,165,57,0.10), 0 8px 20px rgba(255,152,0,0.08);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* Hero/section cards get the soft orange section glow on top */
+.zitlas-premium-bg .goal-card,
+.zitlas-premium-bg .swot-widget-section,
+.zitlas-premium-bg .focus-card,
+.zitlas-premium-bg .wp-hero,
+.zitlas-premium-bg .plan-section {
+  box-shadow:
+    0 15px 40px rgba(107,165,57,0.10),
+    0 8px 20px rgba(255,152,0,0.08),
+    0 0 30px rgba(255,152,0,0.12);
+}
+
+/* Floating hover lift — pointer devices only, honors reduced motion */
+@media (hover: hover) {
+  .zitlas-premium-bg .goal-card:hover,
+  .zitlas-premium-bg .qs-card:hover,
+  .zitlas-premium-bg .swot-widget-section:hover,
+  .zitlas-premium-bg .focus-card:hover,
+  .zitlas-premium-bg .diet-hydration-card:hover,
+  .zitlas-premium-bg .tip-card:hover,
+  .zitlas-premium-bg .wp-day-card:hover,
+  .zitlas-premium-bg .nutri-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 20px 50px rgba(107,165,57,0.14), 0 10px 26px rgba(255,152,0,0.12);
+  }
+}
+
+/* Quick-action tap feedback: press-in with a warm glow */
+.zitlas-premium-bg .qs-card:active,
+.zitlas-premium-bg .nutri-card:active {
+  transform: scale(0.97);
+  box-shadow: 0 0 24px rgba(255,152,0,0.25);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zitlas-premium-bg .goal-card,
+  .zitlas-premium-bg .qs-card,
+  .zitlas-premium-bg .swot-widget-section,
+  .zitlas-premium-bg .focus-card,
+  .zitlas-premium-bg .diet-hydration-card,
+  .zitlas-premium-bg .tip-card,
+  .zitlas-premium-bg .wp-day-card,
+  .zitlas-premium-bg .nutri-card,
+  .btn-primary {
+    transition: none !important;
+    transform: none !important;
+  }
 }

@@ -228,16 +228,19 @@ html, body {
 .page-title-block {
   padding: 18px 16px 0;
 }
+/* Sits directly on the homebg.png photo — soft halo for legibility. */
 .page-heading {
   font-size: 1.45rem;
   font-weight: 800;
   color: var(--text);
   line-height: 1.2;
+  text-shadow: 0 1px 8px rgba(244,247,237,0.7);
 }
 .page-subheading {
   font-size: .78rem;
   color: var(--text-muted);
   margin-top: 4px;
+  text-shadow: 0 1px 6px rgba(244,247,237,0.85);
 }
 
 /* ─── Main Content ───────────────────────────────────────────────── */

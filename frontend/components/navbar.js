@@ -100,8 +100,17 @@
       'border-radius:24px;display:flex;align-items:center;justify-content:space-around;',
       'z-index:500;padding:0 6px;',
       'backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);',
-      'transition:background .2s,border-color .2s;',
+      'transition:background .2s,border-color .2s,transform .3s ease,opacity .3s ease;',
     '}',
+    /* Hidden while a modal/bottom-sheet is open — keeps the existing
+       translateX(-50%) centering and adds translateY so it slides straight
+       down rather than jumping to the left edge. */
+    '#zitlas-navbar.nav-hidden{',
+      'transform:translateX(-50%) translateY(120%);opacity:0;pointer-events:none;',
+    '}',
+    '@media(prefers-reduced-motion:reduce){#zitlas-navbar{transition:background .2s,border-color .2s;}}',
+    /* Lock background scroll while any modal/bottom-sheet is open */
+    'body.modal-open{overflow:hidden;}',
     /* Dark (default) */
     'html:not([data-theme="light"]) #zitlas-navbar,',
     '[data-theme="dark"] #zitlas-navbar{',
@@ -205,7 +214,93 @@
 
     /* Trigger i18n if available */
     if (window.ZitlasLang) window.ZitlasLang.applyTranslations();
+
+    _initModalWatcher();
   }
+
+  /* ── Modal / bottom-sheet auto-hide ───────────────────────────────────────
+   * Project-wide and forward-compatible: every actual toggled modal/sheet
+   * CONTAINER across the app — the element whose visibility is what
+   * changes — is named with "overlay" or "backdrop" (verified across
+   * profile, diet, dashboard, coaches, expert-dashboard: .modal-overlay,
+   * .zc-overlay, .zc-confirm-backdrop, .rc-sheet-overlay, .vp-sheet-overlay,
+   * .zc-img-sheet-overlay, .pr-edit-overlay, .ep-modal-backdrop, ...).
+   *
+   * Deliberately NOT matching bare "modal" or "sheet": those substrings
+   * also hit the *inner* static panel (.modal-card, .rc-sheet-card,
+   * .vp-sheet-card, .pr-edit-sheet, .ep-modal) which is always rendered at
+   * its own display:flex/opacity:1 — only its parent overlay/backdrop
+   * toggles. Matching the inner panel would make isAnyModalOpen() return
+   * true permanently on any page that merely contains one, hiding the
+   * navbar forever. Every real container already includes "overlay" or
+   * "backdrop" too, so this loses no coverage.
+   *
+   * Two different show/hide mechanisms are both in real use on the
+   * overlay/backdrop containers themselves:
+   *   (a) display:none  <->  .open sets display:flex/block
+   *   (b) display:flex always, opacity:0;pointer-events:none <-> .open
+   *       sets opacity:1 (used by .modal-overlay, .rc-sheet-overlay, etc.)
+   * Checking display alone would treat every (b)-style overlay as
+   * permanently "open" (display is never none), so all three signals
+   * below are checked together.
+   */
+  var MODAL_SELECTOR = '[class*="overlay"],[class*="backdrop"]';
+
+  function isAnyModalOpen() {
+    var els = document.querySelectorAll(MODAL_SELECTOR);
+    for (var i = 0; i < els.length; i++) {
+      if (els[i].id === 'zitlas-navbar') continue; /* not itself */
+      var cs = window.getComputedStyle(els[i]);
+      if (cs.display !== 'none' && cs.opacity !== '0' && cs.visibility !== 'hidden') return true;
+    }
+    return false;
+  }
+
+  function hideBottomNav() {
+    var nav = document.getElementById('zitlas-navbar');
+    if (nav) nav.classList.add('nav-hidden');
+  }
+
+  function showBottomNav() {
+    var nav = document.getElementById('zitlas-navbar');
+    if (nav) nav.classList.remove('nav-hidden');
+  }
+
+  var _navRaf = null;
+  function _recheckModalState() {
+    if (_navRaf) return;
+    _navRaf = requestAnimationFrame(function () {
+      _navRaf = null;
+      if (isAnyModalOpen()) {
+        hideBottomNav();
+        document.body.classList.add('modal-open');
+      } else {
+        showBottomNav();
+        document.body.classList.remove('modal-open');
+      }
+    });
+  }
+
+  function _initModalWatcher() {
+    if (_initModalWatcher._started) return;
+    _initModalWatcher._started = true;
+    _recheckModalState();
+    new MutationObserver(_recheckModalState).observe(document.body, {
+      subtree: true, attributes: true, attributeFilter: ['class', 'style'],
+    });
+    /* The class/style mutation fires the instant .open is removed, before
+       the opacity fade (mechanism (b) above) has actually finished — so a
+       single check right then would still see the old, "open" opacity.
+       Re-checking on transitionend catches the moment it truly reaches 0. */
+    document.addEventListener('transitionend', function (e) {
+      if (e.propertyName === 'opacity') _recheckModalState();
+    }, true);
+  }
+
+  /* Exposed globally per spec — for the rare modal that doesn't match
+     MODAL_SELECTOR, or for code that wants to force the state directly. */
+  window.hideBottomNav = hideBottomNav;
+  window.showBottomNav = showBottomNav;
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', inject);

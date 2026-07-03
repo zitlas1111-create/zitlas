@@ -28,7 +28,7 @@
   background: linear-gradient(90deg, transparent, rgba(var(--white-rgb),0.07), transparent);
 }
 .zc-day-sep-lbl {
-  font-size: 10px; font-weight: 700; color: var(--border);
+  font-size: 10px; font-weight: 700; color: var(--text-muted);
   text-transform: uppercase; letter-spacing: 0.8px; white-space: nowrap; padding: 0 4px;
 }
 
