@@ -2279,16 +2279,19 @@
       btn.className = 'cp-cta cp-cta--verify cp-cta--vp-done';
       btn.innerHTML = VP_SVG.check + ' Expert Reviewed';
       /* Terminal state: the main button is a status label (disabled by
-         design). "Verify Again" is the re-request path — without this
-         reveal it stayed permanently hidden and the athlete could never
-         submit another review after the first one completed. */
-      if (againWrap) againWrap.style.display = '';
+         design). "Request Another Review" is the re-request path.
+         MUST be an explicit 'block': the stylesheet class itself is
+         display:none (cprofile.css .cp-verify-again-wrap), so clearing
+         the inline style with '' falls back to hidden — which is exactly
+         how this button stayed invisible on production even after the
+         reveal code ran. */
+      if (againWrap) againWrap.style.display = 'block';
     } else if (st === 'rejected') {
       btn.disabled  = true;
       btn.className = 'cp-cta cp-cta--verify cp-cta--vp-rejected';
       btn.innerHTML = VP_SVG.clock + ' Review Rejected';
       /* A rejected athlete must also be able to re-request */
-      if (againWrap) againWrap.style.display = '';
+      if (againWrap) againWrap.style.display = 'block';
     } else {
       btn.disabled  = true;
       btn.className = 'cp-cta cp-cta--verify cp-cta--vp-pending';
@@ -2305,7 +2308,10 @@
       });
     if (prevSection && doneRevs.length > 0) {
       renderPrevReviews(doneRevs, coach);
-      prevSection.style.display = '';
+      /* explicit 'block' — .cp-prev-reviews is display:none in the
+         stylesheet, so '' would fall back to hidden (same trap as the
+         Request Another Review wrap) */
+      prevSection.style.display = 'block';
     }
   }
 
@@ -2687,6 +2693,18 @@
         })
         .catch(function(e) { console.error('[CLEANUP] query failed', e); });
     };
+
+    /* Auto-run once per browser session: orphaned pendings (addressed to a
+       deleted expert, or superseded by a newer request) otherwise sit in
+       Firestore forever and are invisible to every expert dashboard. The
+       helper is conservative — a genuinely-awaiting review is never touched
+       (it logs "keeping" instead). Delayed so auth is settled first. */
+    try {
+      if (!sessionStorage.getItem('zitlas_review_cleanup_ran')) {
+        sessionStorage.setItem('zitlas_review_cleanup_ran', '1');
+        setTimeout(function() { window.zitlasCleanupStalePendingReviews(); }, 4000);
+      }
+    } catch (_) {}
 
     /* Listen for expert completing review in Firestore — single source of truth.
        Syncs canonical status into expert_plan_reviews (cache) and auto-applies
