@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(python -c ' *)",
-      "Bash(python build_nutri_foods.py)"
+      "Bash(python build_nutri_foods.py)",
+      "Bash(curl -s \"https://zitlas.com/pages/coaches/cprofile.html\")"
     ]
   }
 }
