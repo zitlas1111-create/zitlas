@@ -2227,11 +2227,13 @@
   function _getMyLatestPlanReview(coach) {
     var all = _getAllMyPlanReviews(coach);
     if (!all.length) return null;
-    /* An active (pending/accepted) review blocks new submissions */
+    /* An active (pending/in-progress/accepted) review blocks new submissions */
     var active = all.find(function(r) {
-      return r.status === 'pending' || r.status === 'accepted';
+      return r.status === 'pending' || r.status === 'accepted' ||
+             r.status === 'in_progress' || r.status === 'expert_reviewing';
     });
-    return active || all[0]; /* all[0] = most recently submitted (we unshift) */
+    /* 'superseded' reviews are replaced history — never drive button state */
+    return active || all.find(function(r) { return r.status !== 'superseded'; }) || null;
   }
 
   function updateVerifyBtnState(coach) {
@@ -2251,18 +2253,19 @@
     if (!review) {
       btn.dataset.vpStatus = '';
       btn.className = 'cp-cta cp-cta--verify';
-      btn.innerHTML = VP_SVG.check + ' Verify Plan';
+      btn.innerHTML = VP_SVG.check + ' Request Review';
       return;
     }
 
     var st = review.status;
     btn.dataset.vpStatus = st;
-    console.log('[REVIEW] button state', st);
+    console.log('[REVIEW] button state', st, '| reviewId:', review.id,
+      '| expertId:', review.expertId, '| athleteId:', review.userId);
 
     if (st === 'pending') {
       btn.disabled  = true;
       btn.className = 'cp-cta cp-cta--verify cp-cta--vp-pending';
-      btn.innerHTML = VP_SVG.clock + ' Verification Pending';
+      btn.innerHTML = VP_SVG.clock + ' Review Requested';
     } else if (st === 'accepted') {
       /* backward-compat: existing production reviews may have status='accepted' */
       btn.className = 'cp-cta cp-cta--verify cp-cta--vp-accepted';
@@ -2270,7 +2273,7 @@
     } else if (st === 'in_progress' || st === 'expert_reviewing') {
       btn.disabled  = true;
       btn.className = 'cp-cta cp-cta--verify cp-cta--vp-pending';
-      btn.innerHTML = VP_SVG.clock + ' Under Review';
+      btn.innerHTML = VP_SVG.clock + ' Expert Reviewing…';
     } else if (st === 'completed' || st === 'review_completed') {
       btn.disabled  = true;
       btn.className = 'cp-cta cp-cta--verify cp-cta--vp-done';
@@ -2467,6 +2470,24 @@
         console.log('[VERIFY] selected expert', { id: coach.id, name: coach.name });
         if (!_selectedType) return;
 
+        /* ── Lifecycle guard: only ONE active review per athlete↔expert ──
+           Rules: pending → block; in_progress/expert_reviewing/accepted →
+           block; completed/rejected → allowed. Without this, the sheet
+           (reachable via "Request Another Review") could create a second
+           request while one is still open. */
+        var _latestForCoach = _getMyLatestPlanReview(coach);
+        var _activeStatuses = ['pending', 'accepted', 'in_progress', 'expert_reviewing'];
+        if (_latestForCoach && _activeStatuses.indexOf(_latestForCoach.status) !== -1) {
+          console.error('[VERIFY] blocked — active review already exists:',
+            _latestForCoach.id, 'status:', _latestForCoach.status);
+          showToast(_latestForCoach.status === 'pending'
+            ? 'Your previous review request is still pending.'
+            : 'Your plan is currently being reviewed by the expert.');
+          closeSheet();
+          updateVerifyBtnState(coach);
+          return;
+        }
+
         var ctx = buildContextPackage();
         var planData;
         if (_selectedType === 'diet') {
@@ -2543,13 +2564,30 @@
            Completed/rejected reviews are kept as permanent history. */
         var existing = [];
         try { existing = JSON.parse(localStorage.getItem('expert_plan_reviews') || '[]'); } catch (_) {}
+        var _staleIds = [];
         existing = existing.filter(function(r) {
-          return !(r.userId === userId && r.expertId === coach.id &&
+          var isStalePending = r.userId === userId && r.expertId === coach.id &&
                    (r.reviewType || r.planReviewType) === _selectedType &&
-                   r.status === 'pending');
+                   r.status === 'pending';
+          if (isStalePending && r.id) _staleIds.push(r.id);
+          return !isStalePending;
         });
         existing.unshift(review);
         try { localStorage.setItem('expert_plan_reviews', JSON.stringify(existing)); } catch (_) {}
+
+        /* Supersede the same stale pendings IN FIRESTORE too. Previously
+           only the localStorage copy was pruned — the old pending document
+           stayed 'pending' in Firestore forever, which is exactly how
+           orphaned duplicate requests accumulated. Update, never delete:
+           history is preserved and every transition is auditable. */
+        if (typeof ZitlasDB !== 'undefined' && _staleIds.length) {
+          _staleIds.forEach(function(staleId) {
+            console.log('[VERIFY] superseding stale pending review', staleId, '→ replaced by', review.id);
+            ZitlasDB.collection('review_requests').doc(staleId)
+              .update({ status: 'superseded', supersededBy: review.id, supersededAt: new Date().toISOString() })
+              .catch(function(e) { console.error('[VERIFY] supersede failed for', staleId, e && e.code); });
+          });
+        }
 
         /* Write to Firestore so the expert's dashboard inbox receives it */
         if (typeof ZitlasDB !== 'undefined') {
@@ -2612,16 +2650,60 @@
     /* Set initial button state on page load */
     updateVerifyBtnState(coach);
 
+    /* ── Maintenance: safely resolve orphaned pending reviews ──
+       Marks the current user's 'pending' reviews as 'superseded' (never
+       deletes) when (a) the target expert no longer exists in Firestore, or
+       (b) a newer request to the same expert+type exists. Run manually from
+       the console: zitlasCleanupStalePendingReviews() */
+    window.zitlasCleanupStalePendingReviews = function() {
+      if (typeof ZitlasDB === 'undefined') { console.error('[CLEANUP] Firestore unavailable'); return; }
+      var uid = _getMyUserId();
+      if (!uid) { console.error('[CLEANUP] no signed-in user'); return; }
+      ZitlasDB.collection('review_requests')
+        .where('userId', '==', uid).get()
+        .then(function(snap) {
+          var docs = snap.docs.map(function(d) { return d.data(); });
+          var pendings = docs.filter(function(r) { return r.status === 'pending'; });
+          console.log('[CLEANUP]', pendings.length, 'pending review(s) found');
+          pendings.forEach(function(p) {
+            var newer = docs.find(function(o) {
+              return o.id !== p.id && o.expertId === p.expertId &&
+                (o.reviewType || 'diet') === (p.reviewType || 'diet') &&
+                (o.createdAt || '') > (p.createdAt || '');
+            });
+            var resolve = function(reason) {
+              console.log('[CLEANUP] superseding', p.id, '— reason:', reason);
+              ZitlasDB.collection('review_requests').doc(p.id)
+                .update({ status: 'superseded', supersededReason: reason, supersededAt: new Date().toISOString() })
+                .then(function() { console.log('[CLEANUP] done:', p.id); })
+                .catch(function(e) { console.error('[CLEANUP] failed:', p.id, e); });
+            };
+            if (newer) { resolve('newer_request_exists:' + newer.id); return; }
+            ZitlasDB.collection('experts').doc(p.expertId).get().then(function(eDoc) {
+              if (!eDoc.exists) resolve('expert_not_found:' + p.expertId);
+              else console.log('[CLEANUP] keeping', p.id, '— expert exists, no newer request; genuinely awaiting review');
+            });
+          });
+        })
+        .catch(function(e) { console.error('[CLEANUP] query failed', e); });
+    };
+
     /* Listen for expert completing review in Firestore — single source of truth.
        Syncs canonical status into expert_plan_reviews (cache) and auto-applies
        the reviewed plan to zitlas_diet_plan / zitlas_workout_plan. */
     if (typeof ZitlasDB !== 'undefined') {
       var _reviewUid = _getMyUserId();
       if (_reviewUid) {
+        console.log('[REVIEW] athlete query: review_requests.where(userId ==', _reviewUid + ') | this page\'s expert:', coach.id);
         ZitlasDB.collection('review_requests')
           .where('userId', '==', _reviewUid)
           .onSnapshot(function(snapshot) {
-            console.log('athlete reviews', snapshot.docs.map(function(d) { return d.data(); }));
+            console.log('[REVIEW] athlete snapshot —', snapshot.size, 'doc(s):',
+              snapshot.docs.map(function(d) {
+                var x = d.data();
+                return { reviewId: x.id, status: x.status, expertId: x.expertId, athleteId: x.userId,
+                         forThisExpert: x.expertId === coach.id };
+              }));
             var changed = false;
             snapshot.docs.forEach(function(doc) {
               var data = doc.data();
