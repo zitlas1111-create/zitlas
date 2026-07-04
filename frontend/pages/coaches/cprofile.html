@@ -144,6 +144,26 @@
   </button>
 </div>
 
+<!-- Withdraw Request (shown only while a review request is pending) -->
+<div class="cp-withdraw-wrap" id="withdrawWrap" style="display:none">
+  <button class="cp-withdraw-btn" id="withdrawBtn">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    Withdraw Request
+  </button>
+</div>
+
+<!-- Withdraw confirmation dialog -->
+<div class="cp-withdraw-backdrop" id="withdrawBackdrop">
+  <div class="cp-withdraw-modal">
+    <p class="cp-withdraw-title">Withdraw Review Request?</p>
+    <p class="cp-withdraw-sub">Are you sure you want to withdraw this review request?<br><br>The expert will no longer receive or be able to review this request.</p>
+    <div class="cp-withdraw-actions">
+      <button class="cp-withdraw-cancel" id="withdrawCancelBtn">Cancel</button>
+      <button class="cp-withdraw-confirm" id="withdrawConfirmBtn">Withdraw</button>
+    </div>
+  </div>
+</div>
+
 <!-- Previous Reviews (collapsible list) -->
 <div class="cp-prev-reviews" id="prevReviewsSection" style="display:none"></div>
 

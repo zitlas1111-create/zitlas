@@ -2232,22 +2232,27 @@
       return r.status === 'pending' || r.status === 'accepted' ||
              r.status === 'in_progress' || r.status === 'expert_reviewing';
     });
-    /* 'superseded' reviews are replaced history — never drive button state */
-    return active || all.find(function(r) { return r.status !== 'superseded'; }) || null;
+    /* 'superseded' and 'withdrawn' reviews are resolved history — they never
+       drive button state (a withdrawn request returns the athlete to idle) */
+    return active || all.find(function(r) {
+      return r.status !== 'superseded' && r.status !== 'withdrawn';
+    }) || null;
   }
 
   function updateVerifyBtnState(coach) {
-    var btn         = document.getElementById('verifyPlanBtn');
-    var againWrap   = document.getElementById('verifyAgainWrap');
-    var prevSection = document.getElementById('prevReviewsSection');
+    var btn          = document.getElementById('verifyPlanBtn');
+    var againWrap    = document.getElementById('verifyAgainWrap');
+    var withdrawWrap = document.getElementById('withdrawWrap');
+    var prevSection  = document.getElementById('prevReviewsSection');
     if (!btn) return;
 
     var allRevs = _getAllMyPlanReviews(coach);
     var review  = _getMyLatestPlanReview(coach);
 
     /* Reset secondary elements */
-    if (againWrap)   againWrap.style.display   = 'none';
-    if (prevSection) prevSection.style.display = 'none';
+    if (againWrap)    againWrap.style.display    = 'none';
+    if (withdrawWrap) withdrawWrap.style.display = 'none';
+    if (prevSection)  prevSection.style.display  = 'none';
     btn.disabled = false;
 
     if (!review) {
@@ -2266,6 +2271,9 @@
       btn.disabled  = true;
       btn.className = 'cp-cta cp-cta--verify cp-cta--vp-pending';
       btn.innerHTML = VP_SVG.clock + ' Review Requested';
+      /* Pending is the ONLY state that offers withdrawal (explicit 'block' —
+         the stylesheet class is display:none) */
+      if (withdrawWrap) withdrawWrap.style.display = 'block';
     } else if (st === 'accepted') {
       /* backward-compat: existing production reviews may have status='accepted' */
       btn.className = 'cp-cta cp-cta--verify cp-cta--vp-accepted';
@@ -2435,6 +2443,91 @@
       verifyAgain.addEventListener('click', function() {
         console.log('Expert Review button clicked (Verify Again)');
         openSheet();
+      });
+    }
+
+    /* ── Withdraw Request (pending state only) ── */
+    var withdrawBtn        = document.getElementById('withdrawBtn');
+    var withdrawBackdrop   = document.getElementById('withdrawBackdrop');
+    var withdrawCancelBtn  = document.getElementById('withdrawCancelBtn');
+    var withdrawConfirmBtn = document.getElementById('withdrawConfirmBtn');
+
+    function closeWithdrawModal() {
+      if (withdrawBackdrop) withdrawBackdrop.classList.remove('open');
+    }
+
+    if (withdrawBtn && withdrawBackdrop) {
+      withdrawBtn.addEventListener('click', function() {
+        console.log('[WITHDRAW] button clicked');
+        withdrawBackdrop.classList.add('open');
+      });
+      withdrawBackdrop.addEventListener('click', function(e) {
+        if (e.target === withdrawBackdrop) closeWithdrawModal();
+      });
+    }
+    if (withdrawCancelBtn) withdrawCancelBtn.addEventListener('click', closeWithdrawModal);
+
+    if (withdrawConfirmBtn) {
+      withdrawConfirmBtn.addEventListener('click', function() {
+        var review = _getMyLatestPlanReview(coach);
+        /* Safety rule: only a PENDING request may be withdrawn */
+        if (!review || review.status !== 'pending') {
+          console.error('[WITHDRAW] blocked — no pending review to withdraw (status:',
+            review && review.status, ')');
+          closeWithdrawModal();
+          showToast('This request can no longer be withdrawn.');
+          updateVerifyBtnState(coach);
+          return;
+        }
+        if (typeof ZitlasDB === 'undefined') {
+          console.error('[WITHDRAW] Firestore unavailable');
+          showToast('Unable to withdraw request. Please try again.');
+          return;
+        }
+
+        withdrawConfirmBtn.disabled = true;
+        var docRef = ZitlasDB.collection('review_requests').doc(review.id);
+        console.log('[WITHDRAW] withdrawing', review.id, '(expert:', review.expertId + ')');
+
+        /* Transaction: re-check status INSIDE Firestore so a withdrawal can
+           never stomp a review the expert accepted moments earlier. The doc
+           is updated (status:'withdrawn'), never deleted — completed reviews
+           and history are untouched, and the expert's pending tab drops it
+           in realtime because that tab filters status === 'pending'. */
+        ZitlasDB.runTransaction(function(tx) {
+          return tx.get(docRef).then(function(snap) {
+            if (!snap.exists) throw new Error('not_found');
+            if (snap.data().status !== 'pending') throw new Error('not_pending');
+            tx.update(docRef, { status: 'withdrawn', withdrawnAt: new Date().toISOString() });
+          });
+        }).then(function() {
+          console.log('[WITHDRAW] success —', review.id, 'is now withdrawn');
+          /* Update local cache so the button flips immediately (the
+             Firestore listener will confirm moments later) */
+          try {
+            var all = JSON.parse(localStorage.getItem('expert_plan_reviews') || '[]');
+            var idx = all.findIndex(function(r) { return r.id === review.id; });
+            if (idx !== -1) {
+              all[idx].status = 'withdrawn';
+              all[idx].withdrawnAt = new Date().toISOString();
+              localStorage.setItem('expert_plan_reviews', JSON.stringify(all));
+            }
+          } catch (_) {}
+          closeWithdrawModal();
+          showToast('Review request withdrawn.');
+          updateVerifyBtnState(coach);
+        }).catch(function(err) {
+          console.error('[WITHDRAW] failed:', err && err.message);
+          closeWithdrawModal();
+          if (err && err.message === 'not_pending') {
+            showToast('The expert has already started this review — it can no longer be withdrawn.');
+            updateVerifyBtnState(coach);
+          } else {
+            showToast('Unable to withdraw request. Please try again.');
+          }
+        }).then(function() {
+          withdrawConfirmBtn.disabled = false;
+        });
       });
     }
 
