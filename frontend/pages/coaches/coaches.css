@@ -543,24 +543,6 @@ html, body {
 .ask-btn:hover { background: var(--primary-dark); transform: scale(1.02); }
 .ask-btn:active { transform: scale(0.98); }
 
-/* ─── Earnings Strip ─────────────────────────────────────────────── */
-.earnings-strip {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 20px 16px 0;
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 12px 14px;
-}
-.earnings-strip-icon { font-size: 1rem; flex-shrink: 0; }
-.earnings-strip-text {
-  font-size: .72rem;
-  color: var(--text-muted);
-  line-height: 1.4;
-}
-
 /* ─── Empty State ────────────────────────────────────────────────── */
 .empty-state {
   text-align: center;

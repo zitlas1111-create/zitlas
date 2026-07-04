@@ -1438,7 +1438,10 @@ a      { text-decoration: none; color: inherit; }
 
 /* ── Image source bottom sheet ── */
 .zc-img-sheet-overlay {
-  position: fixed; inset: 0; z-index: 2000;
+  /* Must stack ABOVE the expert chat overlay (.zc-overlay, z-index 9999) —
+     at the old 2000 the sheet opened invisibly BEHIND the chat, making the
+     paperclip button appear dead. */
+  position: fixed; inset: 0; z-index: 10500;
   background: rgba(var(--black-rgb),.65);
   display: flex; align-items: flex-end;
   opacity: 0; pointer-events: none;

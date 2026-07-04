@@ -339,18 +339,27 @@ searchClearBtn.addEventListener('click', () => {
 
 coachesList.addEventListener('click', e => {
   const askBtn = e.target.closest('.ask-btn');
-  if (askBtn) {
+  /* data-id guard: the empty-state "Become an Expert" <a> reuses the
+     .ask-btn class but has no data-id — without the guard this handler
+     hijacked it to cprofile.html?expertId=undefined instead of letting
+     its own href (login page) navigate. */
+  if (askBtn && askBtn.dataset.id) {
+    console.log('[ASK EXPERT] navigating to expert', askBtn.dataset.id);
     window.location.href = `cprofile.html?expertId=${askBtn.dataset.id}`;
     return;
   }
+  if (askBtn) return; /* .ask-btn without data-id (e.g. a real link) — let it be */
   const card = e.target.closest('.nutri-card');
-  if (card) window.location.href = `cprofile.html?expertId=${card.dataset.id}`;
+  if (card && card.dataset.id) {
+    console.log('[ASK EXPERT] navigating to expert (card)', card.dataset.id);
+    window.location.href = `cprofile.html?expertId=${card.dataset.id}`;
+  }
 });
 
 coachesList.addEventListener('keydown', e => {
   if (e.key !== 'Enter' && e.key !== ' ') return;
   const card = e.target.closest('.nutri-card');
-  if (card) {
+  if (card && card.dataset.id) {
     e.preventDefault();
     window.location.href = `cprofile.html?expertId=${card.dataset.id}`;
   }

@@ -1761,7 +1761,7 @@ function buildExpertChatBubble(msg, expertName, grouped) {
 
   var isImage = msg.type === 'image' && msg.imageUrl;
   var contentHtml = isImage
-    ? '<img class="chat-image" src="' + esc(msg.imageUrl) + '" alt="Image" onclick="window.open(this.src)">'
+    ? '<img class="chat-image" src="' + esc(msg.imageUrl) + '" alt="Image" onclick="ZitlasChatAttach.openViewer(this.src)">'
     : '<span class="zc-bbl-txt">' + esc(msg.text || '').replace(/\n/g, '<br>') + '</span>';
   var bblClass = 'zc-bbl' + (isImage ? ' zc-bbl--img' : '');
 
@@ -2056,82 +2056,57 @@ function initExpertChatOverlay() {
    EXPERT CHAT IMAGE ATTACH
    ══════════════════════════════════════════════ */
 
-function edCompressImage(file) {
-  return new Promise(function(resolve, reject) {
-    var reader = new FileReader();
-    reader.onerror = reject;
-    reader.onload = function(e) {
-      var img = new Image();
-      img.onerror = reject;
-      img.onload = function() {
-        var MAX = 1280;
-        var w = img.naturalWidth, h = img.naturalHeight;
-        if (w > MAX || h > MAX) {
-          var scale = Math.min(MAX / w, MAX / h);
-          w = Math.round(w * scale);
-          h = Math.round(h * scale);
-        }
-        var canvas = document.createElement('canvas');
-        canvas.width = w; canvas.height = h;
-        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        canvas.toBlob(function(blob) {
-          if (blob) resolve(blob); else reject(new Error('Canvas compression failed'));
-        }, 'image/jpeg', 0.8);
-      };
-      img.src = e.target.result;
-    };
-    reader.readAsDataURL(file);
-  });
-}
-
-async function edUploadChatImage(file) {
-  console.log('[ED CHAT IMAGE] Compressing…', file.name, file.type, file.size);
-  var blob = await edCompressImage(file);
-  console.log('[ED CHAT IMAGE] Compressed to', blob.size, 'bytes — uploading…');
-  var fd = new FormData();
-  fd.append('file', blob, 'photo.jpg');
-  var resp = await fetch('/api/chat/upload', { method: 'POST', body: fd });
-  console.log('[ED CHAT IMAGE] Response status:', resp.status, resp.statusText);
-  if (!resp.ok) throw new Error('Upload failed (' + resp.status + ' ' + resp.statusText + ')');
-  var data = await resp.json();
-  console.log('[ED CHAT IMAGE] Server response:', data);
-  if (!data.success) throw new Error('Server rejected the image');
-  console.log('[ED CHAT IMAGE] URL:', data.url);
-  return data.url;
-}
-
+/* Compression + upload + preview + fullscreen viewer live in the shared
+   module (assets/js/chat-attachments.js) so athlete and expert chat behave
+   identically. This function owns only the expert-side flow:
+   validate -> preview (Cancel/Send) -> spinner bubble -> upload ->
+   persist, with a tappable Retry on failure. */
 function expertSendImageMessage(file, expert, msgWrap) {
-  if (!_edChatConversationId) return;
-  var now = new Date().toISOString();
+  if (!_edChatConversationId || typeof ZitlasChatAttach === 'undefined') return;
 
-  /* Placeholder */
-  var placeholder = document.createElement('div');
-  placeholder.className = 'zc-msg zc-msg--in zc-msg--first';
-  placeholder.innerHTML =
-    '<div class="zc-av">' + esc((expert.name || 'E')[0].toUpperCase()) + '</div>' +
-    '<div class="zc-bbl zc-bbl--img">' +
-      '<div class="zc-img-placeholder"><span>📎</span><span>Uploading…</span></div>' +
-    '</div>';
-  if (msgWrap) { msgWrap.appendChild(placeholder); msgWrap.scrollTop = msgWrap.scrollHeight; }
+  var v = ZitlasChatAttach.validate(file);
+  if (!v.ok) { edShowToast(v.reason); return; }
 
-  edUploadChatImage(file).then(function(url) {
-    placeholder.remove();
-    var conv = chatGetConversation(_edChatConversationId);
-    var grouped = false;
-    if (conv && conv.messages && conv.messages.length) {
-      var last = conv.messages[conv.messages.length - 1];
-      grouped = edZcIsGrouped(last, { senderType: 'expert', timestamp: now });
-    }
-    var msg = chatSaveExpertReply(_edChatConversationId, expert, '', url);
-    if (!msg) return;
-    if (msgWrap) {
-      msgWrap.appendChild(buildExpertChatBubble(msg, expert.name, grouped));
-      msgWrap.scrollTop = msgWrap.scrollHeight;
-    }
-  }).catch(function(err) {
-    var inner = placeholder.querySelector('.zc-img-placeholder');
-    if (inner) inner.innerHTML = '<span>❌</span><span>Failed — try again</span>';
-    console.error('[ED CHAT IMAGE] Upload failed:', err);
+  ZitlasChatAttach.confirmPreview(file).then(function(send) {
+    if (!send) return;
+    var now = new Date().toISOString();
+
+    /* Spinner placeholder while uploading */
+    var placeholder = document.createElement('div');
+    placeholder.className = 'zc-msg zc-msg--in zc-msg--first';
+    placeholder.innerHTML =
+      '<div class="zc-av">' + esc((expert.name || 'E')[0].toUpperCase()) + '</div>' +
+      '<div class="zc-bbl zc-bbl--img">' +
+        '<div class="zc-img-placeholder"><span class="zca-spinner"></span><span>Uploading…</span></div>' +
+      '</div>';
+    if (msgWrap) { msgWrap.appendChild(placeholder); msgWrap.scrollTop = msgWrap.scrollHeight; }
+
+    ZitlasChatAttach.upload(file).then(function(url) {
+      placeholder.remove();
+      var conv = chatGetConversation(_edChatConversationId);
+      var grouped = false;
+      if (conv && conv.messages && conv.messages.length) {
+        var last = conv.messages[conv.messages.length - 1];
+        grouped = edZcIsGrouped(last, { senderType: 'expert', timestamp: now });
+      }
+      var msg = chatSaveExpertReply(_edChatConversationId, expert, '', url);
+      if (!msg) return;
+      if (msgWrap) {
+        msgWrap.appendChild(buildExpertChatBubble(msg, expert.name, grouped));
+        msgWrap.scrollTop = msgWrap.scrollHeight;
+      }
+    }).catch(function(err) {
+      console.error('[ED CHAT IMAGE] Upload failed:', err);
+      var inner = placeholder.querySelector('.zc-img-placeholder');
+      if (inner) {
+        inner.classList.add('zc-img-placeholder--retry');
+        inner.innerHTML = '<span>❌</span><span>Upload failed</span><span class="zca-retry-label">Tap to retry</span>';
+        inner.addEventListener('click', function() {
+          placeholder.remove();
+          expertSendImageMessage(file, expert, msgWrap);
+        }, { once: true });
+      }
+    });
   });
 }
 
@@ -2143,6 +2118,15 @@ function initExpertChatImageAttach(expert, msgWrap) {
   var sheetCamera  = document.getElementById('edChatSheetCamera');
   var sheetGallery = document.getElementById('edChatSheetGallery');
   var sheetCancel  = document.getElementById('edChatSheetCancel');
+
+  /* openExpertChat() calls this on EVERY chat open — without a guard the
+     change listeners stack and one photo pick sends N duplicate messages.
+     The context is refreshed each call; the listeners are wired once and
+     read the latest context, so a naive early-return doesn't freeze the
+     first expert/msgWrap either. */
+  _edAttachCtx = { expert: expert, msgWrap: msgWrap };
+  if (initExpertChatImageAttach._wired) return;
+  initExpertChatImageAttach._wired = true;
 
   function openSheet()  { if (sheet) sheet.classList.add('open'); }
   function closeSheet() { if (sheet) sheet.classList.remove('open'); }
@@ -2166,18 +2150,19 @@ function initExpertChatImageAttach(expert, msgWrap) {
   if (fileInput) {
     fileInput.addEventListener('change', function() {
       var f = fileInput.files[0];
-      if (f) expertSendImageMessage(f, expert, msgWrap);
+      if (f && _edAttachCtx) expertSendImageMessage(f, _edAttachCtx.expert, _edAttachCtx.msgWrap);
       fileInput.value = '';
     });
   }
   if (cameraInput) {
     cameraInput.addEventListener('change', function() {
       var f = cameraInput.files[0];
-      if (f) expertSendImageMessage(f, expert, msgWrap);
+      if (f && _edAttachCtx) expertSendImageMessage(f, _edAttachCtx.expert, _edAttachCtx.msgWrap);
       cameraInput.value = '';
     });
   }
 }
+var _edAttachCtx = null; /* latest {expert, msgWrap} for the attach listeners */
 
 /* ══════════════════════════════════════════════
    EDIT PROFILE

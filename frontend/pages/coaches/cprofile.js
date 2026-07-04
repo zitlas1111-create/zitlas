@@ -924,7 +924,7 @@
     var ts = '';
     try { if (timestamp) ts = new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); } catch(_) {}
     var contentHtml = imageUrl
-      ? '<img class="chat-image" src="' + esc(imageUrl) + '" alt="Image" onclick="window.open(this.src)">'
+      ? '<img class="chat-image" src="' + esc(imageUrl) + '" alt="Image" onclick="ZitlasChatAttach.openViewer(this.src)">'
       : '<span class="zc-bbl-txt">' + esc(text).replace(/\n/g, '<br>') + '</span>';
     div.innerHTML =
       '<div class="zc-bbl' + (imageUrl ? ' zc-bbl--img' : '') + '">' +
@@ -942,7 +942,7 @@
     try { if (timestamp) ts = new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); } catch(_) {}
     var avHtml = grouped ? '<div class="zc-av-ghost"></div>' : '<div class="zc-av">' + esc(initials) + '</div>';
     var contentHtml = imageUrl
-      ? '<img class="chat-image" src="' + esc(imageUrl) + '" alt="Image" onclick="window.open(this.src)">'
+      ? '<img class="chat-image" src="' + esc(imageUrl) + '" alt="Image" onclick="ZitlasChatAttach.openViewer(this.src)">'
       : '<span class="zc-bbl-txt">' + esc(text).replace(/\n/g, '<br>') + '</span>';
     div.innerHTML =
       avHtml +
@@ -2898,91 +2898,72 @@
      CHAT IMAGE ATTACH
   ══════════════════════════════════════════ */
 
-  function compressImage(file) {
-    return new Promise(function(resolve, reject) {
-      var reader = new FileReader();
-      reader.onerror = reject;
-      reader.onload = function(e) {
-        var img = new Image();
-        img.onerror = reject;
-        img.onload = function() {
-          var MAX = 1280;
-          var w = img.naturalWidth, h = img.naturalHeight;
-          if (w > MAX || h > MAX) {
-            var scale = Math.min(MAX / w, MAX / h);
-            w = Math.round(w * scale);
-            h = Math.round(h * scale);
-          }
-          var canvas = document.createElement('canvas');
-          canvas.width = w; canvas.height = h;
-          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-          canvas.toBlob(function(blob) {
-            if (blob) resolve(blob); else reject(new Error('Canvas compression failed'));
-          }, 'image/jpeg', 0.8);
-        };
-        img.src = e.target.result;
-      };
-      reader.readAsDataURL(file);
-    });
-  }
-
-  async function uploadChatImage(file) {
-    console.log('[CHAT IMAGE] Compressing…', file.name, file.type, file.size);
-    var blob = await compressImage(file);
-    console.log('[CHAT IMAGE] Compressed to', blob.size, 'bytes — uploading…');
-    var fd = new FormData();
-    fd.append('file', blob, 'photo.jpg');
-    var resp = await fetch('/api/chat/upload', { method: 'POST', body: fd });
-    console.log('[CHAT IMAGE] Response status:', resp.status, resp.statusText);
-    if (!resp.ok) throw new Error('Upload failed (' + resp.status + ' ' + resp.statusText + ')');
-    var data = await resp.json();
-    console.log('[CHAT IMAGE] Server response:', data);
-    if (!data.success) throw new Error('Server rejected the image');
-    console.log('[CHAT IMAGE] URL:', data.url);
-    return data.url;
-  }
-
+  /* Compression + upload + preview + viewer live in the shared module
+     (assets/js/chat-attachments.js) so athlete and expert chat behave
+     identically. This function owns only the athlete-side flow:
+     validate -> preview (Cancel/Send) -> spinner bubble -> upload ->
+     persist, with a tappable Retry on failure. */
   function sendImageMessage(file) {
     var container = document.getElementById('chatMessages');
-    if (!container) return;
-    var now = new Date().toISOString();
+    if (!container || typeof ZitlasChatAttach === 'undefined') return;
 
-    /* Show placeholder while uploading */
-    var placeholder = document.createElement('div');
-    placeholder.className = 'zc-msg zc-msg--out zc-msg--first';
-    placeholder.innerHTML =
-      '<div class="zc-bbl zc-bbl--img">' +
-        '<div class="zc-img-placeholder"><span>📎</span><span>Uploading…</span></div>' +
-      '</div>';
-    container.appendChild(placeholder);
-    container.scrollTop = container.scrollHeight;
+    var v = ZitlasChatAttach.validate(file);
+    if (!v.ok) { showToast(v.reason); return; }
 
-    uploadChatImage(file).then(function(url) {
-      placeholder.remove();
-      var grouped = false;
-      if (_currentChatCoach) {
-        var conv = loadConversation(getConversationId(_currentChatCoach.id));
-        if (conv && conv.messages && conv.messages.length) {
-          var last = conv.messages[conv.messages.length - 1];
-          grouped = zcIsGrouped(last, { senderType: 'athlete', timestamp: now });
-        }
-      }
-      var msgEl = createUserMsg('', now, grouped, url);
-      container.appendChild(msgEl);
+    ZitlasChatAttach.confirmPreview(file).then(function(send) {
+      if (!send) return;
+      var now = new Date().toISOString();
+
+      /* Spinner placeholder while uploading */
+      var placeholder = document.createElement('div');
+      placeholder.className = 'zc-msg zc-msg--out zc-msg--first';
+      placeholder.innerHTML =
+        '<div class="zc-bbl zc-bbl--img">' +
+          '<div class="zc-img-placeholder"><span class="zca-spinner"></span><span>Uploading…</span></div>' +
+        '</div>';
+      container.appendChild(placeholder);
       container.scrollTop = container.scrollHeight;
-      if (_currentChatCoach) {
-        var conversationId = getConversationId(_currentChatCoach.id);
-        var msg = persistChatMessage(conversationId, 'athlete', '', url);
-        if (msg) msgEl.dataset.msgId = msg.id;
-      }
-    }).catch(function(err) {
-      var inner = placeholder.querySelector('.zc-img-placeholder');
-      if (inner) inner.innerHTML = '<span>❌</span><span>Failed — tap to retry</span>';
-      console.error('[CHAT IMAGE] Upload failed:', err);
+
+      ZitlasChatAttach.upload(file).then(function(url) {
+        placeholder.remove();
+        var grouped = false;
+        if (_currentChatCoach) {
+          var conv = loadConversation(getConversationId(_currentChatCoach.id));
+          if (conv && conv.messages && conv.messages.length) {
+            var last = conv.messages[conv.messages.length - 1];
+            grouped = zcIsGrouped(last, { senderType: 'athlete', timestamp: now });
+          }
+        }
+        var msgEl = createUserMsg('', now, grouped, url);
+        container.appendChild(msgEl);
+        container.scrollTop = container.scrollHeight;
+        if (_currentChatCoach) {
+          var conversationId = getConversationId(_currentChatCoach.id);
+          var msg = persistChatMessage(conversationId, 'athlete', '', url);
+          if (msg) msgEl.dataset.msgId = msg.id;
+        }
+      }).catch(function(err) {
+        console.error('[CHAT IMAGE] Upload failed:', err);
+        var inner = placeholder.querySelector('.zc-img-placeholder');
+        if (inner) {
+          inner.classList.add('zc-img-placeholder--retry');
+          inner.innerHTML = '<span>❌</span><span>Upload failed</span><span class="zca-retry-label">Tap to retry</span>';
+          inner.addEventListener('click', function() {
+            placeholder.remove();
+            sendImageMessage(file); /* fresh attempt, preview already confirmed? re-preview keeps it simple + safe */
+          }, { once: true });
+        }
+      });
     });
   }
 
   function initChatImageAttach() {
+    /* openChatOverlay() calls this on EVERY chat open — without this guard
+       the change listeners stack and one photo pick sends N duplicate
+       messages after N chat opens. */
+    if (initChatImageAttach._wired) return;
+    initChatImageAttach._wired = true;
+
     var attachBtn    = document.getElementById('chatAttachBtn');
     var fileInput    = document.getElementById('chatFileInput');
     var cameraInput  = document.getElementById('chatCameraInput');
