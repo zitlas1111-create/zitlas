@@ -2275,10 +2275,17 @@
       btn.disabled  = true;
       btn.className = 'cp-cta cp-cta--verify cp-cta--vp-done';
       btn.innerHTML = VP_SVG.check + ' Expert Reviewed';
+      /* Terminal state: the main button is a status label (disabled by
+         design). "Verify Again" is the re-request path — without this
+         reveal it stayed permanently hidden and the athlete could never
+         submit another review after the first one completed. */
+      if (againWrap) againWrap.style.display = '';
     } else if (st === 'rejected') {
       btn.disabled  = true;
       btn.className = 'cp-cta cp-cta--verify cp-cta--vp-rejected';
       btn.innerHTML = VP_SVG.clock + ' Review Rejected';
+      /* A rejected athlete must also be able to re-request */
+      if (againWrap) againWrap.style.display = '';
     } else {
       btn.disabled  = true;
       btn.className = 'cp-cta cp-cta--verify cp-cta--vp-pending';
@@ -2417,12 +2424,18 @@
     /* "Verify Again" button always opens the review-type selector sheet */
     if (verifyAgain) {
       verifyAgain.addEventListener('click', function() {
+        console.log('Expert Review button clicked (Verify Again)');
         openSheet();
       });
     }
 
-    /* Main button click — only accepted goes to chat, everything else opens the review sheet */
+    /* Main button click — only accepted goes to chat, everything else opens
+       the review sheet. NOTE: in pending/under-review/completed/rejected
+       states the button is disabled BY DESIGN (it is a status label) and
+       the browser fires no click event at all — re-requests go through the
+       "Verify Again" button that appears under it in terminal states. */
     openBtn.addEventListener('click', function() {
+      console.log('Expert Review button clicked — state:', openBtn.dataset.vpStatus || '(new)');
       var st = openBtn.dataset.vpStatus || '';
       if (st === 'accepted') {
         openChatOverlay('', buildContextPackage(), 'chat', coach);
