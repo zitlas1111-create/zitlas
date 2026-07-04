@@ -2452,14 +2452,26 @@
     var withdrawCancelBtn  = document.getElementById('withdrawCancelBtn');
     var withdrawConfirmBtn = document.getElementById('withdrawConfirmBtn');
 
+    /* display is JS-driven (inline none in the HTML) so a stale cached
+       stylesheet can never expose the dialog inline; .open drives the
+       200ms fade + scale(0.95 → 1) animation. */
+    function openWithdrawModal() {
+      if (!withdrawBackdrop) return;
+      withdrawBackdrop.style.display = 'flex';
+      requestAnimationFrame(function() {
+        requestAnimationFrame(function() { withdrawBackdrop.classList.add('open'); });
+      });
+    }
     function closeWithdrawModal() {
-      if (withdrawBackdrop) withdrawBackdrop.classList.remove('open');
+      if (!withdrawBackdrop) return;
+      withdrawBackdrop.classList.remove('open');
+      setTimeout(function() { withdrawBackdrop.style.display = 'none'; }, 200);
     }
 
     if (withdrawBtn && withdrawBackdrop) {
       withdrawBtn.addEventListener('click', function() {
         console.log('[WITHDRAW] button clicked');
-        withdrawBackdrop.classList.add('open');
+        openWithdrawModal();
       });
       withdrawBackdrop.addEventListener('click', function(e) {
         if (e.target === withdrawBackdrop) closeWithdrawModal();

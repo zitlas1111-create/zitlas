@@ -1741,23 +1741,33 @@ img { display: block; max-width: 100%; }
 }
 .cp-withdraw-btn svg { flex-shrink: 0; }
 
+/* display driven by JS (inline style) — .open drives the 200ms animation */
 .cp-withdraw-backdrop {
-  display: none;
   position: fixed; inset: 0; z-index: 11500;
   background: rgba(30,41,59,0.5);
   backdrop-filter: blur(5px);
   -webkit-backdrop-filter: blur(5px);
   align-items: center; justify-content: center;
   padding: 20px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
 }
-.cp-withdraw-backdrop.open { display: flex; }
+.cp-withdraw-backdrop.open { opacity: 1; }
 .cp-withdraw-modal {
-  background: rgba(255,255,255,0.96);
+  background: rgba(255,255,255,0.92);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
   border: 1px solid rgba(255,255,255,0.6);
   border-radius: 24px;
   padding: 24px 20px 20px;
   max-width: 340px; width: 100%;
   box-shadow: 0 24px 70px rgba(30,41,59,0.30);
+  transform: scale(0.95);
+  transition: transform 0.2s ease;
+}
+.cp-withdraw-backdrop.open .cp-withdraw-modal { transform: scale(1); }
+@media (prefers-reduced-motion: reduce) {
+  .cp-withdraw-backdrop, .cp-withdraw-modal { transition: none; }
 }
 .cp-withdraw-title {
   font-size: 16px; font-weight: 800; color: var(--text);
@@ -1773,9 +1783,10 @@ img { display: block; max-width: 100%; }
   font-size: 14px; font-weight: 700; cursor: pointer;
 }
 .cp-withdraw-cancel {
-  background: rgba(30,41,59,0.06);
-  border: 1px solid rgba(30,41,59,0.10);
-  color: var(--text-sec);
+  /* White outlined per spec */
+  background: #FFFFFF;
+  border: 1.5px solid rgba(30,41,59,0.18);
+  color: var(--text);
 }
 .cp-withdraw-confirm {
   background: #E5484D;

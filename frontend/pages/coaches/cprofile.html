@@ -4,7 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>ZITLAS — Expert Profile</title>
-  <link rel="stylesheet" href="cprofile.css" />
+  <!-- ?v= cache-buster: the server sends no cache-control header, so browsers
+       heuristically cache this file and can pair fresh HTML/JS with stale CSS.
+       Bump the version whenever this stylesheet changes. -->
+  <link rel="stylesheet" href="cprofile.css?v=20260704" />
   <link rel="stylesheet" href="../../assets/css/theme.css" />
   <link rel="stylesheet" href="" />
   <script src="../../assets/js/i18n.js"></script>
@@ -152,14 +155,17 @@
   </button>
 </div>
 
-<!-- Withdraw confirmation dialog -->
-<div class="cp-withdraw-backdrop" id="withdrawBackdrop">
+<!-- Withdraw confirmation dialog. Inline display:none is deliberate
+     defense-in-depth: even if a stale cached stylesheet is missing the
+     modal rules, the dialog can never render inline in the page flow.
+     Visibility is driven by JS (display + .open for the animation). -->
+<div class="cp-withdraw-backdrop" id="withdrawBackdrop" style="display:none" role="dialog" aria-modal="true" aria-labelledby="withdrawTitle">
   <div class="cp-withdraw-modal">
-    <p class="cp-withdraw-title">Withdraw Review Request?</p>
+    <p class="cp-withdraw-title" id="withdrawTitle">Withdraw Review Request?</p>
     <p class="cp-withdraw-sub">Are you sure you want to withdraw this review request?<br><br>The expert will no longer receive or be able to review this request.</p>
     <div class="cp-withdraw-actions">
       <button class="cp-withdraw-cancel" id="withdrawCancelBtn">Cancel</button>
-      <button class="cp-withdraw-confirm" id="withdrawConfirmBtn">Withdraw</button>
+      <button class="cp-withdraw-confirm" id="withdrawConfirmBtn">Withdraw Request</button>
     </div>
   </div>
 </div>
