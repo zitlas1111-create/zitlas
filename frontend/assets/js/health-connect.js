@@ -69,4 +69,18 @@
     },
   };
 
+  /* Spec-named helper: availability check + permission sheet in one call.
+     Resolves { available, granted }. Safe in browsers ({available:false}). */
+  window.requestHealthPermissions = function () {
+    return window.HealthConnect.isAvailable().then(function (st) {
+      if (!st.available) return { available: false, granted: false };
+      return window.HealthConnect.requestPermissions().then(function (p) {
+        return { available: true, granted: !!p.permissionGranted };
+      });
+    }).catch(function (e) {
+      console.error('[HealthConnect] requestHealthPermissions failed', e);
+      return { available: false, granted: false };
+    });
+  };
+
 })();

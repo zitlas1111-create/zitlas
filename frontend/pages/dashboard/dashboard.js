@@ -1252,15 +1252,21 @@
      without touching the UI code.
   ══════════════════════════════════════════ */
 
-  /* Baseline zeros — Health Connect overwrites with real data when available */
-  window.zitlasSteps = window.zitlasSteps || {
-    today_steps:     0,
-    daily_step_goal: 10000,
-    calories_burned: 0,
-    distance_km:     0,
-    active_minutes:  85,
-    streak_days:     7,
-  };
+  /* Baseline — hydrated from the persisted activity model (activity-service)
+     so a browser or offline launch shows the last real values, not dummies.
+     Health Connect then overwrites with live data when available. */
+  window.zitlasSteps = window.zitlasSteps || (function () {
+    const A = window.ZitlasActivity, S = window.ZitlasStreak;
+    const t = A ? A.getToday() : null;
+    return {
+      today_steps:     t ? t.steps         : 0,
+      daily_step_goal: A ? A.getDailyGoal() : 10000,
+      calories_burned: t ? t.calories      : 0,
+      distance_km:     t ? t.distance      : 0,
+      active_minutes:  t ? t.activeMinutes : 0,
+      streak_days:     S ? S.getStreak().currentStreak : 0,
+    };
+  })();
 
   /* Returns { pct, circumference, targetOffset } for the SVG ring */
   function calculateStepProgress() {
@@ -1331,16 +1337,32 @@
     const mStr    = `${mins % 60}m`;
     const timeStr = hStr + mStr;
 
-    /* Remaining steps */
+    /* Status line: "X steps left" / "target completed" / "exceeded by X".
+       activity-service owns the message rules; inline fallback matches. */
     const remaining = Math.max((d.daily_step_goal || 10000) - (d.today_steps || 0), 0);
-    const remainingLine = remaining === 0
-      ? `<p class="sac-remaining sac-remaining--done">🎉 Goal completed! Amazing work today.</p>`
-      : `<p class="sac-remaining">🚀 ${remaining.toLocaleString()} steps left today</p>`;
+    const statusText = window.ZitlasActivity
+      ? window.ZitlasActivity.getStatusMessage()
+      : (remaining === 0
+          ? `🎉 Today's target completed!`
+          : `🚀 ${remaining.toLocaleString()} steps left today`);
+    const remainingLine =
+      `<p class="sac-remaining${remaining === 0 ? ' sac-remaining--done' : ''}">${statusText}</p>`;
 
     /* Motivational message */
     const motiveMsg = pctRounded >= 100
-      ? `🏆 Outstanding! You've smashed today's goal!`
+      ? `🔥 Goal achieved! Keep moving!`
       : `🚶 Keep going, you're ${pctRounded}% of the way there!`;
+
+    /* Weekly summary strip (Mon ✅ Tue ✅ Wed ❌ …) */
+    let weeklyHtml = '';
+    if (window.ZitlasActivity) {
+      const wk = window.ZitlasActivity.getWeeklySummary();
+      weeklyHtml = `<div class="sac-week-row">` + wk.map(w => {
+        const mark = w.status === 'done' ? '✅' : w.status === 'missed' ? '❌' : w.status === 'today' ? '·' : '–';
+        return `<span class="sac-week-day${w.status === 'today' ? ' sac-week-day--today' : ''}">` +
+               `<b>${w.day}</b><em>${mark}</em></span>`;
+      }).join('') + `</div>`;
+    }
 
     /* Streak badge */
     const streakDays  = d.streak_days || 0;
@@ -1406,6 +1428,8 @@
             </div>
           </div>
 
+          ${weeklyHtml}
+
           ${streakBadge}
 
           <p class="sac-motive">${motiveMsg}</p>
@@ -1413,6 +1437,9 @@
 
       </div>
     `;
+
+    /* Ring turns green once the goal is reached (orange before) */
+    content.classList.toggle('sac-goal-done', pctRounded >= 100);
 
     /* Animate ring + count-up + percentage after two frames */
     requestAnimationFrame(() => {
@@ -1788,32 +1815,29 @@
   async function loadHealthConnectData() {
     console.log('[HealthConnect] Plugin:', !!(window.Capacitor?.Plugins?.HealthConnect));
 
-    if (!window.Capacitor) return;
+    /* Full pipeline: rollover -> Health Connect read -> persist (localStorage
+       + Firestore) -> goal/streak settle -> "zitlas-activity-updated" event,
+       which applyActivityModel() below turns into a re-render. Runs in the
+       browser too (Health Connect just reports unavailable there). */
+    if (window.ZitlasActivitySync) {
+      /* Ask for permissions first on native so the first sync has data */
+      if (window.Capacitor && window.requestHealthPermissions) {
+        try { await window.requestHealthPermissions(); } catch (_) {}
+      }
+      window.ZitlasActivitySync.syncTodayActivity();
+      return;
+    }
 
+    /* Legacy inline path — only reached if the activity modules failed to load */
+    if (!window.Capacitor) return;
     try {
       const HealthConnect = window.Capacitor.Plugins.HealthConnect;
-      if (!HealthConnect) {
-        console.log('[HealthConnect] Plugin not found — using dummy data');
-        return;
-      }
-
+      if (!HealthConnect) return;
       const status = await HealthConnect.isAvailable();
-      console.log('[HealthConnect] Status:', status);
-      if (!status.available) {
-        console.log('[HealthConnect] Not installed — using dummy data');
-        return;
-      }
-
+      if (!status.available) return;
       const permission = await HealthConnect.requestPermissions();
-      console.log('[HealthConnect] Permission:', permission);
-      if (!permission.permissionGranted) {
-        console.log('[HealthConnect] Permission denied — using dummy data');
-        return;
-      }
-
+      if (!permission.permissionGranted) return;
       const activity = await HealthConnect.getTodayActivity();
-      console.log('[HealthConnect] Activity:', activity);
-
       window.zitlasSteps = {
         today_steps:     activity.today_steps     || 0,
         daily_step_goal: window.zitlasSteps?.daily_step_goal || 10000,
@@ -1822,13 +1846,27 @@
         active_minutes:  activity.active_minutes  || 0,
         streak_days:     window.zitlasSteps?.streak_days    || 0,
       };
-
-      console.log('[HealthConnect] Updated Steps:', window.zitlasSteps);
       renderStepCounterCard();
-
     } catch (e) {
       console.error('[HealthConnect] Failed:', e);
     }
   }
+
+  /* Single render path for activity updates — fired by activity-sync.js on
+     every sync (app open, foreground resume, midnight rollover). */
+  function applyActivityModel(model) {
+    window.zitlasSteps = {
+      today_steps:     model.steps         || 0,
+      daily_step_goal: window.ZitlasActivity ? window.ZitlasActivity.getDailyGoal() : 10000,
+      calories_burned: model.calories      || 0,
+      distance_km:     model.distance      || 0,
+      active_minutes:  model.activeMinutes || 0,
+      streak_days:     window.ZitlasStreak ? window.ZitlasStreak.getStreak().currentStreak : 0,
+    };
+    renderStepCounterCard();
+  }
+  window.addEventListener('zitlas-activity-updated', (e) => {
+    if (e.detail) applyActivityModel(e.detail);
+  });
 
 })();

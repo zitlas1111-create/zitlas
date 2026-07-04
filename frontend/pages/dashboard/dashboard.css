@@ -1988,14 +1988,47 @@ a   { text-decoration: none; }
   stroke: var(--primary-hover);
   filter: blur(8px);
   opacity: 0.5;
-  transition: stroke-dashoffset 1s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  transition: stroke-dashoffset 1s cubic-bezier(0.25, 0.46, 0.45, 0.94), stroke 0.8s ease;
 }
 
-/* Crisp progress arc */
+/* Crisp progress arc — orange while working toward the goal */
 .sac-ring-progress {
   stroke: var(--primary);
-  transition: stroke-dashoffset 1s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  transition: stroke-dashoffset 1s cubic-bezier(0.25, 0.46, 0.45, 0.94), stroke 0.8s ease;
 }
+
+/* Goal reached: the ring animates orange -> green (class set by
+   renderStepCounterCard on #stepCounterContent when pct >= 100) */
+.sac-goal-done .sac-ring-progress { stroke: var(--success); }
+.sac-goal-done .sac-ring-glow     { stroke: var(--success); }
+
+/* ── Weekly summary strip (Mon ✅ Tue ✅ Wed ❌ …) ── */
+.sac-week-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+  margin: 10px 0 2px;
+  padding: 8px 10px;
+  background: rgba(255,255,255,0.55);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+.sac-week-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 26px;
+}
+.sac-week-day b {
+  font-size: 9px;
+  font-weight: 800;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.sac-week-day em { font-style: normal; font-size: 11px; line-height: 1; }
+.sac-week-day--today b { color: var(--primary); }
 
 /* ── Center text ── */
 .sac-ring-center {
