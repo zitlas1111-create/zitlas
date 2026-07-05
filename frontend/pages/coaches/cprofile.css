@@ -1797,6 +1797,83 @@ img { display: block; max-width: 100%; }
 .cp-withdraw-confirm:disabled { opacity: 0.6; }
 .cp-withdraw-cancel:active, .cp-withdraw-confirm:active { transform: scale(0.97); }
 
+/* ── Personal Coaching ── */
+.cp-cta--coach,
+.cp-sb-btn--coach {
+  background: linear-gradient(135deg, #6BA539, #578A2C);
+  color: #fff;
+  box-shadow: 0 10px 26px rgba(107,165,57,0.35);
+}
+.cp-cta--coach:active, .cp-sb-btn--coach:active { transform: scale(0.97); }
+/* Active relationship state */
+.cp-cta--coach.cp-coach-active,
+.cp-sb-btn--coach.cp-coach-active {
+  background: rgba(107,165,57,0.12);
+  color: #578A2C;
+  border: 1.5px solid rgba(107,165,57,0.4);
+  box-shadow: none;
+}
+
+.cp-coaching-backdrop {
+  position: fixed; inset: 0; z-index: 11500;
+  background: rgba(30,41,59,0.5);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  align-items: center; justify-content: center;
+  padding: 20px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.cp-coaching-backdrop.open { opacity: 1; }
+.cp-coaching-modal {
+  background: rgba(255,255,255,0.94);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(255,255,255,0.6);
+  border-radius: 28px;
+  padding: 26px 22px 18px;
+  max-width: 360px; width: 100%;
+  box-shadow: 0 24px 70px rgba(30,41,59,0.30);
+  text-align: center;
+  transform: scale(0.95);
+  transition: transform 0.2s ease;
+}
+.cp-coaching-backdrop.open .cp-coaching-modal { transform: scale(1); }
+.cp-coaching-icon  { font-size: 40px; margin-bottom: 6px; }
+.cp-coaching-title { font-size: 19px; font-weight: 900; color: var(--text); margin: 0 0 2px; }
+.cp-coaching-coach { font-size: 13px; color: var(--text-sec); margin: 0 0 12px; }
+.cp-coaching-price {
+  font-size: 30px; font-weight: 900; color: #578A2C;
+  margin-bottom: 14px;
+}
+.cp-coaching-price em { font-size: 13px; font-weight: 600; font-style: normal; color: var(--text-muted); }
+.cp-coaching-perks {
+  list-style: none; margin: 0 0 18px; padding: 0;
+  text-align: left; display: flex; flex-direction: column; gap: 8px;
+}
+.cp-coaching-perks li { font-size: 12.5px; color: var(--text-sec); line-height: 1.45; }
+.cp-coaching-actions { display: flex; gap: 10px; }
+.cp-coaching-cancel, .cp-coaching-confirm {
+  flex: 1; padding: 13px; border-radius: 14px;
+  font-size: 14px; font-weight: 700; cursor: pointer;
+}
+.cp-coaching-cancel {
+  background: #FFFFFF;
+  border: 1.5px solid rgba(30,41,59,0.18);
+  color: var(--text);
+}
+.cp-coaching-confirm {
+  background: linear-gradient(135deg, #6BA539, #578A2C);
+  border: none; color: #fff;
+  box-shadow: 0 8px 20px rgba(107,165,57,0.35);
+}
+.cp-coaching-confirm:disabled { opacity: 0.6; }
+.cp-coaching-cancel:active, .cp-coaching-confirm:active { transform: scale(0.97); }
+.cp-coaching-note { font-size: 11px; color: var(--text-muted); margin: 12px 0 0; }
+@media (prefers-reduced-motion: reduce) {
+  .cp-coaching-backdrop, .cp-coaching-modal { transition: none; }
+}
+
 /* ══════════════════════════════════════════════════
    PREVIOUS REVIEWS SECTION — small text-link style
 ══════════════════════════════════════════════════ */

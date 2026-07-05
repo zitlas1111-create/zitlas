@@ -3363,16 +3363,167 @@
       var modal = document.getElementById('contextModal');
       if (modal) { modal.classList.add('open'); document.body.style.overflow = 'hidden'; }
     }
-    function openCallStub() { showToast('Voice call — launching soon'); }
 
     ['inlineChatBtn', 'stickyChatBtn'].forEach(function(id) {
       var btn = document.getElementById(id);
       if (btn) btn.addEventListener('click', openChatModal);
     });
-    ['inlineCallBtn', 'stickyCallBtn'].forEach(function(id) {
-      var btn = document.getElementById(id);
-      if (btn) btn.addEventListener('click', openCallStub);
+    /* The old Call Now buttons here were always a stub toast — real calling
+       lives in the chat header. They are now the Personal Coaching entry. */
+    initPersonalCoaching(coach);
+  }
+
+  /* ══════════════════════════════════════════
+     PERSONAL COACHING
+     Firestore: personal_coaching/{athleteUid}
+       { coachId, coachName, athleteId, athleteName, startDate, endDate,
+         status, subscriptionId, paymentId, fee }
+     Doc id = athlete uid → structurally ONE relationship doc per athlete;
+     a transaction guards against replacing a different coach's active
+     subscription. Ended/expired relationships flip status, never delete.
+  ══════════════════════════════════════════ */
+  var COACHING_DEFAULT_FEE = 999;
+
+  function _coachingIsActive(rel) {
+    return !!(rel && rel.status === 'active' &&
+      (!rel.endDate || new Date(rel.endDate) > new Date()));
+  }
+
+  function initPersonalCoaching(coach) {
+    var fee        = parseInt(coach.coachingFee, 10) || COACHING_DEFAULT_FEE;
+    var backdrop   = document.getElementById('coachingBackdrop');
+    var cancelBtn  = document.getElementById('coachingCancelBtn');
+    var confirmBtn = document.getElementById('coachingConfirmBtn');
+    var priceEl    = document.getElementById('coachingPrice');
+    var coachEl    = document.getElementById('coachingCoachName');
+    var buttons    = ['personalCoachBtn', 'stickyCoachBtn']
+      .map(function(id) { return document.getElementById(id); })
+      .filter(Boolean);
+
+    if (priceEl) priceEl.textContent = '₹' + fee;
+    if (coachEl) coachEl.textContent = 'with ' + (coach.name || 'your expert');
+
+    var _myCoaching = null; /* latest personal_coaching doc for this athlete */
+
+    function updateCoachButtons() {
+      var active = _coachingIsActive(_myCoaching);
+      buttons.forEach(function(btn) {
+        var isMine = active && _myCoaching.coachId === coach.id;
+        btn.classList.toggle('cp-coach-active', isMine);
+        btn.innerHTML = btn.innerHTML.replace(/Personal Coach|Your Coach ✓/, isMine ? 'Your Coach ✓' : 'Personal Coach');
+      });
+    }
+
+    function openCoachingModal() {
+      if (!backdrop) return;
+      backdrop.style.display = 'flex';
+      requestAnimationFrame(function() {
+        requestAnimationFrame(function() { backdrop.classList.add('open'); });
+      });
+    }
+    function closeCoachingModal() {
+      if (!backdrop) return;
+      backdrop.classList.remove('open');
+      setTimeout(function() { backdrop.style.display = 'none'; }, 200);
+    }
+
+    buttons.forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        console.log('[COACHING] button clicked');
+        if (_coachingIsActive(_myCoaching)) {
+          if (_myCoaching.coachId === coach.id) {
+            /* Already my coach — go straight to the coaching chat */
+            openChatOverlay('', buildContextPackage(), 'chat', coach);
+          } else {
+            showToast('You already have an active coach: ' + (_myCoaching.coachName || 'another expert') + '. One coach at a time.');
+          }
+          return;
+        }
+        openCoachingModal();
+      });
     });
+
+    if (cancelBtn) cancelBtn.addEventListener('click', closeCoachingModal);
+    if (backdrop) backdrop.addEventListener('click', function(e) {
+      if (e.target === backdrop) closeCoachingModal();
+    });
+
+    if (confirmBtn) {
+      confirmBtn.addEventListener('click', function() {
+        if (typeof ZitlasDB === 'undefined') {
+          showToast('Connection unavailable — please try again.');
+          return;
+        }
+        var uid = _getMyUserId();
+        if (!uid) { showToast('Please sign in first.'); return; }
+
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = 'Activating…';
+
+        /* ─── RAZORPAY SEAM ────────────────────────────────────────────
+           Real payment goes HERE, before the Firestore write:
+           1. POST /api/coaching/create-order (backend, key_secret) → order_id
+           2. new Razorpay({key, order_id, handler}) .open()
+           3. In handler: verify signature server-side, then run the
+              transaction below with the real paymentId/subscriptionId.
+           Until merchant keys are configured, activation proceeds with an
+           explicit 'payment_pending_razorpay' marker so relationships are
+           auditable and no fake payment success is ever recorded. */
+
+        var now     = new Date();
+        var endDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+        var docRef  = ZitlasDB.collection('personal_coaching').doc(uid);
+        var payload = {
+          coachId:        coach.id,
+          coachName:      coach.name || 'Expert',
+          athleteId:      uid,
+          athleteName:    getAthleteName(),
+          startDate:      now.toISOString(),
+          endDate:        endDate.toISOString(),
+          status:         'active',
+          subscriptionId: 'sub_' + Date.now(),
+          paymentId:      'payment_pending_razorpay',
+          fee:            fee,
+        };
+        console.log('[COACHING] activating — personal_coaching/' + uid, payload);
+
+        ZitlasDB.runTransaction(function(tx) {
+          return tx.get(docRef).then(function(snap) {
+            var rel = snap.exists ? snap.data() : null;
+            if (_coachingIsActive(rel) && rel.coachId !== coach.id) throw new Error('other_coach_active');
+            tx.set(docRef, payload);
+          });
+        }).then(function() {
+          console.log('[COACHING] activated with', coach.name);
+          _myCoaching = payload;
+          updateCoachButtons();
+          closeCoachingModal();
+          showToast('🎉 ' + (coach.name || 'Your expert') + ' is now your personal coach!');
+        }).catch(function(err) {
+          console.error('[COACHING] activation failed:', err && err.message);
+          closeCoachingModal();
+          showToast(err && err.message === 'other_coach_active'
+            ? 'You already have an active coach. One coach at a time.'
+            : 'Could not activate coaching — please try again.');
+        }).then(function() {
+          confirmBtn.disabled = false;
+          confirmBtn.textContent = 'Activate Coaching';
+        });
+      });
+    }
+
+    /* Realtime relationship state — button reflects Firestore instantly */
+    if (typeof ZitlasDB !== 'undefined') {
+      var uid = _getMyUserId();
+      if (uid) {
+        ZitlasDB.collection('personal_coaching').doc(uid).onSnapshot(function(snap) {
+          _myCoaching = snap.exists ? snap.data() : null;
+          console.log('[COACHING] relationship:', _myCoaching
+            ? _myCoaching.status + ' with ' + _myCoaching.coachName : 'none');
+          updateCoachButtons();
+        }, function(err) { console.warn('[COACHING] listener error', err); });
+      }
+    }
   }
 
   /* ══════════════════════════════════════════

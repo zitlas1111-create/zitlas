@@ -1003,6 +1003,33 @@ a      { text-decoration: none; color: inherit; }
 .ed-empty-title { font-size: 15px; font-weight: 800; color: var(--text-sec); }
 .ed-empty-sub   { font-size: 13px; color: var(--text-muted); line-height: 1.5; max-width: 240px; }
 
+/* ── My Athletes (personal coaching) ── */
+.ed-athlete-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  margin-bottom: 10px;
+  border-radius: 22px;
+  background: rgba(255,255,255,0.78);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255,255,255,0.6);
+  box-shadow: 0 12px 28px rgba(107,165,57,0.08), 0 6px 14px rgba(255,152,0,0.06);
+}
+.ed-athlete-av {
+  width: 44px; height: 44px; border-radius: 50%;
+  background: linear-gradient(135deg, #A9C46C, #6BA539);
+  border: 2px solid rgba(255,255,255,0.85);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 800; color: #fff;
+  flex-shrink: 0;
+}
+.ed-athlete-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ed-athlete-name { font-size: 14px; font-weight: 800; color: var(--text); }
+.ed-athlete-sub  { font-size: 11.5px; color: var(--text-muted); }
+.ed-athlete-chat { flex-shrink: 0; }
+
 /* ══════════════════════════════════════════════
    BOTTOM NAV
    ══════════════════════════════════════════════ */

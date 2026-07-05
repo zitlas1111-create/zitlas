@@ -1255,6 +1255,72 @@ function startExpertChatMessagesListener(conversationId) {
 }
 
 /* ══════════════════════════════════════════════
+   MY ATHLETES — personal coaching clients
+   Reads personal_coaching where coachId == live uid (realtime). A doc's
+   status/endDate decides activity; ended relationships simply drop out.
+   ══════════════════════════════════════════════ */
+function listenForMyAthletes(expert) {
+  if (typeof ZitlasDB === 'undefined') return;
+  var uid = (typeof ZitlasAuth !== 'undefined' && ZitlasAuth.currentUser)
+    ? ZitlasAuth.currentUser.uid
+    : (expert && expert.id);
+  if (!uid) return;
+  if (listenForMyAthletes._attachedFor === uid) return;
+  listenForMyAthletes._attachedFor = uid;
+
+  console.log('[COACHING] listening: personal_coaching.where(coachId ==', uid + ')');
+  ZitlasDB.collection('personal_coaching')
+    .where('coachId', '==', uid)
+    .onSnapshot(function(snap) {
+      var rels = snap.docs.map(function(d) { return d.data(); })
+        .filter(function(r) {
+          return r.status === 'active' && (!r.endDate || new Date(r.endDate) > new Date());
+        });
+      console.log('[COACHING] active athletes:', rels.length);
+      renderMyAthletes(rels, expert);
+    }, function(err) { console.warn('[COACHING] athletes listener error', err); });
+}
+
+function renderMyAthletes(rels, expert) {
+  var wrap  = document.getElementById('myAthletesList');
+  var empty = document.getElementById('myAthletesEmpty');
+  if (!wrap) return;
+
+  if (!rels.length) {
+    wrap.querySelectorAll('.ed-athlete-card').forEach(function(el) { el.remove(); });
+    if (empty) empty.style.display = '';
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+  wrap.querySelectorAll('.ed-athlete-card').forEach(function(el) { el.remove(); });
+
+  rels.forEach(function(rel) {
+    var daysLeft = rel.endDate
+      ? Math.max(0, Math.ceil((new Date(rel.endDate) - new Date()) / 86400000))
+      : null;
+    var name     = rel.athleteName || 'Athlete';
+    var initials = name.split(/\s+/).map(function(w) { return w[0] || ''; }).slice(0, 2).join('').toUpperCase();
+
+    var card = document.createElement('div');
+    card.className = 'ed-athlete-card';
+    card.innerHTML =
+      '<div class="ed-athlete-av">' + esc(initials) + '</div>' +
+      '<div class="ed-athlete-info">' +
+        '<span class="ed-athlete-name">' + esc(name) + '</span>' +
+        '<span class="ed-athlete-sub">Coaching since ' +
+          esc(new Date(rel.startDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })) +
+          (daysLeft !== null ? ' · ' + daysLeft + ' days left' : '') + '</span>' +
+      '</div>' +
+      '<button class="erc-btn erc-btn--primary ed-athlete-chat">Chat</button>';
+
+    card.querySelector('.ed-athlete-chat').addEventListener('click', function() {
+      openExpertChat('chat_' + rel.athleteId + '_' + rel.coachId, name);
+    });
+    wrap.appendChild(card);
+  });
+}
+
+/* ══════════════════════════════════════════════
    CHAT ROOM DISCOVERY — the fix for the empty Client Chats inbox.
 
    A conversation started on the athlete's device exists only in THAT
@@ -4492,6 +4558,8 @@ function renderAll(baseExpert) {
   listenForReviews(expert);
   /* Discover chat conversations from Firestore (cross-device inbox + calls) */
   listenForChatRooms(expert);
+  /* Personal coaching clients (realtime) */
+  listenForMyAthletes(expert);
   /* Auto-open chat when returning from a modify page after completing review */
   _prCheckPendingChatOpen(expert);
 
