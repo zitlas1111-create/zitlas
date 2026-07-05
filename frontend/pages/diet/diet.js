@@ -937,6 +937,9 @@
         const day   = weeklyPlan && weeklyPlan.days && weeklyPlan.days[currentDay];
         const meals = day && day.meals ? day.meals : [];
         const meal  = meals.find((m) => (m.meal_name || '') === mealName);
+        /* Coach-managed meal → coach's predefined options ONLY; the AI swap
+           modal (global food dataset) must never open in coach mode. */
+        if (meal && meal._coach) { openCoachOptionSheet(meal); return; }
         openSwapModal(mealName, meal ? (meal.foods || []) : [], meal ? (meal.time || '') : '');
       });
     });
@@ -1408,6 +1411,216 @@
   /* ══════════════════════════════════════════
      MAIN INIT
   ══════════════════════════════════════════ */
+  /* ══════════════════════════════════════════
+     PERSONAL COACHING MODE
+     With an active (or ended-but-kept) Personal Coaching relationship that
+     includes diet permission, the coach-authored plan in
+     coaching_plans/{uid} REPLACES the AI plan on this page. Swapping a meal
+     offers ONLY the coach's predefined options — the AI swap flow and the
+     global food dataset are never queried while a coach plan is shown.
+     Everything below is inert when Firebase isn't loaded or no relationship
+     exists, so the AI diet path is untouched.
+  ══════════════════════════════════════════ */
+  var _pcRel     = null;   /* personal_coaching/{uid} */
+  var _pcPlanDoc = null;   /* coaching_plans/{uid} */
+  var _pcActive  = false;  /* coach plan currently rendered */
+
+  function _pcUid() {
+    try {
+      var fb = JSON.parse(localStorage.getItem('zitlas_firebase_user') || 'null');
+      return fb && fb.uid;
+    } catch (_) { return null; }
+  }
+  /* Render eligibility: active OR ended (athlete keeps the last coach plan).
+     Interactive requests (Ask Expert) additionally require active. */
+  function _pcShowsCoachPlan() {
+    return !!(_pcRel && (_pcRel.status === 'active' || _pcRel.status === 'ended') &&
+      (_pcRel.planType === 'diet' || _pcRel.planType === 'complete'));
+  }
+
+  function initCoachDietMode() {
+    if (typeof ZitlasDB === 'undefined') return;
+    var uid = _pcUid();
+    if (!uid) return;
+    ZitlasDB.collection('personal_coaching').doc(uid).onSnapshot(function (snap) {
+      _pcRel = snap.exists ? snap.data() : null;
+      console.log('[DIET COACH] relationship:', _pcRel ? _pcRel.status + '/' + _pcRel.planType : 'none');
+      if (_pcShowsCoachPlan() && !initCoachDietMode._planAttached) {
+        initCoachDietMode._planAttached = true;
+        ZitlasDB.collection('coaching_plans').doc(uid).onSnapshot(function (ps) {
+          _pcPlanDoc = ps.exists ? ps.data() : null;
+          applyCoachDiet();
+        }, function (e) { console.warn('[DIET COACH] plan listener error', e); });
+      }
+      applyCoachDiet();
+    }, function (e) { console.warn('[DIET COACH] rel listener error', e); });
+  }
+
+  var _PC_EMOJI = { breakfast: '🍳', lunch: '🍛', snacks: '🍎', snack: '🍎', dinner: '🥗' };
+
+  function applyCoachDiet() {
+    var coachDiet = _pcPlanDoc && _pcPlanDoc.diet;
+    if (!_pcShowsCoachPlan() || !coachDiet || !coachDiet.days || !coachDiet.days.length) {
+      /* Not eligible / no coach plan — leave the AI flow exactly as-is.
+         If we had been showing a coach plan and it disappeared, reload to
+         restore the pristine AI pipeline rather than half-reverting state. */
+      if (_pcActive) { _pcActive = false; window.location.reload(); }
+      return;
+    }
+    var selections = _pcPlanDoc.dietSelections || {};
+    weeklyPlan = {
+      plan_name: 'Coach Plan',
+      days: coachDiet.days.map(function (d) {
+        return {
+          day: d.day,
+          theme: '👨‍🏫 Coached by ' + (_pcPlanDoc.coachName || 'your expert'),
+          day_type: d.day,
+          meals: (d.meals || []).map(function (m) {
+            var opts = (m.options || []).filter(function (o) { return o && o.name; });
+            var key = d.day + ':' + m.id;
+            var selIdx = Math.min(selections[key] || 0, Math.max(0, opts.length - 1));
+            var opt = opts[selIdx] || {};
+            return {
+              meal_name: m.name || 'Meal',
+              time: m.time || '',
+              foods: [opt.name || '— (coach hasn’t filled this meal yet)'],
+              calories: opt.calories || null,
+              purpose: [opt.calories ? opt.calories + ' kcal' : '', opt.protein ? opt.protein + 'g protein' : '', opt.notes || '']
+                .filter(Boolean).join(' · '),
+              emoji: _PC_EMOJI[(m.name || '').toLowerCase()] || '🍽️',
+              color: '#6BA539',
+              _coach: { day: d.day, mealId: m.id, mealName: m.name || 'Meal', options: opts, selIdx: selIdx },
+            };
+          }),
+        };
+      }),
+    };
+    planSource = 'coach';
+    _pcActive = true;
+    showLoading(false);
+    _pcRenderBanner();
+    try { renderFocusCard(weeklyPlan, null); } catch (_) {}
+    if (currentDay >= weeklyPlan.days.length) currentDay = 0;
+    renderDay(currentDay);
+    console.log('[DIET COACH] coach plan rendered —', weeklyPlan.days.length, 'days');
+  }
+
+  function _pcRenderBanner() {
+    var mealList = document.getElementById('mealList');
+    if (!mealList) return;
+    var banner = document.getElementById('pcCoachBanner');
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.id = 'pcCoachBanner';
+      banner.className = 'cw-readonly-note';
+      banner.style.margin = '0 16px 12px';
+      mealList.parentNode.insertBefore(banner, mealList);
+    }
+    banner.innerHTML = _pcRel.status === 'active'
+      ? '👨‍🏫 Diet managed by <b>&nbsp;' + (_pcPlanDoc.coachName || 'your coach') + '</b>&nbsp;— swaps use your coach’s options only.'
+      : '👨‍🏫 Coaching ended — you’re keeping your coach’s last diet plan.';
+  }
+
+  /* Coach-option picker (replaces the AI swap flow in coach mode).
+     Styled by assets/css/coaching-workspace.css (cw-*). */
+  function _pcEnsureSheet() {
+    var bd = document.getElementById('pcSheetBackdrop');
+    if (bd) return bd;
+    bd = document.createElement('div');
+    bd.id = 'pcSheetBackdrop';
+    bd.className = 'cw-sheet-backdrop';
+    bd.innerHTML = '<div class="cw-sheet" id="pcSheet"></div>';
+    document.body.appendChild(bd);
+    bd.addEventListener('click', function (e) { if (e.target === bd) _pcCloseSheet(); });
+    return bd;
+  }
+  function _pcOpenSheet(html) {
+    var bd = _pcEnsureSheet();
+    document.getElementById('pcSheet').innerHTML = html;
+    bd.style.display = 'flex';
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () { bd.classList.add('open'); });
+    });
+  }
+  function _pcCloseSheet() {
+    var bd = document.getElementById('pcSheetBackdrop');
+    if (!bd) return;
+    bd.classList.remove('open');
+    setTimeout(function () { bd.style.display = 'none'; }, 200);
+  }
+
+  function openCoachOptionSheet(meal) {
+    var c = meal._coach;
+    var canAsk = _pcRel && _pcRel.status === 'active';
+    var optsHtml = c.options.length ? c.options.map(function (o, i) {
+      var meta = [];
+      if (o.calories) meta.push(o.calories + ' kcal');
+      if (o.protein) meta.push(o.protein + 'g protein');
+      return '<button class="cw-opt-choice' + (i === c.selIdx ? ' selected' : '') + '" data-pc-pick="' + i + '">' +
+        '<span class="cw-opt-choice-label">Option ' + (i + 1) + (i === c.selIdx ? ' · current' : '') + '</span>' +
+        '<span class="cw-opt-choice-name">' + esc(o.name) + '</span>' +
+        (meta.length || o.notes
+          ? '<span class="cw-opt-choice-meta">' + esc(meta.join(' · ')) + (o.notes ? (meta.length ? ' · ' : '') + esc(o.notes) : '') + '</span>'
+          : '') +
+        '</button>';
+    }).join('') : '<p class="cw-sheet-sub">Your coach hasn’t added alternatives for this meal yet.</p>';
+
+    _pcOpenSheet(
+      '<p class="cw-sheet-title">Swap ' + esc(c.mealName) + '</p>' +
+      '<p class="cw-sheet-sub">' + esc(c.day) + ' — choose one of your coach’s options.</p>' +
+      optsHtml +
+      (canAsk ? '<button class="cw-ghost-btn" style="width:100%;margin-top:6px" id="pcAskExpert">💬 Ask Expert for new options</button>' : '')
+    );
+
+    var sheet = document.getElementById('pcSheet');
+    sheet.querySelectorAll('[data-pc-pick]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var idx = parseInt(b.dataset.pcPick, 10) || 0;
+        /* set+merge (not update) — the key contains ':' which is illegal in
+           a string field path but fine as a map key under merge. */
+        var sel = {};
+        sel[c.day + ':' + c.mealId] = idx;
+        ZitlasDB.collection('coaching_plans').doc(_pcUid()).set({ dietSelections: sel }, { merge: true })
+          .then(function () {
+            _pcCloseSheet();
+            showToast('✅ ' + c.mealName + ' swapped to Option ' + (idx + 1));
+          })
+          .catch(function (e) { console.warn('[DIET COACH] swap failed', e); showToast('Swap failed — try again.'); });
+      });
+    });
+    var askBtn = document.getElementById('pcAskExpert');
+    if (askBtn) askBtn.addEventListener('click', function () { _pcAskExpert(c); });
+  }
+
+  function _pcAskExpert(c) {
+    var uid = _pcUid();
+    var id = 'CMR_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+    var athleteName = (function () {
+      try { var fb = JSON.parse(localStorage.getItem('zitlas_firebase_user') || 'null'); return (fb && fb.displayName) || (fb && fb.name) || 'Athlete'; } catch (_) { return 'Athlete'; }
+    })();
+    var req = {
+      requestId: id, athleteId: uid, athleteName: athleteName,
+      coachId: _pcRel.coachId,
+      day: c.day, mealId: c.mealId, mealName: c.mealName,
+      note: '', status: 'pending', createdAt: new Date().toISOString(),
+    };
+    console.log('[DIET COACH] ask-expert', req);
+    ZitlasDB.collection('coaching_meal_requests').doc(id).set(req)
+      .then(function () {
+        var nid = 'CN_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+        return ZitlasDB.collection('coaching_notifications').doc(nid).set({
+          id: nid, toId: _pcRel.coachId, fromId: uid, fromName: athleteName,
+          text: '🍽 ' + athleteName + ' requested alternatives for ' + c.day + ' ' + c.mealName + '.',
+          type: 'meal_request', createdAt: new Date().toISOString(), read: false,
+        });
+      })
+      .then(function () {
+        _pcCloseSheet();
+        showToast('📨 Request sent — your coach will reply with new options.');
+      })
+      .catch(function (e) { console.warn('[DIET COACH] ask failed', e); showToast('Could not send — try again.'); });
+  }
+
   async function init() {
     // Set --nav-height to actual navbar dimensions so body padding-bottom is correct
     const _navbar = document.getElementById('zitlas-navbar');
@@ -1422,6 +1635,11 @@
     initSwapModal();
     initNutriSelectModal();
     initHeader();
+
+    /* Personal Coaching: attach realtime listeners early — if an active
+       coach relationship with a published diet exists, it overrides the AI
+       plan below the moment its snapshot arrives (no refresh needed). */
+    initCoachDietMode();
 
     /* Real-time listener: expert saves a review → show banner without refresh */
     window.addEventListener('storage', function (e) {

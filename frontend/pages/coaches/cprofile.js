@@ -968,6 +968,29 @@
     return !!(coach && _pcRelationship &&
       _pcRelationship.coachId === coach.id && _pcRelationship.status === 'ended');
   }
+
+  /* Active Personal Coaching with THIS coach → chat/coach buttons route into
+     the dedicated Coaching Workspace instead of the normal chat overlay. */
+  function _coachingWorkspaceFor(coach) {
+    return !!(coach && _pcRelationship && window.ZitlasCoachingWorkspace &&
+      _pcRelationship.status === 'active' && _pcRelationship.coachId === coach.id);
+  }
+  function _openCoachingWorkspace(coach, tab) {
+    var rel = _pcRelationship;
+    ZitlasCoachingWorkspace.open({
+      role:        'athlete',
+      athleteId:   rel.athleteId || _getMyUserId(),
+      athleteName: rel.athleteName || getAthleteName(),
+      coachId:     rel.coachId,
+      coachName:   rel.coachName || (coach && coach.name) || 'Coach',
+      planType:    rel.planType || 'complete',
+      planLabel:   rel.planLabel || 'Personal Coaching',
+      startDate:   rel.startDate,
+      endDate:     rel.endDate,
+      status:      rel.status,
+      initialTab:  tab || 'overview',
+    });
+  }
   function _applyChatReadOnlyState() {
     var banner = document.getElementById('chatReadonlyBanner');
     var inputBar = document.getElementById('chatInputBar');
@@ -3380,6 +3403,8 @@
   ══════════════════════════════════════════ */
   function initCTAs(coach) {
     function openChatModal() {
+      /* Active Personal Coaching → the workspace IS the chat */
+      if (_coachingWorkspaceFor(coach)) { _openCoachingWorkspace(coach, 'chat'); return; }
       updateChipPresence(buildContextPackage(), 'ctxChips');
       var modal = document.getElementById('contextModal');
       if (modal) { modal.classList.add('open'); document.body.style.overflow = 'hidden'; }
@@ -3514,7 +3539,8 @@
         console.log('[COACHING] button clicked');
         if (_coachingIsActive(_myCoaching)) {
           if (_myCoaching.coachId === coach.id) {
-            openChatOverlay('', buildContextPackage(), 'chat', coach);
+            if (window.ZitlasCoachingWorkspace) _openCoachingWorkspace(coach, 'overview');
+            else openChatOverlay('', buildContextPackage(), 'chat', coach);
           } else {
             showToast('You already have an active coach: ' + (_myCoaching.coachName || 'another expert') + '. One coach at a time.');
           }
@@ -3616,6 +3642,19 @@
           .update({ status: 'active', activatedAt: new Date().toISOString() })
           .catch(function(e) { console.warn('[COACHING] request status update failed', e); });
       }).then(function() {
+        /* Publish this athlete's AI context to the coaching workspace right
+           away so the coach sees profile/metrics/SWOT without waiting for the
+           athlete to open the workspace first. */
+        var ctx = buildContextPackage();
+        try { ctx.goal = JSON.parse(localStorage.getItem('zitlas_goal') || 'null'); } catch(_) {}
+        return ZitlasDB.collection('coaching_plans').doc(uid).set({
+          athleteId: uid, athleteName: payload.athleteName,
+          coachId: payload.coachId, coachName: payload.coachName,
+          planType: payload.planType,
+          athleteContext: ctx,
+          athleteContextUpdatedAt: new Date().toISOString(),
+        }, { merge: true }).catch(function(e) { console.warn('[COACHING] context publish failed', e); });
+      }).then(function() {
         showToast('🎉 ' + req.expertName + ' is now your personal coach!');
       }).catch(function(err) {
         console.error('[COACHING] activation failed:', err && err.message);
@@ -3682,6 +3721,11 @@
     if (typeof ZitlasDB !== 'undefined') {
       var uid = _getMyUserId();
       if (uid) {
+        /* Coaching notifications ("Coach updated your diet", replies, etc.)
+           surface as toasts on this page even before the workspace opens. */
+        if (window.ZitlasCoachingWorkspace) {
+          ZitlasCoachingWorkspace.attachNotifications(uid, showToast);
+        }
         ZitlasDB.collection('personal_coaching').doc(uid).onSnapshot(function(snap) {
           _myCoaching = snap.exists ? snap.data() : null;
           _pcRelationship = _myCoaching;

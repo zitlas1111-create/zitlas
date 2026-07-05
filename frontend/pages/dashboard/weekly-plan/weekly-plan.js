@@ -37,12 +37,116 @@
     var _nb = document.getElementById('zitlas-navbar');
     if (_nb) document.documentElement.style.setProperty('--nav-height', (window.innerHeight - _nb.getBoundingClientRect().top) + 'px');
 
+    /* Personal Coaching: when an active coach relationship with training
+       permission has published a plan, it overrides the AI plan the moment
+       its realtime snapshot arrives. */
+    initCoachTrainingMode();
+
     const plan = loadPlan();
     if (!plan || !plan.days || !plan.days.length) {
-      showError();
+      if (!_pcActive) showError();
       return;
     }
-    render(plan);
+    if (!_pcActive) render(plan);
+  }
+
+  /* ══════════════════════════════════════════
+     PERSONAL COACHING MODE
+     coaching_plans/{uid}.training → converted into the same shape the AI
+     plan uses and fed through the existing transformWorkoutPlan/render
+     pipeline. Inert when Firebase isn't loaded or no relationship exists.
+  ══════════════════════════════════════════ */
+  var _pcRel = null, _pcPlanDoc = null, _pcActive = false;
+
+  function _pcUid() {
+    try {
+      var fb = JSON.parse(localStorage.getItem('zitlas_firebase_user') || 'null');
+      return fb && fb.uid;
+    } catch (_) { return null; }
+  }
+  function _pcShowsCoachPlan() {
+    return !!(_pcRel && (_pcRel.status === 'active' || _pcRel.status === 'ended') &&
+      (_pcRel.planType === 'training' || _pcRel.planType === 'complete'));
+  }
+
+  function initCoachTrainingMode() {
+    if (typeof ZitlasDB === 'undefined') return;
+    var uid = _pcUid();
+    if (!uid) return;
+    ZitlasDB.collection('personal_coaching').doc(uid).onSnapshot(function (snap) {
+      _pcRel = snap.exists ? snap.data() : null;
+      console.log('[WP COACH] relationship:', _pcRel ? _pcRel.status + '/' + _pcRel.planType : 'none');
+      if (_pcShowsCoachPlan() && !initCoachTrainingMode._planAttached) {
+        initCoachTrainingMode._planAttached = true;
+        ZitlasDB.collection('coaching_plans').doc(uid).onSnapshot(function (ps) {
+          _pcPlanDoc = ps.exists ? ps.data() : null;
+          applyCoachTraining();
+        }, function (e) { console.warn('[WP COACH] plan listener error', e); });
+      }
+      applyCoachTraining();
+    }, function (e) { console.warn('[WP COACH] rel listener error', e); });
+  }
+
+  function applyCoachTraining() {
+    var tr = _pcPlanDoc && _pcPlanDoc.training;
+    if (!_pcShowsCoachPlan() || !tr || !tr.days || !tr.days.length) {
+      if (_pcActive) { _pcActive = false; window.location.reload(); }
+      return;
+    }
+    /* Convert coach schema → AI weekly_plan shape, reuse the whole renderer */
+    var coachWp = {
+      plan_name: '👨‍🏫 Coach Training Plan',
+      weekly_plan: tr.days.map(function (d) {
+        return {
+          day: d.day,
+          focus: d.rest ? 'Rest & Recovery' : (d.focus || 'Training Session'),
+          duration_minutes: d.duration ? parseInt(d.duration, 10) || null : null,
+          exercises: d.rest ? [] : (d.exercises || []).map(function (ex) {
+            var parts = [];
+            if (ex.reps) parts.push(ex.reps);
+            if (ex.duration) parts.push(ex.duration);
+            if (ex.rest) parts.push('rest ' + ex.rest);
+            return {
+              name: ex.name || 'Exercise',
+              sets: ex.sets || '',
+              reps_or_duration: parts.join(' · '),
+              tip: ex.notes || '',
+            };
+          }),
+        };
+      }),
+    };
+    var meta = {
+      reviewedBy: _pcPlanDoc.coachName || 'Your Coach',
+      reviewedAt: _pcPlanDoc.trainingUpdatedAt
+        ? new Date(_pcPlanDoc.trainingUpdatedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+        : '',
+    };
+    /* If the "No Plan Found" error state replaced the page (athlete had no
+       AI plan), restore the original skeleton before rendering. */
+    if (!el('wpContent') && showError._savedHtml) {
+      el('wpPage').innerHTML = showError._savedHtml;
+    }
+    _pcActive = true;
+    render(transformWorkoutPlan(coachWp, null, meta));
+    _pcRenderBanner();
+    console.log('[WP COACH] coach training rendered —', coachWp.weekly_plan.length, 'days');
+  }
+
+  function _pcRenderBanner() {
+    var content = el('wpContent');
+    if (!content) return;
+    var banner = document.getElementById('pcCoachBanner');
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.id = 'pcCoachBanner';
+      banner.className = 'cw-readonly-note';
+      banner.style.margin = '0 0 12px';
+      content.insertBefore(banner, content.firstChild);
+    }
+    banner.innerHTML = _pcRel.status === 'active'
+      ? '👨‍🏫 Training managed by <b>&nbsp;' + (_pcPlanDoc.coachName || 'your coach') + '</b>&nbsp;— updates appear here instantly.'
+      : '👨‍🏫 Coaching ended — you’re keeping your coach’s last training plan.';
   }
 
   /* ══════════════════════════════════════════
@@ -774,6 +878,9 @@
   function showError() {
     const page = el('wpPage');
     if (!page) return;
+    /* Coach mode may still render after this (its snapshot arrives async) —
+       keep the original skeleton so applyCoachTraining can restore it. */
+    showError._savedHtml = page.innerHTML;
     page.innerHTML = `
       <div class="wp-error">
         <span class="wp-error-icon">📋</span>

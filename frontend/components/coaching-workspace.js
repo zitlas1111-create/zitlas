@@ -1,0 +1,1340 @@
+/*!
+ * ZITLAS — Personal Coaching Workspace (components/coaching-workspace.js)
+ *
+ * One full-screen workspace shared by BOTH sides of an active coaching
+ * relationship. Opened via:
+ *   ZitlasCoachingWorkspace.open({
+ *     role: 'athlete' | 'coach',
+ *     athleteId, athleteName, coachId, coachName,
+ *     planType ('diet'|'training'|'complete'), planLabel,
+ *     startDate, endDate, status, initialTab
+ *   })
+ *
+ * Firestore:
+ *   coaching_plans/{athleteUid}
+ *     { athleteId, athleteName, coachId, coachName, planType,
+ *       athleteContext (published by the athlete's device),
+ *       diet:     { days: [ {day, meals:[{id, name, time, options:[{name, calories, protein, notes}]}]} ] },
+ *       dietSelections: { '<day>:<mealId>': optionIndex },
+ *       dietUpdatedAt, dietVersion,
+ *       training: { days: [ {day, rest, focus, duration, exercises:[{name, sets, reps, duration, rest, notes}]} ] },
+ *       trainingUpdatedAt, trainingVersion }
+ *   coaching_plans/{athleteUid}/versions/{id}   — snapshot per save (restore)
+ *   coaching_meal_requests/{id}                 — athlete "Ask Expert" per meal
+ *   coaching_notifications/{id}                 — cross-side toasts
+ *   chat_rooms/{chat_<athleteId>_<coachId>}/messages — SAME collection the
+ *     normal chat uses, so history is shared and nothing breaks.
+ *
+ * Permissions (coach side): planType 'diet' → Diet editable, Training
+ * read-only; 'training' → reverse; 'complete' → both. Athlete never edits —
+ * they pick among the coach's options and can Ask Expert.
+ */
+(function (win) {
+  'use strict';
+
+  var DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  var DEFAULT_MEALS = ['Breakfast', 'Lunch', 'Snacks', 'Dinner'];
+  var MEAL_EMOJI = { breakfast: '🍳', lunch: '🍛', snacks: '🍎', snack: '🍎', dinner: '🥗' };
+
+  var S = {
+    open: false,
+    opts: null,
+    plan: null,            /* coaching_plans doc data */
+    tab: 'overview',
+    dayIdx: 0,             /* viewer/editor selected day */
+    unsubs: [],
+    dietDraft: null, dietDirty: false,
+    trainDraft: null, trainDirty: false,
+    mealReqs: [],
+    chatMsgs: [],
+    saving: false,
+  };
+
+  /* ── tiny helpers ── */
+  function db()  { return (typeof ZitlasDB !== 'undefined') ? ZitlasDB : null; }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function $(id) { return document.getElementById(id); }
+  function myUid() {
+    var o = S.opts;
+    return o ? (o.role === 'coach' ? o.coachId : o.athleteId) : null;
+  }
+  function otherUid() {
+    var o = S.opts;
+    return o ? (o.role === 'coach' ? o.athleteId : o.coachId) : null;
+  }
+  function myName() {
+    var o = S.opts;
+    return o ? (o.role === 'coach' ? o.coachName : o.athleteName) : '';
+  }
+  function chatId() {
+    return 'chat_' + S.opts.athleteId + '_' + S.opts.coachId;
+  }
+  function canEditDiet() {
+    return S.opts && S.opts.role === 'coach' && S.opts.status === 'active' &&
+      (S.opts.planType === 'diet' || S.opts.planType === 'complete');
+  }
+  function canEditTraining() {
+    return S.opts && S.opts.role === 'coach' && S.opts.status === 'active' &&
+      (S.opts.planType === 'training' || S.opts.planType === 'complete');
+  }
+  function fmtDate(iso) {
+    try { return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }); }
+    catch (_) { return ''; }
+  }
+  function fmtTime(iso) {
+    try { return new Date(iso).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' }); }
+    catch (_) { return ''; }
+  }
+  function daysLeft() {
+    if (!S.opts || !S.opts.endDate) return null;
+    return Math.max(0, Math.ceil((new Date(S.opts.endDate) - new Date()) / 86400000));
+  }
+  function newId(prefix) {
+    return prefix + '_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+  }
+  function todayIdx() {
+    var n = new Date().getDay(); /* 0=Sun */
+    return n === 0 ? 6 : n - 1;
+  }
+
+  var _toastEl = null, _toastTimer = null;
+  function toast(msg, ms) {
+    if (!_toastEl) {
+      _toastEl = document.createElement('div');
+      _toastEl.className = 'cw-toast';
+      document.body.appendChild(_toastEl);
+    }
+    _toastEl.textContent = msg;
+    _toastEl.classList.add('show');
+    clearTimeout(_toastTimer);
+    _toastTimer = setTimeout(function () { _toastEl.classList.remove('show'); }, ms || 3000);
+  }
+
+  /* ══════════════════════════════════════════════
+     NOTIFICATIONS — coaching_notifications
+     Written by either side; the recipient's device toasts unread ones
+     and marks them read. attachNotifications() can also be called by a
+     host page so toasts arrive without the workspace being open.
+  ══════════════════════════════════════════════ */
+  function notify(toId, text, type) {
+    var d = db();
+    if (!d || !toId) return;
+    var id = newId('CN');
+    d.collection('coaching_notifications').doc(id).set({
+      id: id, toId: toId,
+      fromId: myUid() || '', fromName: myName() || '',
+      text: text, type: type || 'info',
+      createdAt: new Date().toISOString(), read: false,
+    }).catch(function (e) { console.warn('[CW] notify failed', e); });
+  }
+
+  var _notifAttachedFor = null;
+  function attachNotifications(uid, toastFn) {
+    var d = db();
+    if (!d || !uid || _notifAttachedFor === uid) return;
+    _notifAttachedFor = uid;
+    var show = toastFn || toast;
+    d.collection('coaching_notifications')
+      .where('toId', '==', uid)
+      .onSnapshot(function (snap) {
+        var unread = snap.docs
+          .map(function (x) { return x.data(); })
+          .filter(function (n) { return n && n.read === false; })
+          .sort(function (a, b) { return (a.createdAt || '') < (b.createdAt || '') ? -1 : 1; });
+        unread.slice(-3).forEach(function (n, i) {
+          setTimeout(function () { show(n.text); }, i * 1200);
+        });
+        unread.forEach(function (n) {
+          d.collection('coaching_notifications').doc(n.id)
+            .update({ read: true }).catch(function () {});
+        });
+      }, function (e) { console.warn('[CW] notifications listener error', e); });
+  }
+
+  /* ══════════════════════════════════════════════
+     DOM SHELL (injected once)
+  ══════════════════════════════════════════════ */
+  var _domReady = false;
+  function ensureDom() {
+    if (_domReady) return;
+    _domReady = true;
+    var el = document.createElement('div');
+    el.className = 'cw-overlay';
+    el.id = 'cwOverlay';
+    el.innerHTML =
+      '<header class="cw-header">' +
+        '<div class="cw-hdr-row">' +
+          '<button class="cw-back" id="cwBack" aria-label="Close">' +
+            '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>' +
+          '</button>' +
+          '<div class="cw-avatar" id="cwAvatar">A</div>' +
+          '<div class="cw-hdr-info">' +
+            '<span class="cw-hdr-name" id="cwName">—</span>' +
+            '<span class="cw-hdr-sub"><span class="cw-live-dot"></span><span id="cwSubline">Active coaching</span></span>' +
+          '</div>' +
+          '<span class="cw-plan-chip" id="cwPlanChip">—</span>' +
+        '</div>' +
+        '<div class="cw-summary" id="cwSummary"></div>' +
+      '</header>' +
+      '<nav class="cw-tabs" id="cwTabs">' +
+        '<button class="cw-tab active" data-cw-tab="overview">📋 Overview</button>' +
+        '<button class="cw-tab" data-cw-tab="diet">🥗 Diet<span class="cw-tab-badge" id="cwDietBadge" style="display:none">0</span></button>' +
+        '<button class="cw-tab" data-cw-tab="training">💪 Training</button>' +
+        '<button class="cw-tab" data-cw-tab="chat">💬 Chat</button>' +
+      '</nav>' +
+      '<main class="cw-body" id="cwBody"></main>';
+    document.body.appendChild(el);
+
+    $('cwBack').addEventListener('click', close);
+    el.querySelectorAll('[data-cw-tab]').forEach(function (t) {
+      t.addEventListener('click', function () { switchTab(t.dataset.cwTab); });
+    });
+
+    /* Bottom sheet host (option picker / ask expert / history) */
+    var sheet = document.createElement('div');
+    sheet.className = 'cw-sheet-backdrop';
+    sheet.id = 'cwSheetBackdrop';
+    sheet.innerHTML = '<div class="cw-sheet" id="cwSheet"></div>';
+    document.body.appendChild(sheet);
+    sheet.addEventListener('click', function (e) { if (e.target === sheet) closeSheet(); });
+  }
+
+  function openSheet(html) {
+    var bd = $('cwSheetBackdrop');
+    $('cwSheet').innerHTML = html;
+    bd.style.display = 'flex';
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () { bd.classList.add('open'); });
+    });
+  }
+  function closeSheet() {
+    var bd = $('cwSheetBackdrop');
+    if (!bd) return;
+    bd.classList.remove('open');
+    setTimeout(function () { bd.style.display = 'none'; }, 200);
+  }
+
+  /* ══════════════════════════════════════════════
+     OPEN / CLOSE
+  ══════════════════════════════════════════════ */
+  function open(opts) {
+    if (!opts || !opts.athleteId || !opts.coachId) {
+      console.warn('[CW] open() missing athleteId/coachId', opts);
+      return;
+    }
+    ensureDom();
+    S.opts = opts;
+    S.tab = opts.initialTab || 'overview';
+    S.dayIdx = todayIdx();
+    S.dietDraft = null; S.dietDirty = false;
+    S.trainDraft = null; S.trainDirty = false;
+    S.plan = null; S.mealReqs = []; S.chatMsgs = [];
+    S.open = true;
+
+    console.log('[CW] open', opts.role, 'athlete:', opts.athleteId, 'coach:', opts.coachId, 'plan:', opts.planType);
+
+    renderHeader();
+    var overlay = $('cwOverlay');
+    overlay.style.display = 'flex';
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () { overlay.classList.add('open'); });
+    });
+    document.body.style.overflow = 'hidden';
+    var navbar = document.getElementById('zitlas-navbar');
+    if (navbar) navbar.style.display = 'none';
+
+    switchTab(S.tab, true);
+    subscribeAll();
+    if (opts.role === 'athlete') publishAthleteContext();
+    attachNotifications(myUid());
+  }
+
+  function close() {
+    S.open = false;
+    S.unsubs.forEach(function (u) { try { u(); } catch (_) {} });
+    S.unsubs = [];
+    var overlay = $('cwOverlay');
+    if (overlay) {
+      overlay.classList.remove('open');
+      setTimeout(function () { overlay.style.display = 'none'; }, 220);
+    }
+    closeSheet();
+    document.body.style.overflow = '';
+    var navbar = document.getElementById('zitlas-navbar');
+    if (navbar) navbar.style.display = '';
+  }
+
+  function switchTab(tab, force) {
+    if (S.tab === tab && !force) return;
+    if (S.tab === 'diet' && tab !== 'diet' && S.dietDirty) {
+      if (!win.confirm('You have unsaved diet changes. Leave without saving?')) return;
+      S.dietDirty = false; S.dietDraft = null;
+    }
+    if (S.tab === 'training' && tab !== 'training' && S.trainDirty) {
+      if (!win.confirm('You have unsaved training changes. Leave without saving?')) return;
+      S.trainDirty = false; S.trainDraft = null;
+    }
+    S.tab = tab;
+    var tabsEl = $('cwTabs');
+    if (tabsEl) tabsEl.querySelectorAll('[data-cw-tab]').forEach(function (t) {
+      t.classList.toggle('active', t.dataset.cwTab === tab);
+    });
+    var body = $('cwBody');
+    body.classList.toggle('cw-body--chat', tab === 'chat');
+    renderTab();
+  }
+
+  /* ══════════════════════════════════════════════
+     FIRESTORE SUBSCRIPTIONS
+  ══════════════════════════════════════════════ */
+  function subscribeAll() {
+    var d = db();
+    if (!d) { toast('Connection unavailable'); return; }
+
+    S.unsubs.push(d.collection('coaching_plans').doc(S.opts.athleteId)
+      .onSnapshot(function (snap) {
+        S.plan = snap.exists ? snap.data() : null;
+        console.log('[CW] plan snapshot — diet days:',
+          S.plan && S.plan.diet && S.plan.diet.days ? S.plan.diet.days.length : 0,
+          '| training days:',
+          S.plan && S.plan.training && S.plan.training.days ? S.plan.training.days.length : 0);
+        renderHeader();
+        /* Never clobber an editor mid-edit; viewers always refresh */
+        if (S.tab === 'diet' && !S.dietDirty) renderTab();
+        else if (S.tab === 'training' && !S.trainDirty) renderTab();
+        else if (S.tab === 'overview') renderTab();
+      }, function (e) { console.warn('[CW] plan listener error', e); }));
+
+    S.unsubs.push(d.collection('coaching_meal_requests')
+      .where('athleteId', '==', S.opts.athleteId)
+      .onSnapshot(function (snap) {
+        S.mealReqs = snap.docs.map(function (x) { return x.data(); })
+          .filter(function (r) { return r.coachId === S.opts.coachId; });
+        var pending = S.mealReqs.filter(function (r) { return r.status === 'pending'; }).length;
+        var badge = $('cwDietBadge');
+        if (badge && S.opts.role === 'coach') {
+          badge.textContent = pending;
+          badge.style.display = pending > 0 ? 'flex' : 'none';
+        }
+        if (S.tab === 'diet' && !S.dietDirty) renderTab();
+      }, function (e) { console.warn('[CW] meal requests listener error', e); }));
+
+    S.unsubs.push(d.collection('chat_rooms').doc(chatId()).collection('messages')
+      .orderBy('timestamp')
+      .onSnapshot(function (snap) {
+        S.chatMsgs = snap.docs.map(function (x) { return x.data(); })
+          .filter(function (m) { return m && m.type !== 'review_packet'; });
+        if (S.tab === 'chat') renderChatMsgs();
+      }, function (e) { console.warn('[CW] chat listener error', e); }));
+  }
+
+  /* Athlete device publishes its localStorage-derived context so the coach
+     never has to ask onboarding questions again. Merge-write, cheap. */
+  function publishAthleteContext() {
+    var d = db();
+    if (!d) return;
+    var ctx = {};
+    var keys = {
+      assessment: 'zitlas_assessment', calculations: 'zitlas_calculations',
+      swot: 'zitlas_swot', survey: 'zitlas_survey', goal: 'zitlas_goal',
+      diet_plan: 'zitlas_diet_plan', workout_plan: 'zitlas_workout_plan',
+    };
+    Object.keys(keys).forEach(function (k) {
+      try { ctx[k] = JSON.parse(localStorage.getItem(keys[k]) || 'null'); } catch (_) { ctx[k] = null; }
+    });
+    /* Unwrap expert-modification schema to the flat plan */
+    if (ctx.diet_plan && (ctx.diet_plan.currentDietPlan || ctx.diet_plan.originalDietPlan)) {
+      ctx.diet_plan = ctx.diet_plan.currentDietPlan || ctx.diet_plan.originalDietPlan;
+    }
+    if (ctx.workout_plan && (ctx.workout_plan.currentWorkoutPlan || ctx.workout_plan.originalWorkoutPlan)) {
+      ctx.workout_plan = ctx.workout_plan.currentWorkoutPlan || ctx.workout_plan.originalWorkoutPlan;
+    }
+    d.collection('coaching_plans').doc(S.opts.athleteId).set({
+      athleteId: S.opts.athleteId, athleteName: S.opts.athleteName || 'Athlete',
+      coachId: S.opts.coachId, coachName: S.opts.coachName || 'Coach',
+      planType: S.opts.planType || 'complete',
+      athleteContext: ctx,
+      athleteContextUpdatedAt: new Date().toISOString(),
+    }, { merge: true })
+      .then(function () { console.log('[CW] athlete context published'); })
+      .catch(function (e) { console.warn('[CW] context publish failed', e); });
+  }
+
+  /* ══════════════════════════════════════════════
+     HEADER
+  ══════════════════════════════════════════════ */
+  function renderHeader() {
+    if (!S.opts) return;
+    var showName = S.opts.role === 'coach' ? (S.opts.athleteName || 'Athlete') : (S.opts.coachName || 'Coach');
+    $('cwName').textContent = showName;
+    $('cwAvatar').textContent = showName.split(/\s+/).map(function (w) { return w[0] || ''; })
+      .slice(0, 2).join('').toUpperCase() || 'A';
+    $('cwPlanChip').textContent = S.opts.planLabel || S.opts.planType || 'Coaching';
+    var dl = daysLeft();
+    $('cwSubline').textContent = S.opts.status === 'active'
+      ? ('Active coaching' + (dl !== null ? ' · ' + dl + ' days left' : ''))
+      : 'Coaching ended';
+
+    var ctx = (S.plan && S.plan.athleteContext) || {};
+    var c = ctx.calculations || {};
+    var goal = ctx.goal || {};
+    var items = [];
+    if (goal.type) items.push({ v: String(goal.type).replace(/_/g, ' '), l: 'Goal' });
+    var a = ctx.assessment || ctx.survey || {};
+    if (a.weight_kg) items.push({ v: a.weight_kg + ' kg', l: 'Weight' });
+    if (c.bmi) items.push({ v: parseFloat(c.bmi).toFixed(1), l: 'BMI' });
+    if (dl !== null) items.push({ v: dl + 'd', l: 'Remaining' });
+    var dietDays = S.plan && S.plan.diet && S.plan.diet.days ? S.plan.diet.days.length : 0;
+    var trainDays = S.plan && S.plan.training && S.plan.training.days ? S.plan.training.days.length : 0;
+    items.push({ v: dietDays ? dietDays + ' days' : '—', l: 'Coach Diet' });
+    items.push({ v: trainDays ? trainDays + ' days' : '—', l: 'Coach Training' });
+
+    $('cwSummary').innerHTML = items.map(function (it) {
+      return '<div class="cw-sum-item"><span class="cw-sum-val">' + esc(it.v) +
+        '</span><span class="cw-sum-lbl">' + esc(it.l) + '</span></div>';
+    }).join('');
+  }
+
+  /* ══════════════════════════════════════════════
+     TAB ROUTER
+  ══════════════════════════════════════════════ */
+  function renderTab() {
+    if (!S.open) return;
+    if (S.tab === 'overview')      renderOverview();
+    else if (S.tab === 'diet')     renderDiet();
+    else if (S.tab === 'training') renderTraining();
+    else if (S.tab === 'chat')     renderChatShell();
+  }
+
+  /* ══════════════════════════════════════════════
+     OVERVIEW — everything ZITLAS AI already knows
+  ══════════════════════════════════════════════ */
+  function kv(label, val) {
+    if (val === null || val === undefined || val === '' ) return '';
+    return '<div class="cw-kv-row"><span>' + esc(label) + '</span><b>' + esc(val) + '</b></div>';
+  }
+  function cap(s) {
+    s = String(s == null ? '' : s).replace(/_/g, ' ');
+    return s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
+  }
+
+  function renderOverview() {
+    var body = $('cwBody');
+    var ctx = (S.plan && S.plan.athleteContext) || null;
+    if (!ctx || (!ctx.assessment && !ctx.calculations && !ctx.survey)) {
+      body.innerHTML =
+        '<div class="cw-card"><div class="cw-empty">' +
+          '<span class="cw-empty-icon">📡</span>' +
+          (S.opts.role === 'coach'
+            ? 'Waiting for the athlete’s data to sync.<br>It publishes automatically the first time they open their coaching workspace.'
+            : 'Your ZITLAS profile hasn’t synced yet.<br>Complete your assessment on the AI Coach page and reopen this workspace.') +
+        '</div></div>';
+      return;
+    }
+    var a = ctx.assessment || ctx.survey || {};
+    var sv = ctx.survey || {};
+    var c = ctx.calculations || {};
+    var g = ctx.goal || {};
+    var swot = ctx.swot || null;
+
+    var metrics = [];
+    function metric(v, l) { if (v !== undefined && v !== null && v !== '') metrics.push({ v: v, l: l }); }
+    metric(c.bmi ? parseFloat(c.bmi).toFixed(1) : null, 'BMI');
+    metric(c.bmi_category, 'Category');
+    metric(c.bmr_kcal ? Math.round(c.bmr_kcal) + ' kcal' : null, 'BMR');
+    metric(c.tdee_kcal ? Math.round(c.tdee_kcal) + ' kcal' : null, 'TDEE');
+    metric(c.weight_loss_calories_kcal ? c.weight_loss_calories_kcal + ' kcal' : (c.target_calories_kcal ? c.target_calories_kcal + ' kcal' : null), 'Target Cal');
+    metric(c.protein_target_g ? c.protein_target_g + ' g' : null, 'Protein');
+    metric(c.water_target_l ? c.water_target_l + ' L' : (c.water_liters ? c.water_liters + ' L' : null), 'Water');
+    metric(c.daily_steps || c.steps_target, 'Steps');
+
+    var progress = '';
+    if (g.current_value && g.target_value) {
+      progress = g.current_value + ' → ' + g.target_value;
+    }
+
+    var html =
+      '<div class="cw-card"><p class="cw-card-title">👤 Athlete Profile</p>' +
+        kv('Name', S.opts.athleteName) +
+        kv('Age', a.age) +
+        kv('Gender', cap(a.gender)) +
+        kv('Height', a.height_cm ? a.height_cm + ' cm' : null) +
+        kv('Weight', a.weight_kg ? a.weight_kg + ' kg' : null) +
+        kv('Goal Weight', a.goal_weight_kg ? a.goal_weight_kg + ' kg' : null) +
+      '</div>';
+
+    if (metrics.length) {
+      html += '<div class="cw-card"><p class="cw-card-title">📊 AI Fitness Metrics</p>' +
+        '<div class="cw-metric-grid">' + metrics.map(function (m) {
+          return '<div class="cw-metric"><span class="cw-metric-val">' + esc(m.v) +
+            '</span><span class="cw-metric-lbl">' + esc(m.l) + '</span></div>';
+        }).join('') + '</div></div>';
+    }
+
+    if (g.type || progress) {
+      html += '<div class="cw-card"><p class="cw-card-title">🎯 Current Goal</p>' +
+        kv('Goal', cap(g.type)) +
+        kv('Progress', progress) +
+        kv('Target Date', g.end_date ? fmtDate(g.end_date) : null) +
+        kv('Assessment Score', a.score || a.assessment_score) +
+      '</div>';
+    }
+
+    if (swot && (swot.strengths || swot.weaknesses || swot.opportunities || swot.threats)) {
+      function quad(cls, title, arr) {
+        if (!arr || !arr.length) return '';
+        return '<div class="cw-swot-quad cw-swot-quad--' + cls + '"><h4>' + title + '</h4><ul>' +
+          arr.slice(0, 4).map(function (x) { return '<li>' + esc(typeof x === 'string' ? x : (x.point || x.text || JSON.stringify(x))) + '</li>'; }).join('') +
+          '</ul></div>';
+      }
+      html += '<div class="cw-card"><p class="cw-card-title">🧭 AI SWOT Analysis</p><div class="cw-swot-grid">' +
+        quad('s', 'Strengths', swot.strengths) +
+        quad('w', 'Weaknesses', swot.weaknesses) +
+        quad('o', 'Opportunities', swot.opportunities) +
+        quad('t', 'Threats', swot.threats) +
+        '</div></div>';
+    }
+
+    var lifestyle =
+      kv('Health Conditions', Array.isArray(a.health_conditions) ? a.health_conditions.join(', ') : a.health_conditions) +
+      kv('Food Preference', cap(a.diet_preference || a.food_preference || sv.diet_preference)) +
+      kv('Workout Preference', cap(a.workout_preference || sv.workout_preference)) +
+      kv('Activity Level', cap(a.activity_level)) +
+      kv('Stress Level', cap(a.stress_level || sv.stress_level)) +
+      kv('Sleep', a.sleep_hours ? a.sleep_hours + ' hrs' : cap(a.sleep_quality || sv.sleep_quality));
+    if (lifestyle) {
+      html += '<div class="cw-card"><p class="cw-card-title">🌿 Lifestyle</p>' + lifestyle + '</div>';
+    }
+
+    html += '<div class="cw-card"><p class="cw-card-title">🤖 Data Source</p>' +
+      '<div class="cw-empty" style="padding:6px 0 2px">Generated by ZITLAS AI — synced ' +
+      esc(S.plan && S.plan.athleteContextUpdatedAt ? fmtDate(S.plan.athleteContextUpdatedAt) : 'recently') +
+      '. The coach never needs to re-ask these questions.</div></div>';
+
+    body.innerHTML = html;
+  }
+
+  /* ══════════════════════════════════════════════
+     DIET TAB
+  ══════════════════════════════════════════════ */
+  function emptyDietWeek() {
+    return {
+      days: DAYS.map(function (d) {
+        return { day: d, meals: DEFAULT_MEALS.map(function (m) {
+          return { id: newId('meal'), name: m, time: '', options: [{ name: '', calories: '', protein: '', notes: '' }] };
+        }) };
+      }),
+    };
+  }
+
+  /* Prefill the editor from the athlete's AI diet (athleteContext.diet_plan) */
+  function dietFromAiPlan() {
+    var ctx = S.plan && S.plan.athleteContext;
+    var ai = ctx && ctx.diet_plan;
+    var aiDays = ai && ai.days;
+    if (!aiDays || !aiDays.length) return null;
+    return {
+      days: DAYS.map(function (d, i) {
+        var src = aiDays[i % aiDays.length] || {};
+        var meals = (src.meals || []).map(function (m) {
+          return {
+            id: newId('meal'),
+            name: m.meal_name || 'Meal',
+            time: m.time || '',
+            options: [{
+              name: (m.foods || []).join(', '),
+              calories: m.calories || '', protein: m.protein_g || '',
+              notes: m.purpose || '',
+            }],
+          };
+        });
+        if (!meals.length) meals = DEFAULT_MEALS.map(function (mn) {
+          return { id: newId('meal'), name: mn, time: '', options: [{ name: '', calories: '', protein: '', notes: '' }] };
+        });
+        return { day: d, meals: meals };
+      }),
+    };
+  }
+
+  function dayPillsHtml(days, activeIdx, pendingByDay) {
+    return '<div class="cw-day-pills">' + days.map(function (d, i) {
+      return '<button class="cw-day-pill' + (i === activeIdx ? ' active' : '') + '" data-cw-day="' + i + '">' +
+        esc((d.day || '').slice(0, 3)) +
+        (pendingByDay && pendingByDay[d.day] ? '<span class="cw-day-dot"></span>' : '') +
+        '</button>';
+    }).join('') + '</div>';
+  }
+  function wireDayPills(container, cb) {
+    container.querySelectorAll('[data-cw-day]').forEach(function (p) {
+      p.addEventListener('click', function () {
+        S.dayIdx = parseInt(p.dataset.cwDay, 10) || 0;
+        cb();
+      });
+    });
+  }
+
+  function renderDiet() {
+    if (canEditDiet()) renderDietEditor();
+    else renderDietViewer();
+  }
+
+  /* ── athlete / read-only coach view ── */
+  function renderDietViewer() {
+    var body = $('cwBody');
+    var diet = S.plan && S.plan.diet;
+    var readonlyNote = (S.opts.role === 'coach' && !canEditDiet())
+      ? '<div class="cw-readonly-note">🔒 Diet is read-only on the ' + esc(S.opts.planLabel || 'current') + ' plan.</div>'
+      : '';
+    if (!diet || !diet.days || !diet.days.length) {
+      body.innerHTML = readonlyNote +
+        '<div class="cw-card"><div class="cw-empty"><span class="cw-empty-icon">🥗</span>' +
+        (S.opts.role === 'athlete'
+          ? 'Your coach hasn’t published a diet plan yet.<br>You’ll be notified the moment it’s ready.'
+          : 'No coach diet plan yet.') +
+        '</div></div>';
+      return;
+    }
+    if (S.dayIdx >= diet.days.length) S.dayIdx = 0;
+    var day = diet.days[S.dayIdx];
+    var selections = (S.plan && S.plan.dietSelections) || {};
+    var pending = {};
+    S.mealReqs.forEach(function (r) {
+      if (r.status === 'pending') pending[r.day + ':' + r.mealId] = true;
+    });
+
+    var mealsHtml = (day.meals || []).map(function (m) {
+      var selKey = day.day + ':' + m.id;
+      var selIdx = Math.min(selections[selKey] || 0, Math.max(0, (m.options || []).length - 1));
+      var opt = (m.options || [])[selIdx] || {};
+      var macros = [];
+      if (opt.calories) macros.push(opt.calories + ' kcal');
+      if (opt.protein) macros.push(opt.protein + 'g protein');
+      var emoji = MEAL_EMOJI[(m.name || '').toLowerCase()] || '🍽️';
+      var optCount = (m.options || []).filter(function (o) { return o && o.name; }).length;
+      var isPending = pending[selKey];
+      return '<div class="cw-meal-card">' +
+        '<div class="cw-meal-head">' +
+          '<span>' + emoji + '</span>' +
+          '<span class="cw-meal-name">' + esc(m.name || 'Meal') + '</span>' +
+          (isPending ? '<span class="cw-meal-pending">⏳ Asked expert</span>' : '') +
+          (m.time ? '<span class="cw-meal-time">' + esc(m.time) + '</span>' : '') +
+        '</div>' +
+        '<p class="cw-meal-food">' + esc(opt.name || '—') + '</p>' +
+        (macros.length ? '<p class="cw-meal-macros">' + esc(macros.join(' · ')) + '</p>' : '') +
+        (opt.notes ? '<p class="cw-meal-notes">' + esc(opt.notes) + '</p>' : '') +
+        (S.opts.role === 'athlete' && S.opts.status === 'active'
+          ? '<div class="cw-meal-actions">' +
+              '<button class="cw-meal-btn cw-meal-btn--swap" data-cw-swap="' + esc(m.id) + '">🔄 Swap Meal <span class="cw-opt-count">(' + optCount + ' options)</span></button>' +
+              '<button class="cw-meal-btn cw-meal-btn--ask" data-cw-ask="' + esc(m.id) + '">💬 Ask Expert</button>' +
+            '</div>'
+          : '') +
+        '</div>';
+    }).join('');
+
+    body.innerHTML = readonlyNote + dayPillsHtml(diet.days, S.dayIdx) +
+      (mealsHtml || '<div class="cw-card"><div class="cw-empty">No meals for this day.</div></div>');
+
+    wireDayPills(body, renderDietViewer);
+    body.querySelectorAll('[data-cw-swap]').forEach(function (b) {
+      b.addEventListener('click', function () { openSwapSheet(day, b.dataset.cwSwap); });
+    });
+    body.querySelectorAll('[data-cw-ask]').forEach(function (b) {
+      b.addEventListener('click', function () { openAskSheet(day, b.dataset.cwAsk); });
+    });
+  }
+
+  /* Athlete swap: pick among the coach's predefined options ONLY.
+     The global food dataset is never queried here. */
+  function openSwapSheet(day, mealId) {
+    var meal = (day.meals || []).find(function (m) { return m.id === mealId; });
+    if (!meal) return;
+    var selections = (S.plan && S.plan.dietSelections) || {};
+    var selKey = day.day + ':' + meal.id;
+    var selIdx = selections[selKey] || 0;
+    var opts = (meal.options || []).filter(function (o) { return o && o.name; });
+    if (!opts.length) { toast('Your coach hasn’t added alternatives for this meal yet — use Ask Expert.'); return; }
+
+    openSheet(
+      '<p class="cw-sheet-title">Swap ' + esc(meal.name || 'Meal') + '</p>' +
+      '<p class="cw-sheet-sub">' + esc(day.day) + ' — choose one of your coach’s options. These are the only alternatives while coaching is active.</p>' +
+      opts.map(function (o, i) {
+        var meta = [];
+        if (o.calories) meta.push(o.calories + ' kcal');
+        if (o.protein) meta.push(o.protein + 'g protein');
+        return '<button class="cw-opt-choice' + (i === selIdx ? ' selected' : '') + '" data-cw-pick="' + i + '">' +
+          '<span class="cw-opt-choice-label">Option ' + (i + 1) + (i === selIdx ? ' · current' : '') + '</span>' +
+          '<span class="cw-opt-choice-name">' + esc(o.name) + '</span>' +
+          (meta.length || o.notes
+            ? '<span class="cw-opt-choice-meta">' + esc(meta.join(' · ')) + (o.notes ? (meta.length ? ' · ' : '') + esc(o.notes) : '') + '</span>'
+            : '') +
+          '</button>';
+      }).join('')
+    );
+    $('cwSheet').querySelectorAll('[data-cw-pick]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var idx = parseInt(b.dataset.cwPick, 10) || 0;
+        var d = db();
+        if (!d) return;
+        /* set+merge (not update) — the key contains ':' which is illegal in
+           a string field path but fine as a map key under merge. */
+        var sel = {};
+        sel[selKey] = idx;
+        d.collection('coaching_plans').doc(S.opts.athleteId).set({ dietSelections: sel }, { merge: true })
+          .then(function () {
+            closeSheet();
+            toast('✅ ' + (meal.name || 'Meal') + ' swapped to Option ' + (idx + 1));
+          })
+          .catch(function (e) { console.warn('[CW] swap failed', e); toast('Swap failed — try again.'); });
+      });
+    });
+  }
+
+  /* Athlete "Ask Expert" — request alternatives for one specific meal */
+  function openAskSheet(day, mealId) {
+    var meal = (day.meals || []).find(function (m) { return m.id === mealId; });
+    if (!meal) return;
+    var already = S.mealReqs.some(function (r) {
+      return r.status === 'pending' && r.day === day.day && r.mealId === meal.id;
+    });
+    if (already) { toast('You’ve already asked about this meal — your coach will reply soon.'); return; }
+
+    openSheet(
+      '<p class="cw-sheet-title">Ask Expert — ' + esc(meal.name || 'Meal') + '</p>' +
+      '<p class="cw-sheet-sub">' + esc(day.day) + ' — your coach will be notified and can reply with new options for this meal.</p>' +
+      '<textarea class="cw-textarea" id="cwAskNote" rows="3" placeholder="Optional note (e.g. “I don’t have these ingredients”)"></textarea>' +
+      '<div class="cw-save-bar" style="position:static;background:none;padding-top:14px">' +
+        '<button class="cw-ghost-btn" id="cwAskCancel">Cancel</button>' +
+        '<button class="cw-save-btn" id="cwAskSend">Send Request</button>' +
+      '</div>'
+    );
+    $('cwAskCancel').addEventListener('click', closeSheet);
+    $('cwAskSend').addEventListener('click', function () {
+      var d = db();
+      if (!d) return;
+      var id = newId('CMR');
+      var req = {
+        requestId: id,
+        athleteId: S.opts.athleteId, athleteName: S.opts.athleteName || 'Athlete',
+        coachId: S.opts.coachId,
+        day: day.day, mealId: meal.id, mealName: meal.name || 'Meal',
+        note: ($('cwAskNote') && $('cwAskNote').value.trim()) || '',
+        status: 'pending', createdAt: new Date().toISOString(),
+      };
+      console.log('[CW] ask-expert request', req);
+      d.collection('coaching_meal_requests').doc(id).set(req)
+        .then(function () {
+          notify(S.opts.coachId, '🍽 ' + req.athleteName + ' requested alternatives for ' + req.day + ' ' + req.mealName + '.', 'meal_request');
+          closeSheet();
+          toast('📨 Request sent — your coach will reply with new options.');
+        })
+        .catch(function (e) { console.warn('[CW] ask failed', e); toast('Could not send — try again.'); });
+    });
+  }
+
+  /* ── coach diet editor ── */
+  function ensureDietDraft() {
+    if (S.dietDraft) return;
+    var remote = S.plan && S.plan.diet;
+    S.dietDraft = remote && remote.days && remote.days.length
+      ? JSON.parse(JSON.stringify(remote))
+      : null;
+  }
+
+  function renderDietEditor() {
+    var body = $('cwBody');
+    ensureDietDraft();
+
+    if (!S.dietDraft) {
+      var hasAi = !!(S.plan && S.plan.athleteContext && S.plan.athleteContext.diet_plan &&
+        S.plan.athleteContext.diet_plan.days && S.plan.athleteContext.diet_plan.days.length);
+      body.innerHTML =
+        '<div class="cw-card"><div class="cw-empty"><span class="cw-empty-icon">🥗</span>' +
+          'No coach diet plan yet. Design the athlete’s complete week — every meal can have up to 3 options they can swap between.' +
+        '</div>' +
+        '<div class="cw-save-bar" style="position:static;background:none">' +
+          (hasAi ? '<button class="cw-ghost-btn" id="cwDietImport">Start from AI plan</button>' : '') +
+          '<button class="cw-save-btn" id="cwDietBlank">Start with template</button>' +
+        '</div></div>';
+      var imp = $('cwDietImport');
+      if (imp) imp.addEventListener('click', function () {
+        S.dietDraft = dietFromAiPlan() || emptyDietWeek();
+        S.dietDirty = true; renderDietEditor();
+      });
+      $('cwDietBlank').addEventListener('click', function () {
+        S.dietDraft = emptyDietWeek();
+        S.dietDirty = true; renderDietEditor();
+      });
+      return;
+    }
+
+    if (S.dayIdx >= S.dietDraft.days.length) S.dayIdx = 0;
+    var day = S.dietDraft.days[S.dayIdx];
+    var pendingByDay = {};
+    var dayReqs = [];
+    S.mealReqs.forEach(function (r) {
+      if (r.status !== 'pending') return;
+      pendingByDay[r.day] = true;
+      if (r.day === day.day) dayReqs.push(r);
+    });
+
+    var reqBanner = dayReqs.length
+      ? '<div class="cw-req-banner">🔔 ' + dayReqs.map(function (r) {
+          return esc(r.athleteName || 'Athlete') + ' asked for alternatives to <b>' + esc(r.mealName) + '</b>' +
+            (r.note ? ' — “' + esc(r.note) + '”' : '');
+        }).join('<br>') + '<br>Update the options below and save — they’ll be marked replied automatically.</div>'
+      : '';
+
+    var mealsHtml = (day.meals || []).map(function (m, mi) {
+      var optsHtml = (m.options || []).map(function (o, oi) {
+        return '<div class="cw-opt-block">' +
+          '<div class="cw-opt-block-head"><span class="cw-opt-label">Option ' + (oi + 1) + '</span>' +
+            ((m.options.length > 1)
+              ? '<button class="cw-icon-btn cw-icon-btn--danger" data-cw-del-opt="' + mi + ':' + oi + '" aria-label="Remove option">✕</button>'
+              : '') +
+          '</div>' +
+          '<div class="cw-ed-row"><textarea class="cw-textarea" rows="1" placeholder="Meal / foods (e.g. Poha with peanuts + buttermilk)" data-cw-opt="' + mi + ':' + oi + ':name">' + esc(o.name || '') + '</textarea></div>' +
+          '<div class="cw-ed-row">' +
+            '<input class="cw-input cw-input--sm" inputmode="numeric" placeholder="kcal" value="' + esc(o.calories || '') + '" data-cw-opt="' + mi + ':' + oi + ':calories">' +
+            '<input class="cw-input cw-input--sm" inputmode="numeric" placeholder="protein g" value="' + esc(o.protein || '') + '" data-cw-opt="' + mi + ':' + oi + ':protein">' +
+            '<input class="cw-input" placeholder="Notes / instructions" value="' + esc(o.notes || '') + '" data-cw-opt="' + mi + ':' + oi + ':notes">' +
+          '</div>' +
+        '</div>';
+      }).join('');
+      return '<div class="cw-ed-meal">' +
+        '<div class="cw-ed-meal-head">' +
+          '<input class="cw-input" placeholder="Meal name" value="' + esc(m.name || '') + '" data-cw-meal="' + mi + ':name">' +
+          '<input class="cw-input cw-input--sm" placeholder="Time" value="' + esc(m.time || '') + '" data-cw-meal="' + mi + ':time">' +
+          '<button class="cw-icon-btn cw-icon-btn--danger" data-cw-del-meal="' + mi + '" aria-label="Remove meal">🗑</button>' +
+        '</div>' +
+        optsHtml +
+        ((m.options || []).length < 3
+          ? '<button class="cw-add-btn" style="margin-bottom:0" data-cw-add-opt="' + mi + '">+ Add option ' + ((m.options || []).length + 1) + ' of 3</button>'
+          : '') +
+        '</div>';
+    }).join('');
+
+    body.innerHTML =
+      dayPillsHtml(S.dietDraft.days, S.dayIdx, pendingByDay) +
+      reqBanner +
+      mealsHtml +
+      '<button class="cw-add-btn" id="cwAddMeal">+ Add custom meal to ' + esc(day.day) + '</button>' +
+      '<div class="cw-save-bar">' +
+        '<button class="cw-ghost-btn" id="cwDietHistory">🕘 History</button>' +
+        '<button class="cw-save-btn" id="cwDietSave"' + (S.dietDirty ? '' : ' disabled') + '>' +
+          (S.dietDirty ? 'Save Diet Plan' : 'Saved ✓') + '</button>' +
+      '</div>';
+
+    wireDayPills(body, renderDietEditor);
+
+    function markDirty() {
+      if (!S.dietDirty) {
+        S.dietDirty = true;
+        var sb = $('cwDietSave');
+        if (sb) { sb.disabled = false; sb.textContent = 'Save Diet Plan'; }
+      }
+    }
+    body.querySelectorAll('[data-cw-meal]').forEach(function (inp) {
+      inp.addEventListener('input', function () {
+        var p = inp.dataset.cwMeal.split(':');
+        day.meals[+p[0]][p[1]] = inp.value;
+        markDirty();
+      });
+    });
+    body.querySelectorAll('[data-cw-opt]').forEach(function (inp) {
+      inp.addEventListener('input', function () {
+        var p = inp.dataset.cwOpt.split(':');
+        day.meals[+p[0]].options[+p[1]][p[2]] = inp.value;
+        markDirty();
+      });
+    });
+    body.querySelectorAll('[data-cw-add-opt]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var m = day.meals[+b.dataset.cwAddOpt];
+        if (m.options.length < 3) m.options.push({ name: '', calories: '', protein: '', notes: '' });
+        markDirty(); renderDietEditor();
+      });
+    });
+    body.querySelectorAll('[data-cw-del-opt]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var p = b.dataset.cwDelOpt.split(':');
+        day.meals[+p[0]].options.splice(+p[1], 1);
+        markDirty(); renderDietEditor();
+      });
+    });
+    body.querySelectorAll('[data-cw-del-meal]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        day.meals.splice(+b.dataset.cwDelMeal, 1);
+        markDirty(); renderDietEditor();
+      });
+    });
+    $('cwAddMeal').addEventListener('click', function () {
+      day.meals.push({ id: newId('meal'), name: '', time: '', options: [{ name: '', calories: '', protein: '', notes: '' }] });
+      markDirty(); renderDietEditor();
+    });
+    $('cwDietSave').addEventListener('click', saveDiet);
+    $('cwDietHistory').addEventListener('click', function () { openHistory('diet'); });
+  }
+
+  function saveDiet() {
+    if (!S.dietDraft || S.saving) return;
+    var d = db();
+    if (!d) { toast('Connection unavailable'); return; }
+    S.saving = true;
+    var btn = $('cwDietSave');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+
+    var now = new Date().toISOString();
+    var version = ((S.plan && S.plan.dietVersion) || 0) + 1;
+    var docRef = d.collection('coaching_plans').doc(S.opts.athleteId);
+    var pendingReqs = S.mealReqs.filter(function (r) { return r.status === 'pending'; });
+
+    docRef.set({
+      athleteId: S.opts.athleteId, athleteName: S.opts.athleteName || 'Athlete',
+      coachId: S.opts.coachId, coachName: S.opts.coachName || 'Coach',
+      planType: S.opts.planType || 'complete',
+      diet: S.dietDraft, dietUpdatedAt: now, dietVersion: version,
+    }, { merge: true }).then(function () {
+      /* Version snapshot for history / restore */
+      return docRef.collection('versions').doc('diet_' + Date.now()).set({
+        type: 'diet', data: S.dietDraft, version: version,
+        savedAt: now, savedBy: S.opts.coachName || 'Coach',
+      });
+    }).then(function () {
+      /* Resolve any pending Ask-Expert requests — the athlete just got new options */
+      pendingReqs.forEach(function (r) {
+        d.collection('coaching_meal_requests').doc(r.requestId)
+          .update({ status: 'replied', repliedAt: now }).catch(function () {});
+      });
+      notify(S.opts.athleteId,
+        pendingReqs.length
+          ? '✅ Your coach replied with new meal options.'
+          : '🥗 ' + (S.opts.coachName || 'Your coach') + ' updated your diet plan.',
+        'diet_update');
+      S.dietDirty = false;
+      S.saving = false;
+      console.log('[CW] diet saved v' + version);
+      toast('✅ Diet plan published to ' + (S.opts.athleteName || 'the athlete'));
+      renderDietEditor();
+    }).catch(function (e) {
+      S.saving = false;
+      console.error('[CW] diet save failed', e);
+      toast('Save failed — please try again.');
+      if (btn) { btn.disabled = false; btn.textContent = 'Save Diet Plan'; }
+    });
+  }
+
+  /* ══════════════════════════════════════════════
+     TRAINING TAB
+  ══════════════════════════════════════════════ */
+  function emptyTrainingWeek() {
+    return {
+      days: DAYS.map(function (d, i) {
+        return { day: d, rest: i === 6, focus: '', duration: '', exercises: [] };
+      }),
+    };
+  }
+  function trainingFromAiPlan() {
+    var ctx = S.plan && S.plan.athleteContext;
+    var wp = ctx && ctx.workout_plan;
+    var aiDays = wp && (wp.weekly_plan || wp.days || wp.weekly_schedule || wp.workout_days);
+    if (!aiDays || !aiDays.length) return null;
+    return {
+      days: DAYS.map(function (d, i) {
+        var src = aiDays[i % aiDays.length] || {};
+        var focus = src.focus || src.type || '';
+        return {
+          day: d,
+          rest: /rest/i.test(focus),
+          focus: focus,
+          duration: src.duration_minutes ? String(src.duration_minutes) : '',
+          exercises: (src.exercises || []).map(function (ex) {
+            return { name: ex.name || '', sets: ex.sets ? String(ex.sets) : '',
+              reps: ex.reps_or_duration || '', duration: '', rest: '', notes: ex.tip || '' };
+          }),
+        };
+      }),
+    };
+  }
+
+  function renderTraining() {
+    if (canEditTraining()) renderTrainingEditor();
+    else renderTrainingViewer();
+  }
+
+  function renderTrainingViewer() {
+    var body = $('cwBody');
+    var tr = S.plan && S.plan.training;
+    var readonlyNote = (S.opts.role === 'coach' && !canEditTraining())
+      ? '<div class="cw-readonly-note">🔒 Training is read-only on the ' + esc(S.opts.planLabel || 'current') + ' plan.</div>'
+      : '';
+    if (!tr || !tr.days || !tr.days.length) {
+      body.innerHTML = readonlyNote +
+        '<div class="cw-card"><div class="cw-empty"><span class="cw-empty-icon">💪</span>' +
+        (S.opts.role === 'athlete'
+          ? 'Your coach hasn’t published a training plan yet.<br>You’ll be notified the moment it’s ready.'
+          : 'No coach training plan yet.') +
+        '</div></div>';
+      return;
+    }
+    if (S.dayIdx >= tr.days.length) S.dayIdx = 0;
+    var day = tr.days[S.dayIdx];
+
+    var content;
+    if (day.rest) {
+      content = '<div class="cw-card"><div class="cw-rest-day">😴 Rest & Recovery Day' +
+        (day.focus ? '<br><span style="font-size:12px;font-weight:600">' + esc(day.focus) + '</span>' : '') +
+        '</div></div>';
+    } else {
+      var exHtml = (day.exercises || []).map(function (ex, i) {
+        var meta = [];
+        if (ex.sets) meta.push(ex.sets + ' sets');
+        if (ex.reps) meta.push(ex.reps);
+        if (ex.duration) meta.push(ex.duration);
+        if (ex.rest) meta.push('rest ' + ex.rest);
+        return '<div class="cw-ex-row"><span class="cw-ex-num">' + (i + 1) + '</span>' +
+          '<div class="cw-ex-info"><span class="cw-ex-name">' + esc(ex.name || 'Exercise') + '</span>' +
+          (meta.length ? '<span class="cw-ex-meta">' + esc(meta.join(' · ')) + '</span>' : '') +
+          (ex.notes ? '<span class="cw-ex-notes">' + esc(ex.notes) + '</span>' : '') +
+          '</div></div>';
+      }).join('');
+      content = '<div class="cw-card">' +
+        '<p class="cw-card-title">' + esc(day.focus || 'Training Session') +
+          (day.duration ? ' <span style="font-weight:600;color:#94A3B8;font-size:11px">· ' + esc(day.duration) + ' min</span>' : '') +
+        '</p>' +
+        (exHtml || '<div class="cw-empty" style="padding:12px">No exercises added for this day.</div>') +
+        '</div>';
+    }
+
+    body.innerHTML = readonlyNote + dayPillsHtml(tr.days, S.dayIdx) + content;
+    wireDayPills(body, renderTrainingViewer);
+  }
+
+  function ensureTrainDraft() {
+    if (S.trainDraft) return;
+    var remote = S.plan && S.plan.training;
+    S.trainDraft = remote && remote.days && remote.days.length
+      ? JSON.parse(JSON.stringify(remote))
+      : null;
+  }
+
+  function renderTrainingEditor() {
+    var body = $('cwBody');
+    ensureTrainDraft();
+
+    if (!S.trainDraft) {
+      var hasAi = !!trainingFromAiPlan();
+      body.innerHTML =
+        '<div class="cw-card"><div class="cw-empty"><span class="cw-empty-icon">💪</span>' +
+          'No coach training plan yet. Build the athlete’s full week — exercises, sets, reps, duration and rest.' +
+        '</div>' +
+        '<div class="cw-save-bar" style="position:static;background:none">' +
+          (hasAi ? '<button class="cw-ghost-btn" id="cwTrainImport">Start from AI plan</button>' : '') +
+          '<button class="cw-save-btn" id="cwTrainBlank">Start with template</button>' +
+        '</div></div>';
+      var imp = $('cwTrainImport');
+      if (imp) imp.addEventListener('click', function () {
+        S.trainDraft = trainingFromAiPlan() || emptyTrainingWeek();
+        S.trainDirty = true; renderTrainingEditor();
+      });
+      $('cwTrainBlank').addEventListener('click', function () {
+        S.trainDraft = emptyTrainingWeek();
+        S.trainDirty = true; renderTrainingEditor();
+      });
+      return;
+    }
+
+    if (S.dayIdx >= S.trainDraft.days.length) S.dayIdx = 0;
+    var day = S.trainDraft.days[S.dayIdx];
+
+    var exHtml = (day.exercises || []).map(function (ex, i) {
+      return '<div class="cw-ed-meal">' +
+        '<div class="cw-ed-meal-head">' +
+          '<span class="cw-ex-num">' + (i + 1) + '</span>' +
+          '<input class="cw-input" placeholder="Exercise name" value="' + esc(ex.name || '') + '" data-cw-ex="' + i + ':name">' +
+          '<button class="cw-icon-btn" data-cw-ex-up="' + i + '" aria-label="Move up"' + (i === 0 ? ' disabled' : '') + '>↑</button>' +
+          '<button class="cw-icon-btn" data-cw-ex-dn="' + i + '" aria-label="Move down"' + (i === day.exercises.length - 1 ? ' disabled' : '') + '>↓</button>' +
+          '<button class="cw-icon-btn cw-icon-btn--danger" data-cw-ex-del="' + i + '" aria-label="Delete">✕</button>' +
+        '</div>' +
+        '<div class="cw-ed-row">' +
+          '<input class="cw-input cw-input--sm" placeholder="Sets" value="' + esc(ex.sets || '') + '" data-cw-ex="' + i + ':sets">' +
+          '<input class="cw-input cw-input--sm" placeholder="Reps" value="' + esc(ex.reps || '') + '" data-cw-ex="' + i + ':reps">' +
+          '<input class="cw-input cw-input--sm" placeholder="Duration" value="' + esc(ex.duration || '') + '" data-cw-ex="' + i + ':duration">' +
+          '<input class="cw-input cw-input--sm" placeholder="Rest" value="' + esc(ex.rest || '') + '" data-cw-ex="' + i + ':rest">' +
+        '</div>' +
+        '<div class="cw-ed-row" style="margin-bottom:0">' +
+          '<input class="cw-input" placeholder="Notes / form cue" value="' + esc(ex.notes || '') + '" data-cw-ex="' + i + ':notes">' +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    body.innerHTML =
+      dayPillsHtml(S.trainDraft.days, S.dayIdx) +
+      '<div class="cw-ed-meal">' +
+        '<div class="cw-ed-row" style="margin-bottom:0">' +
+          '<input class="cw-input" placeholder="Day focus (e.g. Upper Body Strength)" value="' + esc(day.focus || '') + '" id="cwDayFocus">' +
+          '<input class="cw-input cw-input--sm" inputmode="numeric" placeholder="Minutes" value="' + esc(day.duration || '') + '" id="cwDayDuration">' +
+          '<button class="cw-ghost-btn" style="padding:9px 12px;font-size:12px;white-space:nowrap" id="cwRestToggle">' + (day.rest ? '😴 Rest day ✓' : 'Mark rest day') + '</button>' +
+        '</div>' +
+      '</div>' +
+      (day.rest ? '<div class="cw-readonly-note">😴 Marked as a rest day — exercises below are ignored.</div>' : '') +
+      exHtml +
+      '<button class="cw-add-btn" id="cwAddEx">+ Add exercise</button>' +
+      '<div class="cw-save-bar">' +
+        '<button class="cw-ghost-btn" id="cwTrainHistory">🕘 History</button>' +
+        '<button class="cw-save-btn" id="cwTrainSave"' + (S.trainDirty ? '' : ' disabled') + '>' +
+          (S.trainDirty ? 'Save Training Plan' : 'Saved ✓') + '</button>' +
+      '</div>';
+
+    wireDayPills(body, renderTrainingEditor);
+
+    function markDirty() {
+      if (!S.trainDirty) {
+        S.trainDirty = true;
+        var sb = $('cwTrainSave');
+        if (sb) { sb.disabled = false; sb.textContent = 'Save Training Plan'; }
+      }
+    }
+    $('cwDayFocus').addEventListener('input', function (e) { day.focus = e.target.value; markDirty(); });
+    $('cwDayDuration').addEventListener('input', function (e) { day.duration = e.target.value; markDirty(); });
+    $('cwRestToggle').addEventListener('click', function () {
+      day.rest = !day.rest; markDirty(); renderTrainingEditor();
+    });
+    body.querySelectorAll('[data-cw-ex]').forEach(function (inp) {
+      inp.addEventListener('input', function () {
+        var p = inp.dataset.cwEx.split(':');
+        day.exercises[+p[0]][p[1]] = inp.value;
+        markDirty();
+      });
+    });
+    body.querySelectorAll('[data-cw-ex-up]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var i = +b.dataset.cwExUp;
+        if (i > 0) {
+          var t = day.exercises[i - 1]; day.exercises[i - 1] = day.exercises[i]; day.exercises[i] = t;
+          markDirty(); renderTrainingEditor();
+        }
+      });
+    });
+    body.querySelectorAll('[data-cw-ex-dn]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var i = +b.dataset.cwExDn;
+        if (i < day.exercises.length - 1) {
+          var t = day.exercises[i + 1]; day.exercises[i + 1] = day.exercises[i]; day.exercises[i] = t;
+          markDirty(); renderTrainingEditor();
+        }
+      });
+    });
+    body.querySelectorAll('[data-cw-ex-del]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        day.exercises.splice(+b.dataset.cwExDel, 1);
+        markDirty(); renderTrainingEditor();
+      });
+    });
+    $('cwAddEx').addEventListener('click', function () {
+      day.exercises.push({ name: '', sets: '', reps: '', duration: '', rest: '', notes: '' });
+      markDirty(); renderTrainingEditor();
+    });
+    $('cwTrainSave').addEventListener('click', saveTraining);
+    $('cwTrainHistory').addEventListener('click', function () { openHistory('training'); });
+  }
+
+  function saveTraining() {
+    if (!S.trainDraft || S.saving) return;
+    var d = db();
+    if (!d) { toast('Connection unavailable'); return; }
+    S.saving = true;
+    var btn = $('cwTrainSave');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+
+    var now = new Date().toISOString();
+    var version = ((S.plan && S.plan.trainingVersion) || 0) + 1;
+    var docRef = d.collection('coaching_plans').doc(S.opts.athleteId);
+
+    docRef.set({
+      athleteId: S.opts.athleteId, athleteName: S.opts.athleteName || 'Athlete',
+      coachId: S.opts.coachId, coachName: S.opts.coachName || 'Coach',
+      planType: S.opts.planType || 'complete',
+      training: S.trainDraft, trainingUpdatedAt: now, trainingVersion: version,
+    }, { merge: true }).then(function () {
+      return docRef.collection('versions').doc('training_' + Date.now()).set({
+        type: 'training', data: S.trainDraft, version: version,
+        savedAt: now, savedBy: S.opts.coachName || 'Coach',
+      });
+    }).then(function () {
+      notify(S.opts.athleteId, '💪 ' + (S.opts.coachName || 'Your coach') + ' updated your workout plan.', 'training_update');
+      S.trainDirty = false;
+      S.saving = false;
+      console.log('[CW] training saved v' + version);
+      toast('✅ Training plan published to ' + (S.opts.athleteName || 'the athlete'));
+      renderTrainingEditor();
+    }).catch(function (e) {
+      S.saving = false;
+      console.error('[CW] training save failed', e);
+      toast('Save failed — please try again.');
+      if (btn) { btn.disabled = false; btn.textContent = 'Save Training Plan'; }
+    });
+  }
+
+  /* ══════════════════════════════════════════════
+     VERSION HISTORY (diet + training)
+  ══════════════════════════════════════════════ */
+  function openHistory(type) {
+    var d = db();
+    if (!d) return;
+    openSheet('<p class="cw-sheet-title">🕘 ' + (type === 'diet' ? 'Diet' : 'Training') + ' Versions</p>' +
+      '<p class="cw-sheet-sub">Loading…</p>');
+    d.collection('coaching_plans').doc(S.opts.athleteId).collection('versions')
+      .where('type', '==', type).get()
+      .then(function (snap) {
+        var vers = snap.docs.map(function (x) { return x.data(); })
+          .sort(function (a, b) { return (b.savedAt || '') < (a.savedAt || '') ? -1 : 1; });
+        var canRestore = type === 'diet' ? canEditDiet() : canEditTraining();
+        var rows = vers.length ? vers.map(function (v, i) {
+          return '<div class="cw-ver-row">' +
+            '<div class="cw-ver-info">' +
+              '<span class="cw-ver-date">v' + esc(String(v.version || '?')) + ' · ' + esc(fmtDate(v.savedAt)) + ' ' + esc(fmtTime(v.savedAt)) + '</span>' +
+              '<span class="cw-ver-by">by ' + esc(v.savedBy || 'Coach') + '</span>' +
+            '</div>' +
+            (canRestore && i > 0 ? '<button class="cw-ver-restore" data-cw-restore="' + i + '">Restore</button>' : '') +
+            (i === 0 ? '<span class="cw-opt-count">current</span>' : '') +
+            '</div>';
+        }).join('') : '<p class="cw-sheet-sub">No saved versions yet — every save creates one.</p>';
+        openSheet('<p class="cw-sheet-title">🕘 ' + (type === 'diet' ? 'Diet' : 'Training') + ' Versions</p>' +
+          '<p class="cw-sheet-sub">Every coach save is snapshotted. Restoring loads that version into the editor — save to publish it.</p>' + rows);
+        $('cwSheet').querySelectorAll('[data-cw-restore]').forEach(function (b) {
+          b.addEventListener('click', function () {
+            var v = vers[+b.dataset.cwRestore];
+            if (!v || !v.data) return;
+            if (type === 'diet') { S.dietDraft = JSON.parse(JSON.stringify(v.data)); S.dietDirty = true; }
+            else { S.trainDraft = JSON.parse(JSON.stringify(v.data)); S.trainDirty = true; }
+            closeSheet();
+            toast('Version v' + (v.version || '?') + ' loaded — press Save to publish.');
+            renderTab();
+          });
+        });
+      })
+      .catch(function (e) {
+        console.warn('[CW] history load failed', e);
+        openSheet('<p class="cw-sheet-title">🕘 Versions</p><p class="cw-sheet-sub">Could not load history — try again.</p>');
+      });
+  }
+
+  /* ══════════════════════════════════════════════
+     CHAT TAB — same chat_rooms collection as normal chat
+  ══════════════════════════════════════════════ */
+  function renderChatShell() {
+    var body = $('cwBody');
+    var locked = S.opts.status !== 'active';
+    body.innerHTML =
+      '<div class="cw-chat-msgs" id="cwChatMsgs"></div>' +
+      (locked
+        ? '<div class="cw-chat-locked">🔒 Personal Coaching Ended</div>'
+        : '<div class="cw-chat-bar">' +
+            '<button class="cw-chat-attach" id="cwAttach" aria-label="Attach image">' +
+              '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66L9.41 16.73a2 2 0 0 1-2.83-2.83l7.07-7.07"/></svg>' +
+            '</button>' +
+            '<input type="file" id="cwFile" accept="image/jpeg,image/png,image/webp" style="display:none">' +
+            '<textarea class="cw-chat-input" id="cwChatInput" rows="1" placeholder="Message…"></textarea>' +
+            '<button class="cw-chat-send" id="cwSend" aria-label="Send">' +
+              '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>' +
+            '</button>' +
+          '</div>');
+    renderChatMsgs();
+
+    if (locked) return;
+    $('cwSend').addEventListener('click', sendChat);
+    $('cwChatInput').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
+    });
+    var attach = $('cwAttach'), file = $('cwFile');
+    if (typeof ZitlasChatAttach === 'undefined') {
+      attach.style.display = 'none';
+    } else {
+      attach.addEventListener('click', function () { file.click(); });
+      file.addEventListener('change', function () {
+        var f = file.files && file.files[0];
+        file.value = '';
+        if (!f) return;
+        ZitlasChatAttach.upload(f)
+          .then(function (url) { sendChatMessage('', url); })
+          .catch(function (e) { toast(e && e.message ? e.message : 'Image upload failed.'); });
+      });
+    }
+  }
+
+  function renderChatMsgs() {
+    var wrap = $('cwChatMsgs');
+    if (!wrap) return;
+    var mySender = S.opts.role === 'coach' ? 'expert' : 'athlete';
+    wrap.innerHTML = S.chatMsgs.length ? S.chatMsgs.map(function (m) {
+      var mine = m.senderType === mySender;
+      return '<div class="cw-bubble ' + (mine ? 'cw-bubble--me' : 'cw-bubble--them') + '">' +
+        (m.imageUrl ? '<img src="' + esc(m.imageUrl) + '" alt="attachment" data-cw-img="' + esc(m.imageUrl) + '">' : '') +
+        (m.text ? esc(m.text) : '') +
+        '<span class="cw-bubble-ts">' + esc(fmtTime(m.timestamp)) + '</span>' +
+        '</div>';
+    }).join('') : '<div class="cw-empty"><span class="cw-empty-icon">💬</span>Unlimited coaching chat — say hello!</div>';
+    wrap.querySelectorAll('[data-cw-img]').forEach(function (img) {
+      img.addEventListener('click', function () {
+        if (typeof ZitlasChatAttach !== 'undefined' && ZitlasChatAttach.openViewer) {
+          ZitlasChatAttach.openViewer(img.dataset.cwImg);
+        }
+      });
+    });
+    wrap.scrollTop = wrap.scrollHeight;
+  }
+
+  function sendChat() {
+    var input = $('cwChatInput');
+    var text = (input && input.value || '').trim();
+    if (!text) return;
+    input.value = '';
+    sendChatMessage(text, null);
+  }
+
+  /* Same message + room-doc shape the normal chat writes, so both existing
+     chat surfaces receive workspace messages (and vice versa). */
+  function sendChatMessage(text, imageUrl) {
+    var d = db();
+    if (!d) { toast('Connection unavailable'); return; }
+    var msg = {
+      id: newId('msg'),
+      conversationId: chatId(),
+      senderId: myUid(),
+      senderType: S.opts.role === 'coach' ? 'expert' : 'athlete',
+      text: text || '',
+      type: imageUrl ? 'image' : 'text',
+      imageUrl: imageUrl || null,
+      timestamp: new Date().toISOString(),
+    };
+    var roomDoc = {
+      participants: [S.opts.athleteId, S.opts.coachId],
+      athleteId: S.opts.athleteId, athleteName: S.opts.athleteName || 'Athlete',
+      expertId: S.opts.coachId, expertName: S.opts.coachName || 'Coach',
+      lastMessage: text || '📷 Photo',
+      lastMessageAt: msg.timestamp,
+    };
+    d.collection('chat_rooms').doc(chatId()).set(roomDoc, { merge: true })
+      .then(function () {
+        return d.collection('chat_rooms').doc(chatId()).collection('messages').doc(msg.id).set(msg);
+      })
+      .then(function () {
+        notify(otherUid(), '💬 New message from ' + (myName() || 'your coaching partner') + '.', 'chat');
+      })
+      .catch(function (e) { console.error('[CW] chat send failed', e); toast('Message failed to send.'); });
+  }
+
+  /* ══════════════════════════════════════════════
+     EXPORT
+  ══════════════════════════════════════════════ */
+  win.ZitlasCoachingWorkspace = {
+    open: open,
+    close: close,
+    attachNotifications: attachNotifications,
+    isOpen: function () { return S.open; },
+  };
+})(window);

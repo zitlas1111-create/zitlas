@@ -86,6 +86,30 @@ function _pcChatIsReadOnlyFor(athleteId) {
   var rel = athleteId && _pcRelByAthlete[athleteId];
   return !!(rel && rel.status === 'ended');
 }
+
+/* Open the shared Coaching Workspace (components/coaching-workspace.js) for
+   an ACTIVE coaching client. Falls back to the normal chat overlay when the
+   module is unavailable so the button never dead-ends. */
+function openCoachWorkspace(rel, initialTab) {
+  if (!rel) return;
+  if (typeof ZitlasCoachingWorkspace === 'undefined') {
+    openExpertChat('chat_' + rel.athleteId + '_' + rel.coachId, rel.athleteName || 'Athlete');
+    return;
+  }
+  ZitlasCoachingWorkspace.open({
+    role:        'coach',
+    athleteId:   rel.athleteId,
+    athleteName: rel.athleteName || 'Athlete',
+    coachId:     rel.coachId,
+    coachName:   rel.coachName || (_currentExpert ? _currentExpert.name : 'Coach'),
+    planType:    rel.planType || 'complete',
+    planLabel:   rel.planLabel || 'Personal Coaching',
+    startDate:   rel.startDate,
+    endDate:     rel.endDate,
+    status:      rel.status,
+    initialTab:  initialTab || 'overview',
+  });
+}
 function _applyExpertChatReadOnlyState() {
   var banner   = document.getElementById('edChatReadonlyBanner');
   var inputBar = document.getElementById('edChatInputBar');
@@ -1338,10 +1362,10 @@ function renderMyAthletes(rels, expert) {
           esc(new Date(rel.startDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })) +
           (daysLeft !== null ? ' · ' + daysLeft + ' days left' : '') + '</span>' +
       '</div>' +
-      '<button class="erc-btn erc-btn--primary ed-athlete-chat">Chat</button>';
+      '<button class="erc-btn erc-btn--primary ed-athlete-chat">Open</button>';
 
     card.querySelector('.ed-athlete-chat').addEventListener('click', function() {
-      openExpertChat('chat_' + rel.athleteId + '_' + rel.coachId, name);
+      openCoachWorkspace(rel, 'overview');
     });
     wrap.appendChild(card);
   });
@@ -1460,7 +1484,19 @@ function renderCoachingRequests() {
       _pcUpdateRequestStatus(req, 'declined', 'declinedAt');
     });
     if (chatBtn) chatBtn.addEventListener('click', function() {
-      openExpertChat('chat_' + req.athleteId + '_' + req.expertId, name);
+      if (req.status === 'active') {
+        /* Active client → full Coaching Workspace (the relationship doc has
+           the authoritative dates/planType; the request is the fallback). */
+        var rel = _pcRelByAthlete[req.athleteId] || {
+          athleteId: req.athleteId, athleteName: req.athleteName,
+          coachId: req.expertId, coachName: req.expertName,
+          planType: req.planType, planLabel: req.planLabel, status: 'active',
+        };
+        openCoachWorkspace(rel, 'overview');
+      } else {
+        /* Ended → history stays viewable in the normal (read-only) chat */
+        openExpertChat('chat_' + req.athleteId + '_' + req.expertId, name);
+      }
     });
 
     wrap.appendChild(card);
@@ -4729,6 +4765,12 @@ function renderAll(baseExpert) {
   /* Personal coaching requests inbox (realtime) */
   listenForCoachingRequests(expert);
   _initCoachingTabs(expert);
+  /* Coaching notifications (athlete asked for meal alternatives, etc.) */
+  if (typeof ZitlasCoachingWorkspace !== 'undefined') {
+    var _cwUid = (typeof ZitlasAuth !== 'undefined' && ZitlasAuth.currentUser)
+      ? ZitlasAuth.currentUser.uid : (expert && expert.id);
+    if (_cwUid) ZitlasCoachingWorkspace.attachNotifications(_cwUid, edShowToast);
+  }
   /* Auto-open chat when returning from a modify page after completing review */
   _prCheckPendingChatOpen(expert);
 
