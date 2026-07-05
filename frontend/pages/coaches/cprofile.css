@@ -1825,33 +1825,79 @@ img { display: block; max-width: 100%; }
   transition: opacity 0.2s ease;
 }
 .cp-coaching-backdrop.open { opacity: 1; }
-.cp-coaching-modal {
-  background: rgba(255,255,255,0.94);
+.cp-coaching-sheet {
+  background: rgba(255,255,255,0.95);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
   border: 1px solid rgba(255,255,255,0.6);
   border-radius: 28px;
-  padding: 26px 22px 18px;
-  max-width: 360px; width: 100%;
+  padding: 24px 20px 18px;
+  max-width: 380px; width: 100%;
+  max-height: 86vh; overflow-y: auto;
   box-shadow: 0 24px 70px rgba(30,41,59,0.30);
-  text-align: center;
   transform: scale(0.95);
   transition: transform 0.2s ease;
 }
-.cp-coaching-backdrop.open .cp-coaching-modal { transform: scale(1); }
-.cp-coaching-icon  { font-size: 40px; margin-bottom: 6px; }
-.cp-coaching-title { font-size: 19px; font-weight: 900; color: var(--text); margin: 0 0 2px; }
-.cp-coaching-coach { font-size: 13px; color: var(--text-sec); margin: 0 0 12px; }
-.cp-coaching-price {
-  font-size: 30px; font-weight: 900; color: #578A2C;
-  margin-bottom: 14px;
+.cp-coaching-backdrop.open .cp-coaching-sheet { transform: scale(1); }
+.cp-coaching-title { font-size: 19px; font-weight: 900; color: var(--text); margin: 0 0 4px; text-align: center; }
+.cp-coaching-sub   { font-size: 12.5px; color: var(--text-sec); margin: 0 0 16px; text-align: center; }
+
+/* Plan cards */
+.cp-plan-card {
+  position: relative;
+  display: block; width: 100%;
+  text-align: left;
+  background: rgba(255,255,255,0.85);
+  border: 1.5px solid rgba(30,41,59,0.10);
+  border-radius: 20px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
 }
-.cp-coaching-price em { font-size: 13px; font-weight: 600; font-style: normal; color: var(--text-muted); }
-.cp-coaching-perks {
-  list-style: none; margin: 0 0 18px; padding: 0;
-  text-align: left; display: flex; flex-direction: column; gap: 8px;
+.cp-plan-card:active { transform: scale(0.98); }
+.cp-plan-card:hover { border-color: rgba(107,165,57,0.5); box-shadow: 0 10px 26px rgba(107,165,57,0.12); }
+.cp-plan-card--popular {
+  border-color: rgba(255,152,0,0.5);
+  box-shadow: 0 12px 30px rgba(255,152,0,0.14), 0 0 24px rgba(255,152,0,0.10);
 }
-.cp-coaching-perks li { font-size: 12.5px; color: var(--text-sec); line-height: 1.45; }
+.cp-plan-badge {
+  position: absolute; top: -9px; right: 14px;
+  background: linear-gradient(135deg, #FF9800, #FFA726);
+  color: #fff; font-size: 10px; font-weight: 800;
+  padding: 3px 10px; border-radius: 99px;
+  box-shadow: 0 4px 12px rgba(255,152,0,0.4);
+  letter-spacing: 0.3px;
+}
+.cp-plan-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.cp-plan-icon { font-size: 20px; }
+.cp-plan-name { flex: 1; font-size: 14.5px; font-weight: 800; color: var(--text); }
+.cp-plan-price { font-size: 16px; font-weight: 900; color: #578A2C; }
+.cp-plan-price em { font-size: 10.5px; font-weight: 600; font-style: normal; color: var(--text-muted); }
+.cp-plan-perks {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-wrap: wrap; gap: 4px 10px;
+}
+.cp-plan-perks li { font-size: 11.5px; color: var(--text-sec); }
+.cp-plan-perks li::before { content: '• '; color: #6BA539; font-weight: 800; }
+
+/* Summary step */
+.cp-summary-rows {
+  background: rgba(107,165,57,0.06);
+  border: 1px solid rgba(107,165,57,0.18);
+  border-radius: 16px;
+  padding: 6px 14px;
+  margin-bottom: 12px;
+}
+.cp-summary-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 9px 0;
+  font-size: 13px;
+}
+.cp-summary-row + .cp-summary-row { border-top: 1px solid rgba(30,41,59,0.06); }
+.cp-summary-row span { color: var(--text-muted); }
+.cp-summary-row b { color: var(--text); font-weight: 800; }
+.cp-coaching-cancel--full { width: 100%; margin-top: 4px; }
 .cp-coaching-actions { display: flex; gap: 10px; }
 .cp-coaching-cancel, .cp-coaching-confirm {
   flex: 1; padding: 13px; border-radius: 14px;

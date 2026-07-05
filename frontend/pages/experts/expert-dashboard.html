@@ -148,6 +148,28 @@
       <div id="prInboxList"></div>
     </section>
 
+    <!-- ── SECTION: Personal Coaching ── -->
+    <section class="ed-section" id="sectionCoaching">
+      <div class="ed-section-label">Personal Coaching</div>
+
+      <div class="pr-inbox-tabs">
+        <button class="pr-inbox-tab pr-inbox-tab--active" data-coaching-tab="pending">
+          Pending
+          <span class="pr-tab-badge" id="pcTabBadgePending" style="display:none">0</span>
+        </button>
+        <button class="pr-inbox-tab" data-coaching-tab="active">Active</button>
+        <button class="pr-inbox-tab" data-coaching-tab="completed">Completed</button>
+      </div>
+
+      <div id="pcRequestList">
+        <div class="ed-empty-state" id="pcEmpty">
+          <span class="ed-empty-icon">👨‍🏫</span>
+          <p class="ed-empty-title">No coaching requests</p>
+          <p class="ed-empty-sub">Athletes who request Personal Coaching with you will appear here.</p>
+        </div>
+      </div>
+    </section>
+
     <!-- ── SECTION: Client Chats ── -->
     <section class="ed-section" id="sectionChats">
       <div class="ed-section-label">Client Chats</div>
@@ -252,6 +274,14 @@
       </svg>
       <span class="ed-nav-label">Reviews</span>
       <span class="ed-nav-badge" id="navBadgeReviews" style="display:none">0</span>
+    </button>
+    <button class="ed-nav-item" data-section="sectionCoaching" aria-label="Coaching">
+      <svg class="ed-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+        <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+      </svg>
+      <span class="ed-nav-label">Coaching</span>
+      <span class="ed-nav-badge" id="navBadgeCoaching" style="display:none">0</span>
     </button>
     <button class="ed-nav-item" data-section="sectionChats" aria-label="Chats">
       <svg class="ed-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

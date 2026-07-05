@@ -7,7 +7,7 @@
   <!-- ?v= cache-buster: the server sends no cache-control header, so browsers
        heuristically cache this file and can pair fresh HTML/JS with stale CSS.
        Bump the version whenever this stylesheet changes. -->
-  <link rel="stylesheet" href="cprofile.css?v=20260705" />
+  <link rel="stylesheet" href="cprofile.css?v=20260705b" />
   <link rel="stylesheet" href="../../assets/css/theme.css" />
   <link rel="stylesheet" href="" />
   <script src="../../assets/js/i18n.js"></script>
@@ -155,24 +155,53 @@
   </button>
 </div>
 
-<!-- Personal Coaching purchase dialog (JS-driven display, stale-CSS-proof) -->
+<!-- Personal Coaching — plan selection + request bottom sheet
+     (JS-driven display, stale-CSS-proof). Step 1: choose plan tier.
+     Step 2: summary + Send Coaching Request. Payment happens LATER,
+     only after the expert accepts the request. -->
 <div class="cp-coaching-backdrop" id="coachingBackdrop" style="display:none" role="dialog" aria-modal="true" aria-labelledby="coachingTitle">
-  <div class="cp-coaching-modal">
-    <div class="cp-coaching-icon">👨‍🏫</div>
-    <p class="cp-coaching-title" id="coachingTitle">Personal Coaching</p>
-    <p class="cp-coaching-coach" id="coachingCoachName">with your expert</p>
-    <div class="cp-coaching-price"><span id="coachingPrice">₹999</span><em>/ month</em></div>
-    <ul class="cp-coaching-perks">
-      <li>✅ Your dedicated coach manages your complete fitness journey</li>
-      <li>✅ Coach-personalised diet &amp; training, updated in real time</li>
-      <li>✅ Unlimited chat with image sharing</li>
-      <li>✅ AI keeps assisting — your coach has final say</li>
-    </ul>
-    <div class="cp-coaching-actions">
-      <button class="cp-coaching-cancel" id="coachingCancelBtn">Cancel</button>
-      <button class="cp-coaching-confirm" id="coachingConfirmBtn">Activate Coaching</button>
+  <div class="cp-coaching-sheet">
+
+    <!-- STEP 1: plan cards -->
+    <div class="cp-coaching-step" id="coachingStepPlans">
+      <p class="cp-coaching-title" id="coachingTitle">Choose Your Coaching Plan</p>
+      <p class="cp-coaching-sub">Select the type of coaching you want from this expert.</p>
+
+      <button class="cp-plan-card" data-plan="diet">
+        <div class="cp-plan-head"><span class="cp-plan-icon">🥗</span><span class="cp-plan-name">Diet Coaching</span><span class="cp-plan-price">₹499<em>/mo</em></span></div>
+        <ul class="cp-plan-perks"><li>Diet Plan</li><li>Meal Swaps</li><li>Nutrition Guidance</li><li>Daily Diet Chat</li></ul>
+      </button>
+
+      <button class="cp-plan-card" data-plan="training">
+        <div class="cp-plan-head"><span class="cp-plan-icon">💪</span><span class="cp-plan-name">Training Coaching</span><span class="cp-plan-price">₹699<em>/mo</em></span></div>
+        <ul class="cp-plan-perks"><li>Workout Plan</li><li>Exercise Schedule</li><li>Weekly Progress</li><li>Training Guidance</li></ul>
+      </button>
+
+      <button class="cp-plan-card cp-plan-card--popular" data-plan="complete">
+        <span class="cp-plan-badge">Most Popular</span>
+        <div class="cp-plan-head"><span class="cp-plan-icon">🏆</span><span class="cp-plan-name">Complete Transformation</span><span class="cp-plan-price">₹999<em>/mo</em></span></div>
+        <ul class="cp-plan-perks"><li>Diet + Training</li><li>Daily Monitoring</li><li>Unlimited Chat</li><li>Priority Support</li></ul>
+      </button>
+
+      <button class="cp-coaching-cancel cp-coaching-cancel--full" id="coachingCancelBtn">Cancel</button>
     </div>
-    <p class="cp-coaching-note">Secure payment · Cancel anytime</p>
+
+    <!-- STEP 2: summary -->
+    <div class="cp-coaching-step" id="coachingStepSummary" style="display:none">
+      <p class="cp-coaching-title">Confirm Coaching Request</p>
+      <div class="cp-summary-rows">
+        <div class="cp-summary-row"><span>Expert</span><b id="pcSummaryExpert">—</b></div>
+        <div class="cp-summary-row"><span>Plan</span><b id="pcSummaryPlan">—</b></div>
+        <div class="cp-summary-row"><span>Price</span><b id="pcSummaryPrice">—</b></div>
+        <div class="cp-summary-row"><span>Duration</span><b>1 Month</b></div>
+      </div>
+      <p class="cp-coaching-note">No payment now — you'll pay only after the expert accepts your request.</p>
+      <div class="cp-coaching-actions">
+        <button class="cp-coaching-cancel" id="coachingBackBtn">Cancel</button>
+        <button class="cp-coaching-confirm" id="coachingSendBtn">Send Coaching Request</button>
+      </div>
+    </div>
+
   </div>
 </div>
 

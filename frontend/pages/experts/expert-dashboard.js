@@ -1321,6 +1321,142 @@ function renderMyAthletes(rels, expert) {
 }
 
 /* ══════════════════════════════════════════════
+   PERSONAL COACHING REQUESTS — expert inbox
+   personal_coach_requests where expertId == live uid, realtime.
+   Lifecycle: pending → accepted (expert) → active (athlete pays)
+                      → declined (expert)
+   Tabs: Pending = pending · Active = accepted + active ·
+         Completed = declined/completed/ended
+   ══════════════════════════════════════════════ */
+var _pcRequests        = [];
+var _pcActiveTab       = 'pending';
+
+function listenForCoachingRequests(expert) {
+  if (typeof ZitlasDB === 'undefined') return;
+  var uid = (typeof ZitlasAuth !== 'undefined' && ZitlasAuth.currentUser)
+    ? ZitlasAuth.currentUser.uid
+    : (expert && expert.id);
+  if (!uid) return;
+  if (listenForCoachingRequests._attachedFor === uid) return;
+  listenForCoachingRequests._attachedFor = uid;
+
+  console.log('[COACHING] listening: personal_coach_requests.where(expertId ==', uid + ')');
+  ZitlasDB.collection('personal_coach_requests')
+    .where('expertId', '==', uid)
+    .onSnapshot(function(snap) {
+      _pcRequests = snap.docs.map(function(d) { return d.data(); })
+        .sort(function(a, b) { return (b.createdAt || '') < (a.createdAt || '') ? -1 : 1; });
+      console.log('[COACHING] requests:', _pcRequests.map(function(r) {
+        return r.requestId + ':' + r.status;
+      }));
+      var pendingCount = _pcRequests.filter(function(r) { return r.status === 'pending'; }).length;
+      var badge = document.getElementById('navBadgeCoaching');
+      if (badge) {
+        badge.textContent   = pendingCount;
+        badge.style.display = pendingCount > 0 ? '' : 'none';
+      }
+      var tabBadge = document.getElementById('pcTabBadgePending');
+      if (tabBadge) {
+        tabBadge.textContent   = pendingCount;
+        tabBadge.style.display = pendingCount > 0 ? '' : 'none';
+      }
+      renderCoachingRequests();
+    }, function(err) { console.warn('[COACHING] requests listener error', err); });
+}
+
+function _initCoachingTabs() {
+  var tabs = document.querySelectorAll('[data-coaching-tab]');
+  tabs.forEach(function(tab) {
+    tab.addEventListener('click', function() {
+      _pcActiveTab = tab.dataset.coachingTab;
+      tabs.forEach(function(t) { t.classList.remove('pr-inbox-tab--active'); });
+      tab.classList.add('pr-inbox-tab--active');
+      renderCoachingRequests();
+    });
+  });
+}
+
+var PC_PLAN_ICONS = { diet: '🥗', training: '💪', complete: '🏆' };
+
+function renderCoachingRequests() {
+  var wrap  = document.getElementById('pcRequestList');
+  var empty = document.getElementById('pcEmpty');
+  if (!wrap) return;
+
+  var bucket = _pcRequests.filter(function(r) {
+    if (_pcActiveTab === 'pending')   return r.status === 'pending';
+    if (_pcActiveTab === 'active')    return r.status === 'accepted' || r.status === 'active';
+    return r.status === 'declined' || r.status === 'completed' || r.status === 'ended';
+  });
+
+  wrap.querySelectorAll('.pc-req-card').forEach(function(el) { el.remove(); });
+  if (empty) empty.style.display = bucket.length ? 'none' : '';
+
+  bucket.forEach(function(req) {
+    var icon = PC_PLAN_ICONS[req.planType] || '👨‍🏫';
+    var name = req.athleteName || 'Athlete';
+    var initials = name.split(/\s+/).map(function(w) { return w[0] || ''; }).slice(0, 2).join('').toUpperCase();
+    var statusLine =
+      req.status === 'pending'  ? 'Awaiting your response' :
+      req.status === 'accepted' ? 'Accepted — awaiting athlete payment' :
+      req.status === 'active'   ? 'Active coaching client' :
+      req.status === 'declined' ? 'Declined' : 'Completed';
+
+    var card = document.createElement('div');
+    card.className = 'ed-athlete-card pc-req-card';
+    card.innerHTML =
+      '<div class="ed-athlete-av">' + esc(initials) + '</div>' +
+      '<div class="ed-athlete-info">' +
+        '<span class="ed-athlete-name">' + esc(name) + '</span>' +
+        '<span class="ed-athlete-sub">' + icon + ' ' + esc(req.planLabel || req.planType) +
+          ' · ₹' + esc(String(req.price)) + '/mo</span>' +
+        '<span class="ed-athlete-sub">' + esc(statusLine) + '</span>' +
+      '</div>' +
+      (req.status === 'pending'
+        ? '<div class="pc-req-actions">' +
+            '<button class="erc-btn erc-btn--secondary pc-decline">Decline</button>' +
+            '<button class="erc-btn erc-btn--primary pc-accept">Accept</button>' +
+          '</div>'
+        : (req.status === 'active'
+            ? '<button class="erc-btn erc-btn--primary pc-chat">Chat</button>'
+            : ''));
+
+    var acceptBtn  = card.querySelector('.pc-accept');
+    var declineBtn = card.querySelector('.pc-decline');
+    var chatBtn    = card.querySelector('.pc-chat');
+
+    if (acceptBtn) acceptBtn.addEventListener('click', function() {
+      _pcUpdateRequestStatus(req, 'accepted', 'acceptedAt');
+    });
+    if (declineBtn) declineBtn.addEventListener('click', function() {
+      _pcUpdateRequestStatus(req, 'declined', 'declinedAt');
+    });
+    if (chatBtn) chatBtn.addEventListener('click', function() {
+      openExpertChat('chat_' + req.athleteId + '_' + req.expertId, name);
+    });
+
+    wrap.appendChild(card);
+  });
+}
+
+function _pcUpdateRequestStatus(req, newStatus, tsField) {
+  if (typeof ZitlasDB === 'undefined') return;
+  console.log('[COACHING]', newStatus, '→ personal_coach_requests/' + req.requestId);
+  var update = { status: newStatus };
+  update[tsField] = new Date().toISOString();
+  ZitlasDB.collection('personal_coach_requests').doc(req.requestId).update(update)
+    .then(function() {
+      edShowToast(newStatus === 'accepted'
+        ? '✅ Request accepted — the athlete will be asked to complete payment.'
+        : 'Request declined.');
+    })
+    .catch(function(err) {
+      console.error('[COACHING] status update failed', err);
+      edShowToast('Could not update the request — please try again.');
+    });
+}
+
+/* ══════════════════════════════════════════════
    CHAT ROOM DISCOVERY — the fix for the empty Client Chats inbox.
 
    A conversation started on the athlete's device exists only in THAT
@@ -4560,6 +4696,9 @@ function renderAll(baseExpert) {
   listenForChatRooms(expert);
   /* Personal coaching clients (realtime) */
   listenForMyAthletes(expert);
+  /* Personal coaching requests inbox (realtime) */
+  listenForCoachingRequests(expert);
+  _initCoachingTabs(expert);
   /* Auto-open chat when returning from a modify page after completing review */
   _prCheckPendingChatOpen(expert);
 
