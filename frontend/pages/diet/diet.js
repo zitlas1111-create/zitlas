@@ -533,7 +533,37 @@
 
     if (!mealList) return;
 
-    const meals = dayData.meals || [];
+    let meals = dayData.meals || [];
+
+    /* Health-status recovery override — replaces ONLY today's meals with
+       the deterministic recovery template chosen on the dashboard
+       (assets/js/health-status.js → zitlas_health_today). Never touches
+       other days, never overrides an active coach-authored plan (the coach
+       is alerted instead and adjusts it themselves). */
+    var _hsToday = safeJSON('zitlas_health_today', null);
+    var _hsApplies = _hsToday &&
+      _hsToday.date === new Date().toISOString().slice(0, 10) &&
+      _hsToday.diet && _hsToday.diet.meals && _hsToday.diet.meals.length &&
+      (dayData.day || dayData.day_type) === _pcTodayName() &&
+      planSource !== 'coach';
+    if (_hsApplies) meals = _hsToday.diet.meals;
+
+    var _hsBanner = document.getElementById('hsDietBanner');
+    if (_hsApplies) {
+      if (!_hsBanner) {
+        _hsBanner = document.createElement('div');
+        _hsBanner.id = 'hsDietBanner';
+        _hsBanner.className = 'cw-readonly-note';
+        _hsBanner.style.margin = '0 16px 12px';
+        mealList.parentNode.insertBefore(_hsBanner, mealList);
+      }
+      _hsBanner.innerHTML = '🛟 <b>&nbsp;Recovery meals for today&nbsp;</b> — ' +
+        esc(_hsToday.diet.focus || 'adjusted for how you’re feeling') +
+        '. Your normal plan resumes tomorrow.';
+      _hsBanner.style.display = '';
+    } else if (_hsBanner) {
+      _hsBanner.style.display = 'none';
+    }
 
     const swapSvg = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none"
       stroke="var(--primary)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -604,11 +634,11 @@
             ${meal.purpose ? `<span class="meal-purpose">${esc(meal.purpose)}</span>` : ''}
             ${expertNote}
           </div>
-          <button class="swap-btn" data-meal="${esc(meal.meal_name || '')}" aria-label="Swap ${esc(meal.meal_name || '')}">
+          ${meal._recovery ? '' : `<button class="swap-btn" data-meal="${esc(meal.meal_name || '')}" aria-label="Swap ${esc(meal.meal_name || '')}">
             ${swapSvg}
             <span class="swap-label">Can't eat<br>this?</span>
-          </button>
-        </article>` + buildCoachMealRow(meal, dayData.day_type);
+          </button>`}
+        </article>` + buildCoachMealRow(meal, dayData.day || dayData.day_type);
     }).join('');
 
     /* Daily Meal Compliance score — only appears once today has at least
@@ -1052,13 +1082,37 @@
       });
     }
 
-    /* Ask Nutritionist — opens nutritionist selection modal */
+    /* Ask Nutritionist → Ask My Coach. Personal-Coaching-only: with an
+       active coach the question goes ONLY to the assigned coach (never a
+       generic expert lookup); without one the option is disabled. */
     const nutriBtn = document.getElementById('swapNutriBtn');
     if (nutriBtn) {
       nutriBtn.addEventListener('click', () => {
-        closeSwapModal();
-        openNutriSelectModal();
+        if (_pcRel && _pcRel.status === 'active') {
+          closeSwapModal();
+          _pcOpenAskCoachSheet(_swapMealName, _swapMealFoods);
+        } else {
+          showToast('Available only with Personal Coaching — hire a coach from the Experts page.');
+        }
       });
+    }
+    _pcUpdateAskCoachUi();
+  }
+
+  /* Rewrites the swap-modal coach option to reflect the coaching state */
+  function _pcUpdateAskCoachUi() {
+    var btn = document.getElementById('swapNutriBtn');
+    if (!btn) return;
+    var title = btn.querySelector('.swap-opt-title');
+    var desc  = btn.querySelector('.swap-opt-desc');
+    if (_pcRel && _pcRel.status === 'active') {
+      if (title) title.textContent = 'Ask My Coach';
+      if (desc)  desc.textContent  = 'Send this meal question to ' + (_pcRel.coachName || 'your coach');
+      btn.style.opacity = '';
+    } else {
+      if (title) title.textContent = 'Ask My Coach';
+      if (desc)  desc.textContent  = 'Available only with Personal Coaching';
+      btn.style.opacity = '0.5';
     }
   }
 
@@ -1468,6 +1522,13 @@
           applyCoachDiet();
         }, function (e) { console.warn('[DIET COACH] plan listener error', e); });
       }
+      if (_pcRel && _pcRel.status === 'active') {
+        /* Meal check-ins + Ask My Coach are coaching features, live even
+           before the coach publishes a plan (AI meals still render). */
+        _pcAttachCheckinsListener();
+        renderDay(currentDay); /* inject Snap Meal rows into the AI view */
+        _pcUpdateAskCoachUi();
+      }
       applyCoachDiet();
     }, function (e) { console.warn('[DIET COACH] rel listener error', e); });
   }
@@ -1644,6 +1705,96 @@
   }
 
   /* ══════════════════════════════════════════
+     ASK MY COACH — meal question straight to the assigned Personal Coach.
+     Writes a coaching_meal_requests doc (drives the coach's Provide-
+     Alternatives banner in the workspace Diet editor) AND mirrors the
+     question into the coaching chat so the coach can simply Reply there.
+  ══════════════════════════════════════════ */
+  function _pcSendChatToCoach(text) {
+    var uid = _pcUid();
+    if (!uid || !_pcRel || typeof ZitlasDB === 'undefined') return Promise.resolve();
+    var chatId = 'chat_' + uid + '_' + _pcRel.coachId;
+    var msg = {
+      id: 'msg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 5),
+      conversationId: chatId,
+      senderId: uid, senderType: 'athlete',
+      text: text, type: 'text', imageUrl: null,
+      timestamp: new Date().toISOString(),
+    };
+    var roomDoc = {
+      participants: [uid, _pcRel.coachId],
+      athleteId: uid, athleteName: _pcAthleteName(),
+      expertId: _pcRel.coachId, expertName: _pcRel.coachName || 'Coach',
+      lastMessage: text, lastMessageAt: msg.timestamp,
+    };
+    return ZitlasDB.collection('chat_rooms').doc(chatId).set(roomDoc, { merge: true })
+      .then(function () {
+        return ZitlasDB.collection('chat_rooms').doc(chatId).collection('messages').doc(msg.id).set(msg);
+      });
+  }
+
+  function _pcOpenAskCoachSheet(mealName, mealFoods) {
+    var day = _pcTodayName();
+    var examples = 'e.g. “I don’t like today’s breakfast”, “I feel hungry after lunch”, ' +
+      '“Can I replace eggs?”, “I have acidity today”, “I’m travelling”, “Hostel didn’t serve this meal”';
+    _pcOpenSheet(
+      '<p class="cw-sheet-title">💬 Ask ' + esc(_pcRel.coachName || 'My Coach') + '</p>' +
+      '<p class="cw-sheet-sub">' + esc(day) + (mealName ? ' · ' + esc(mealName) : '') +
+        (mealFoods && mealFoods.length ? ' — ' + esc(mealFoods.join(', ')) : '') + '</p>' +
+      '<textarea class="cw-textarea" id="pcAskCoachText" rows="3" placeholder="Describe your problem…"></textarea>' +
+      '<p class="cw-sheet-sub" style="margin-top:8px">' + esc(examples) + '</p>' +
+      '<div class="cw-save-bar" style="position:static;background:none;padding-top:10px">' +
+        '<button class="cw-ghost-btn" id="pcAskCoachCancel">Cancel</button>' +
+        '<button class="cw-save-btn" id="pcAskCoachSend">Send to Coach</button>' +
+      '</div>'
+    );
+    document.getElementById('pcAskCoachCancel').addEventListener('click', _pcCloseSheet);
+    document.getElementById('pcAskCoachSend').addEventListener('click', function () {
+      var q = (document.getElementById('pcAskCoachText').value || '').trim();
+      if (!q) { showToast('Describe your problem first.'); return; }
+      var btn = document.getElementById('pcAskCoachSend');
+      btn.disabled = true; btn.textContent = 'Sending…';
+
+      var uid = _pcUid();
+      var id = 'CMR_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+      var req = {
+        requestId: id, athleteId: uid, athleteName: _pcAthleteName(),
+        coachId: _pcRel.coachId,
+        day: day, mealId: null,
+        mealType: (mealName || 'meal').toLowerCase(), mealName: mealName || 'Meal',
+        mealFoods: mealFoods || [],
+        question: q, note: q,
+        status: 'pending', createdAt: new Date().toISOString(),
+      };
+      console.log('[ASK COACH] request', req);
+      ZitlasDB.collection('coaching_meal_requests').doc(id).set(req)
+        .then(function () {
+          return _pcSendChatToCoach(
+            '🍽 NEW QUESTION — ' + day + ' ' + (mealName || 'Meal') +
+            (mealFoods && mealFoods.length ? ' (' + mealFoods.join(', ') + ')' : '') +
+            ':\n' + q);
+        })
+        .then(function () {
+          var nid = 'CN_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+          return ZitlasDB.collection('coaching_notifications').doc(nid).set({
+            id: nid, toId: _pcRel.coachId, fromId: uid, fromName: _pcAthleteName(),
+            text: '🍽 ' + _pcAthleteName() + ' has a question about ' + day + ' ' + (mealName || 'a meal') + '.',
+            type: 'meal_question', createdAt: new Date().toISOString(), read: false,
+          });
+        })
+        .then(function () {
+          _pcCloseSheet();
+          showToast('📨 Sent to ' + (_pcRel.coachName || 'your coach') + ' — they’ll reply in chat or update your options.');
+        })
+        .catch(function (e) {
+          console.error('[ASK COACH] failed', e);
+          showToast('Could not send — try again.');
+          btn.disabled = false; btn.textContent = 'Send to Coach';
+        });
+    });
+  }
+
+  /* ══════════════════════════════════════════
      DAILY MEAL COMPLIANCE — 📸 Send Meal to Coach
      Only ever shown/wired when Personal Coaching is ACTIVE (_pcRel.status
      === 'active'). Photo goes through the same validated upload pipeline
@@ -1680,16 +1831,19 @@
         _pcCheckins = snap.docs.map(function (d) { return d.data(); })
           .filter(function (c) { return c.coachId === _pcRel.coachId; });
         console.log('[MEAL CHECKIN] snapshot —', _pcCheckins.length, 'total');
-        if (_pcActive) renderDay(currentDay);
+        renderDay(currentDay); /* re-render in BOTH AI and coach-plan mode */
       }, function (e) { console.warn('[MEAL CHECKIN] listener error', e); });
   }
 
   /* Compact per-meal row: camera button (nothing sent yet) OR the photo +
-     coach feedback / pending state (already sent). Only rendered for
-     TODAY — check-ins are a real-time compliance signal, not a historical
-     editor (history stays visible via the coach's Meal Reviews tab). */
+     coach feedback / pending state (already sent). Gated ONLY on an active
+     coaching relationship — NOT on the coach having published a diet plan,
+     so it works on AI-generated meals too (that gating bug hid the button
+     entirely until the coach built a plan). Only rendered for TODAY —
+     check-ins are a real-time compliance signal, not a historical editor
+     (history stays visible via the workspace Meal Reviews tab). */
   function buildCoachMealRow(meal, dayName) {
-    if (!meal._coach || !_pcRel || _pcRel.status !== 'active') return '';
+    if (!_pcRel || _pcRel.status !== 'active') return '';
     if (dayName !== _pcTodayName()) return '';
     var mealType = (meal.meal_name || 'meal').toLowerCase();
     var checkin = _pcCheckinFor(dayName, mealType);
@@ -1715,10 +1869,10 @@
   /* Today's real, computed compliance line — omitted entirely (no "0/0")
      when nothing has been reviewed yet, per "do not fake data". */
   function buildDailyScoreHtml(dayData) {
-    if (!_pcRel || _pcRel.status !== 'active' || dayData.day_type !== _pcTodayName()) return '';
+    var dayName = dayData.day || dayData.day_type;
+    if (!_pcRel || _pcRel.status !== 'active' || dayName !== _pcTodayName()) return '';
     var reviewed = (dayData.meals || [])
-      .filter(function (m) { return m._coach; })
-      .map(function (m) { return _pcCheckinFor(dayData.day_type, (m.meal_name || '').toLowerCase()); })
+      .map(function (m) { return _pcCheckinFor(dayName, (m.meal_name || '').toLowerCase()); })
       .filter(function (c) { return c && c.status === 'reviewed' && c.score != null; });
     if (!reviewed.length) return '';
     var sum = reviewed.reduce(function (s, c) { return s + c.score; }, 0);

@@ -1167,6 +1167,9 @@ async def generate_plan(body: AssessmentInput) -> dict[str, Any]:
         "sources":      all_sources,
         "precautions":                medcon.format_precautions(med_directives),
         "medical_conditions_detected": med_directives["labels"],
+        # Full rules-engine output (severity, exercise/diet/recovery rules) so
+        # the coach-side UI can render restrictions without re-deriving them.
+        "medical_directives":          med_directives,
         "meta": {
             "diet_model":         diet_llm_result.get("model"),
             "workout_model":      workout_llm_result.get("model"),

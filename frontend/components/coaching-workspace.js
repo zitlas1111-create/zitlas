@@ -188,6 +188,7 @@
         '</div>' +
         '<div class="cw-summary" id="cwSummary"></div>' +
       '</header>' +
+      '<div class="cw-med-banner" id="cwMedBanner" style="display:none"></div>' +
       '<nav class="cw-tabs" id="cwTabs">' +
         '<button class="cw-tab active" data-cw-tab="overview">📋 Overview</button>' +
         '<button class="cw-tab" data-cw-tab="diet">🥗 Diet<span class="cw-tab-badge" id="cwDietBadge" style="display:none">0</span></button>' +
@@ -390,6 +391,79 @@
   }
 
   /* ══════════════════════════════════════════════
+     MEDICAL PROFILE — single source for every medical surface in the
+     workspace (sticky banner, Overview card, Diet/Training guidance,
+     pinned chat summary). Data comes from the athlete-published context:
+     free-text medical_conditions + the deterministic rules-engine output
+     (services/medical_conditions.py) stored under precautions.directives.
+  ══════════════════════════════════════════════ */
+  var _MED_NEGATIVE = ['', 'none', 'no', 'nil', 'n/a', 'na', 'nothing'];
+  function medInfo() {
+    var ctx = (S.plan && S.plan.athleteContext) || {};
+    var a = ctx.assessment || ctx.survey || {};
+    var raw = a.medical_conditions || '';
+    var has = raw && _MED_NEGATIVE.indexOf(String(raw).trim().toLowerCase()) === -1;
+    var prec = ctx.precautions || {};
+    var dir = prec.directives || null;
+    var meta = (dir && dir.conditions_meta) || null;
+    if (has && !meta) {
+      /* Context published before the severity engine existed — conservative
+         frontend fallback so critical keywords still surface red. */
+      var lower = String(raw).toLowerCase();
+      var sev = /heart|cardiac|diabet|hypertension|high blood pressure|high bp/.test(lower)
+        ? 'critical' : 'moderate';
+      meta = [{ key: 'raw', label: raw.trim(), severity: sev }];
+    }
+    var rank = { minor: 1, moderate: 2, critical: 3 };
+    var overall = (dir && dir.overall_severity) ||
+      (meta ? meta.reduce(function (w, m) { return rank[m.severity] > rank[w] ? m.severity : w; }, 'minor') : null);
+    return {
+      has: !!has, raw: raw,
+      meta: meta || [], severity: overall,
+      precautions: prec.precautions || (dir && dir.warning_rules) || [],
+      exerciseRules: (dir && dir.exercise_rules) || [],
+      dietRules: (dir && dir.diet_rules) || [],
+      recoveryRules: (dir && dir.recovery_rules) || [],
+    };
+  }
+  function medBadges(med) {
+    if (!med.has) return '<span class="cw-med-badge cw-med-badge--healthy">🟢 No Condition — Healthy</span>';
+    var icon = { critical: '🔴', moderate: '🟠', minor: '🟢' };
+    return med.meta.map(function (m) {
+      return '<span class="cw-med-badge cw-med-badge--' + m.severity + '">' +
+        icon[m.severity] + ' ' + esc(m.label) + '</span>';
+    }).join('');
+  }
+  /* Condition-specific guidance strip for the Diet / Training editors */
+  function medGuidanceBanner(kind) {
+    var med = medInfo();
+    var rules = kind === 'diet' ? med.dietRules : med.exerciseRules;
+    if (!med.has) return '';
+    var names = med.meta.map(function (m) { return m.label; }).join(', ') || med.raw;
+    if (!rules.length) {
+      return '<div class="cw-req-banner">🏥 <b>' + esc(names) + '</b> — adapt this plan to the condition; ' +
+        'detailed AI guidance appears after the athlete regenerates their assessment.</div>';
+    }
+    return '<div class="cw-req-banner">🏥 <b>Medical ' + (kind === 'diet' ? 'diet' : 'workout') +
+      ' guidance — ' + esc(names) + ':</b><br>' +
+      rules.slice(0, 6).map(function (r) { return '• ' + esc(r); }).join('<br>') +
+      '</div>';
+  }
+
+  function renderMedBanner() {
+    var banner = $('cwMedBanner');
+    if (!banner) return;
+    var med = medInfo();
+    if (!med.has) { banner.style.display = 'none'; return; }
+    banner.className = 'cw-med-banner cw-med-banner--' + (med.severity || 'moderate');
+    banner.innerHTML = '⚠ Athlete has ' +
+      esc(med.meta.map(function (m) { return m.label; }).join(', ') || med.raw) +
+      (med.exerciseRules.length ? ' — ' + esc(med.exerciseRules[0]) : '') +
+      ' <span style="font-weight:600">(see Overview → Medical Profile)</span>';
+    banner.style.display = 'block';
+  }
+
+  /* ══════════════════════════════════════════════
      HEADER
   ══════════════════════════════════════════════ */
   function renderHeader() {
@@ -422,6 +496,8 @@
       return '<div class="cw-sum-item"><span class="cw-sum-val">' + esc(it.v) +
         '</span><span class="cw-sum-lbl">' + esc(it.l) + '</span></div>';
     }).join('');
+
+    renderMedBanner();
   }
 
   /* ══════════════════════════════════════════════
@@ -483,35 +559,7 @@
       progress = g.current_value + ' → ' + g.target_value;
     }
 
-    /* Medical condition — prominent, at the top, never buried in Lifestyle.
-       Precautions/detected-condition labels come from the deterministic
-       backend rules engine (services/medical_conditions.py), not the LLM. */
-    var medRaw = a.medical_conditions;
-    var medNegative = ['none', 'no', 'nil', 'n/a', 'na', 'nothing', ''];
-    var hasMedical = medRaw && medNegative.indexOf(String(medRaw).trim().toLowerCase()) === -1;
-    var prec = ctx.precautions || null;
-
-    var html = '';
-    if (hasMedical) {
-      html += '<div class="cw-card" style="border:1.5px solid rgba(229,72,77,0.35);background:rgba(229,72,77,0.05)">' +
-        '<p class="cw-card-title">🩺 Medical Condition</p>' +
-        '<p style="font-size:15px;font-weight:800;color:var(--text,#1E293B);margin:0 0 8px">' + esc(medRaw) +
-          (prec && prec.conditions && prec.conditions.length
-            ? ' <span style="font-weight:600;font-size:12px;color:var(--text-sec,#64748B)">(' + esc(prec.conditions.join(', ')) + ')</span>'
-            : '') +
-        '</p>' +
-        '<p style="font-size:12.5px;color:var(--text-sec,#64748B);margin:0 0 10px">Special Coaching Notes — the AI has adjusted this athlete’s diet and training plan for this condition (see Diet/Training tabs).</p>' +
-        (prec && prec.precautions && prec.precautions.length
-          ? '<span class="cw-score-label">Today’s Precautions</span><ul style="margin:0;padding-left:18px">' +
-              prec.precautions.map(function (p) {
-                return '<li style="font-size:12.5px;color:var(--text-sec,#64748B);line-height:1.6;margin-bottom:3px">' + esc(p) + '</li>';
-              }).join('') +
-            '</ul>'
-          : '') +
-      '</div>';
-    }
-
-    html +=
+    var html =
       '<div class="cw-card"><p class="cw-card-title">👤 Athlete Profile</p>' +
         kv('Name', S.opts.athleteName) +
         kv('Age', a.age) +
@@ -528,6 +576,32 @@
             '</span><span class="cw-metric-lbl">' + esc(m.l) + '</span></div>';
         }).join('') + '</div></div>';
     }
+
+    /* 🏥 Medical Profile — directly below AI Fitness Metrics. Severity
+       badges + precautions + AI coaching notes come from the deterministic
+       backend rules engine, never the LLM. The assessment captures medical
+       info as ONE free-text answer, so allergies/disabilities/medications
+       only appear if the athlete typed them there — never invented. */
+    var med = medInfo();
+    html += '<div class="cw-card"' +
+      (med.has && med.severity === 'critical' ? ' style="border:1.5px solid rgba(229,72,77,0.4)"' : '') +
+      '><p class="cw-card-title">🏥 Medical Profile</p>' +
+      '<div style="margin-bottom:' + (med.has ? '10px' : '0') + '">' + medBadges(med) + '</div>';
+    if (med.has) {
+      html +=
+        '<span class="cw-score-label">Medical Conditions (as reported)</span>' +
+        '<p style="font-size:13.5px;font-weight:700;color:var(--text,#1E293B);margin:0 0 10px">' + esc(med.raw) + '</p>' +
+        '<p style="font-size:11.5px;color:var(--text-sec,#94A3B8);margin:0 0 10px">Allergies, disabilities, injuries or medications appear above only if the athlete mentioned them in their assessment answer.</p>' +
+        (med.precautions.length
+          ? '<span class="cw-score-label">Today’s Precautions</span><ul class="cw-med-list" style="margin-bottom:10px">' +
+              med.precautions.map(function (p) { return '<li>' + esc(p) + '</li>'; }).join('') + '</ul>'
+          : '') +
+        (med.exerciseRules.length
+          ? '<span class="cw-score-label">AI Coaching Notes</span><ul class="cw-med-list">' +
+              med.exerciseRules.slice(0, 6).map(function (r) { return '<li>' + esc(r) + '</li>'; }).join('') + '</ul>'
+          : '');
+    }
+    html += '</div>';
 
     if (g.type || progress) {
       html += '<div class="cw-card"><p class="cw-card-title">🎯 Current Goal</p>' +
@@ -873,6 +947,7 @@
 
     body.innerHTML =
       dayPillsHtml(S.dietDraft.days, S.dayIdx, pendingByDay) +
+      medGuidanceBanner('diet') +
       reqBanner +
       mealsHtml +
       '<button class="cw-add-btn" id="cwAddMeal">+ Add custom meal to ' + esc(day.day) + '</button>' +
@@ -1127,6 +1202,7 @@
 
     body.innerHTML =
       dayPillsHtml(S.trainDraft.days, S.dayIdx) +
+      medGuidanceBanner('workout') +
       '<div class="cw-ed-meal">' +
         '<div class="cw-ed-row" style="margin-bottom:0">' +
           '<input class="cw-input" placeholder="Day focus (e.g. Upper Body Strength)" value="' + esc(day.focus || '') + '" id="cwDayFocus">' +
@@ -1311,6 +1387,39 @@
         sum + '/' + max + ' · ' + Math.round((sum / max) * 100) + '%</b></div>';
     }
 
+    /* Compliance stats — computed from REAL reviewed check-ins only.
+       Rendered only once at least one review exists (never a fake 0). */
+    var reviewed = S.checkins.filter(function (c) { return c.status === 'reviewed' && c.score != null; });
+    var statsRow = '';
+    if (reviewed.length) {
+      var all = reviewed.map(function (c) { return c.score; });
+      var avg = all.reduce(function (s, v) { return s + v; }, 0) / all.length;
+      var weekAgo = Date.now() - 7 * 86400000;
+      var week = reviewed.filter(function (c) { return new Date(c.timestamp) >= weekAgo; })
+        .map(function (c) { return c.score; });
+      var weekAvg = week.length ? week.reduce(function (s, v) { return s + v; }, 0) / week.length : null;
+      /* Submission streak: consecutive calendar days (ending today) with ≥1 check-in */
+      var daySet = {};
+      S.checkins.forEach(function (c) {
+        if (c.timestamp) daySet[new Date(c.timestamp).toDateString()] = true;
+      });
+      var streak = 0;
+      for (var di = 0; ; di++) {
+        var d0 = new Date(); d0.setDate(d0.getDate() - di);
+        if (daySet[d0.toDateString()]) streak++;
+        else if (di === 0) continue; /* today may not be submitted yet */
+        else break;
+      }
+      statsRow = '<div class="cw-stats-row">' +
+        '<div class="cw-stat-chip"><b>' + (Math.round(avg * 10) / 10) + '/10</b><span>Avg Score</span></div>' +
+        '<div class="cw-stat-chip"><b>' + (weekAvg !== null ? Math.round(weekAvg * 10) + '%' : '—') + '</b><span>Weekly Score</span></div>' +
+        '<div class="cw-stat-chip"><b>' + (streak ? '🔥 ' + streak + 'd' : '—') + '</b><span>Check-in Streak</span></div>' +
+        '<div class="cw-stat-chip"><b>' + Math.max.apply(null, all) + '</b><span>Highest</span></div>' +
+        '<div class="cw-stat-chip"><b>' + Math.min.apply(null, all) + '</b><span>Lowest</span></div>' +
+        '<div class="cw-stat-chip"><b>' + reviewed.length + '</b><span>Reviewed</span></div>' +
+        '</div>';
+    }
+
     function card(c) {
       var statusCls = c.status === 'reviewed' ? 'cw-review-status--done' : 'cw-review-status--pending';
       var statusTxt = c.status === 'reviewed' ? (c.score != null ? c.score + '/10' : 'Reviewed') : 'Pending';
@@ -1336,7 +1445,7 @@
       return;
     }
 
-    body.innerHTML = coverage + scoreLine +
+    body.innerHTML = coverage + statsRow + scoreLine +
       (todays.length ? '<p class="cw-review-sec-title">Today</p>' + todays.map(card).join('') : '') +
       (earlier.length ? '<p class="cw-review-sec-title">Earlier</p>' + earlier.map(card).join('') : '');
 
@@ -1438,7 +1547,27 @@
   function renderChatShell() {
     var body = $('cwBody');
     var locked = S.opts.status !== 'active';
+
+    /* Coach-side pinned athlete summary — always visible above the thread */
+    var pin = '';
+    if (S.opts.role === 'coach') {
+      var med = medInfo();
+      var ctx = (S.plan && S.plan.athleteContext) || {};
+      var a2 = ctx.assessment || ctx.survey || {};
+      var c2 = ctx.calculations || {};
+      var g2 = ctx.goal || {};
+      var bits = [];
+      bits.push(med.has
+        ? '🏥 <b>' + esc(med.meta.map(function (m) { return m.label; }).join(', ') || med.raw) + '</b>'
+        : '🟢 No medical conditions');
+      if (g2.type) bits.push(esc(cap(g2.type)) + ' goal');
+      if (c2.bmi) bits.push('BMI ' + esc(parseFloat(c2.bmi).toFixed(1)));
+      if (a2.living_situation) bits.push(esc(cap(a2.living_situation)));
+      pin = '<div class="cw-chat-pin">📌 <b>Athlete Summary</b> — ' + bits.join(' · ') + '</div>';
+    }
+
     body.innerHTML =
+      pin +
       '<div class="cw-chat-msgs" id="cwChatMsgs"></div>' +
       (locked
         ? '<div class="cw-chat-locked">🔒 Personal Coaching Ended</div>'

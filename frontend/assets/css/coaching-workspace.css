@@ -555,6 +555,49 @@
 }
 .cw-score-btn.selected { border-color: #6BA539; background: #6BA539; color: #fff; }
 
+/* ── Medical profile / sticky warning ── */
+.cw-med-banner {
+  flex-shrink: 0;
+  margin: 8px 14px 0;
+  max-width: 760px; width: calc(100% - 28px);
+  align-self: center;
+  border-radius: 14px;
+  padding: 10px 14px;
+  font-size: 12.5px; font-weight: 700; line-height: 1.5;
+}
+.cw-med-banner--critical { background: rgba(229,72,77,0.1); border: 1.5px solid rgba(229,72,77,0.4); color: #B3261E; }
+.cw-med-banner--moderate { background: rgba(245,158,11,0.1); border: 1.5px solid rgba(245,158,11,0.4); color: #92600A; }
+.cw-med-banner--minor    { background: rgba(107,165,57,0.1); border: 1.5px solid rgba(107,165,57,0.4); color: #578A2C; }
+.cw-med-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 11px; border-radius: 999px;
+  font-size: 11.5px; font-weight: 800;
+  margin: 0 6px 6px 0;
+}
+.cw-med-badge--critical { background: rgba(229,72,77,0.12); color: #B3261E; border: 1px solid rgba(229,72,77,0.35); }
+.cw-med-badge--moderate { background: rgba(245,158,11,0.12); color: #92600A; border: 1px solid rgba(245,158,11,0.35); }
+.cw-med-badge--minor    { background: rgba(107,165,57,0.12); color: #578A2C; border: 1px solid rgba(107,165,57,0.35); }
+.cw-med-badge--healthy  { background: rgba(107,165,57,0.12); color: #578A2C; border: 1px solid rgba(107,165,57,0.35); }
+.cw-med-list { margin: 0; padding-left: 18px; }
+.cw-med-list li { font-size: 12.5px; color: var(--text-sec, #64748B); line-height: 1.6; margin-bottom: 3px; }
+.cw-chat-pin {
+  flex-shrink: 0;
+  margin: 10px 14px 0;
+  background: rgba(255,255,255,0.94);
+  border: 1.5px solid rgba(245,158,11,0.4);
+  border-radius: 14px; padding: 10px 13px;
+  font-size: 12px; color: var(--text-sec, #64748B); line-height: 1.6;
+}
+.cw-chat-pin b { color: var(--text, #1E293B); }
+.cw-stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+.cw-stat-chip {
+  background: rgba(255,255,255,0.9);
+  border: 1px solid rgba(30,41,59,0.07);
+  border-radius: 14px; padding: 10px 8px; text-align: center;
+}
+.cw-stat-chip b { display: block; font-size: 15px; font-weight: 800; color: #578A2C; }
+.cw-stat-chip span { display: block; font-size: 9.5px; font-weight: 700; color: var(--text-sec, #94A3B8); text-transform: uppercase; letter-spacing: 0.4px; margin-top: 2px; }
+
 /* ── Toast ── */
 .cw-toast {
   position: fixed; left: 50%; bottom: 90px; z-index: 12500;

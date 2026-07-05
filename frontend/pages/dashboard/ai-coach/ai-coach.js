@@ -2059,6 +2059,7 @@
         localStorage.setItem('zitlas_precautions', JSON.stringify({
           precautions: data.precautions,
           conditions:  data.medical_conditions_detected || [],
+          directives:  data.medical_directives || null,
         }));
       } else {
         localStorage.removeItem('zitlas_precautions');

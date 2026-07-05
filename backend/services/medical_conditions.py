@@ -514,6 +514,33 @@ CONDITION_RULES: dict[str, dict[str, Any]] = {
     },
 }
 
+# Coaching-risk severity per condition — drives the red/orange/green badges
+# and the always-visible warning banner on the coach's side. Anything not
+# listed (including the generic fallback) is treated as "moderate".
+CONDITION_SEVERITY: dict[str, str] = {
+    "asthma":           "moderate",
+    "diabetes":         "critical",
+    "hypertension":     "critical",
+    "hypothyroidism":   "moderate",
+    "hyperthyroidism":  "moderate",
+    "pcos":             "moderate",
+    "arthritis":        "moderate",
+    "knee_pain":        "moderate",
+    "back_pain":        "moderate",
+    "heart_disease":    "critical",
+    "fatty_liver":      "moderate",
+    "high_cholesterol": "moderate",
+    "obesity":          "moderate",
+    "underweight":      "minor",
+    "anemia":           "moderate",
+    "migraine":         "minor",
+    "depression":       "moderate",
+    "anxiety":          "moderate",
+    "sleep_apnea":      "moderate",
+}
+_SEVERITY_RANK = {"minor": 1, "moderate": 2, "critical": 3}
+
+
 # Applied when the user reports a real condition that matches nothing above —
 # never silently ignored.
 _GENERIC_FALLBACK: dict[str, list[str]] = {
@@ -578,6 +605,8 @@ def build_condition_directives(raw: str) -> dict[str, Any]:
     """
     result: dict[str, Any] = {
         "matched": [], "labels": [],
+        "conditions_meta": [],       # [{key, label, severity}] for badge rendering
+        "overall_severity": None,    # worst severity across matches: minor|moderate|critical
         "exercise_rules": [], "diet_rules": [], "warning_rules": [],
         "recovery_rules": [], "progression_rules": [],
         "is_generic_fallback": False,
@@ -589,18 +618,25 @@ def build_condition_directives(raw: str) -> dict[str, Any]:
     if not matched:
         result["is_generic_fallback"] = True
         result["labels"] = [raw.strip()]
+        result["conditions_meta"] = [{"key": "unknown", "label": raw.strip(), "severity": "moderate"}]
+        result["overall_severity"] = "moderate"
         for cat, items in _GENERIC_FALLBACK.items():
             result[cat] = list(items)
         return result
 
     result["matched"] = matched
+    worst = 0
     for key in matched:
         rules = CONDITION_RULES[key]
+        severity = CONDITION_SEVERITY.get(key, "moderate")
+        worst = max(worst, _SEVERITY_RANK.get(severity, 2))
         result["labels"].append(rules["label"])
+        result["conditions_meta"].append({"key": key, "label": rules["label"], "severity": severity})
         for cat in ("exercise_rules", "diet_rules", "warning_rules", "recovery_rules", "progression_rules"):
             for item in rules[cat]:
                 if item not in result[cat]:
                     result[cat].append(item)
+    result["overall_severity"] = {1: "minor", 2: "moderate", 3: "critical"}[worst]
     return result
 
 
