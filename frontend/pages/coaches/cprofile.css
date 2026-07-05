@@ -1797,6 +1797,108 @@ img { display: block; max-width: 100%; }
 .cp-withdraw-confirm:disabled { opacity: 0.6; }
 .cp-withdraw-cancel:active, .cp-withdraw-confirm:active { transform: scale(0.97); }
 
+/* ── End Coaching (active-relationship secondary action) ── */
+.cp-end-coaching-wrap {
+  display: none;
+  padding: 0 16px;
+  margin-top: 10px;
+}
+.cp-end-coaching-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 13px 20px;
+  background: transparent;
+  border: 1.5px solid rgba(229,72,77,0.45);
+  border-radius: 14px;
+  color: #D93036;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  letter-spacing: 0.2px;
+  transition: background 0.2s, border-color 0.2s;
+}
+.cp-end-coaching-btn:active {
+  background: rgba(229,72,77,0.08);
+  border-color: rgba(229,72,77,0.7);
+}
+.cp-end-coaching-btn svg { flex-shrink: 0; }
+
+/* display driven by JS (inline style) — .open drives the 200ms animation */
+.cp-end-coaching-backdrop {
+  position: fixed; inset: 0; z-index: 11500;
+  background: rgba(30,41,59,0.5);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  align-items: center; justify-content: center;
+  padding: 20px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.cp-end-coaching-backdrop.open { opacity: 1; }
+.cp-end-coaching-modal {
+  background: rgba(255,255,255,0.92);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(255,255,255,0.6);
+  border-radius: 24px;
+  padding: 24px 20px 20px;
+  max-width: 340px; width: 100%;
+  box-shadow: 0 24px 70px rgba(30,41,59,0.30);
+  transform: scale(0.95);
+  transition: transform 0.2s ease;
+}
+.cp-end-coaching-backdrop.open .cp-end-coaching-modal { transform: scale(1); }
+@media (prefers-reduced-motion: reduce) {
+  .cp-end-coaching-backdrop, .cp-end-coaching-modal { transition: none; }
+}
+.cp-end-coaching-title {
+  font-size: 16px; font-weight: 800; color: var(--text);
+  margin: 0 0 10px;
+}
+.cp-end-coaching-sub {
+  font-size: 13px; color: var(--text-sec); line-height: 1.55;
+  margin: 0 0 12px;
+}
+.cp-end-coaching-list {
+  margin: 0 0 20px; padding-left: 18px;
+  font-size: 12.5px; color: var(--text-sec); line-height: 1.7;
+}
+.cp-end-coaching-actions { display: flex; gap: 10px; }
+.cp-end-coaching-cancel, .cp-end-coaching-confirm {
+  flex: 1; padding: 12px; border-radius: 14px;
+  font-size: 14px; font-weight: 700; cursor: pointer;
+}
+.cp-end-coaching-cancel {
+  background: #FFFFFF;
+  border: 1.5px solid rgba(30,41,59,0.18);
+  color: var(--text);
+}
+.cp-end-coaching-confirm {
+  background: #E5484D;
+  border: none;
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(229,72,77,0.35);
+}
+.cp-end-coaching-confirm:disabled { opacity: 0.6; }
+.cp-end-coaching-cancel:active, .cp-end-coaching-confirm:active { transform: scale(0.97); }
+
+/* ── Chat: read-only after coaching has ended ── */
+.zc-readonly-banner {
+  display: none;
+  flex-shrink: 0;
+  text-align: center;
+  padding: 12px 14px;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  color: var(--text-sec);
+  font-size: 13px;
+  font-weight: 600;
+}
+
 /* ── Personal Coaching ── */
 .cp-cta--coach,
 .cp-sb-btn--coach {

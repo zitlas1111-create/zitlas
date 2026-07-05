@@ -7,7 +7,7 @@
   <!-- ?v= cache-buster: the server sends no cache-control header, so browsers
        heuristically cache this file and can pair fresh HTML/JS with stale CSS.
        Bump the version whenever this stylesheet changes. -->
-  <link rel="stylesheet" href="cprofile.css?v=20260705b" />
+  <link rel="stylesheet" href="cprofile.css?v=20260705c" />
   <link rel="stylesheet" href="../../assets/css/theme.css" />
   <link rel="stylesheet" href="" />
   <script src="../../assets/js/i18n.js"></script>
@@ -139,6 +139,14 @@
   </button>
 </div>
 
+<!-- End Coaching (shown only while this expert is your active Personal Coach) -->
+<div class="cp-end-coaching-wrap" id="endCoachingWrap" style="display:none">
+  <button class="cp-end-coaching-btn" id="endCoachingBtn">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+    End Coaching
+  </button>
+</div>
+
 <!-- Verify Again + Previous Reviews (shown only when a review is completed) -->
 <div class="cp-verify-again-wrap" id="verifyAgainWrap" style="display:none">
   <button class="cp-verify-again-btn" id="verifyAgainBtn">
@@ -202,6 +210,25 @@
       </div>
     </div>
 
+  </div>
+</div>
+
+<!-- End Coaching confirmation dialog. Inline display:none is deliberate
+     defense-in-depth (see Withdraw dialog note below) — visibility is
+     driven entirely by JS (display + .open for the animation). -->
+<div class="cp-end-coaching-backdrop" id="endCoachingBackdrop" style="display:none" role="dialog" aria-modal="true" aria-labelledby="endCoachingTitle">
+  <div class="cp-end-coaching-modal">
+    <p class="cp-end-coaching-title" id="endCoachingTitle">End Personal Coaching?</p>
+    <p class="cp-end-coaching-sub">Are you sure you want to end your coaching with this expert?</p>
+    <ul class="cp-end-coaching-list">
+      <li>Your coach will no longer be able to edit your plans.</li>
+      <li>Unlimited chat will be disabled.</li>
+      <li>Future coaching updates will stop.</li>
+    </ul>
+    <div class="cp-end-coaching-actions">
+      <button class="cp-end-coaching-cancel" id="endCoachingCancelBtn">Cancel</button>
+      <button class="cp-end-coaching-confirm" id="endCoachingConfirmBtn">End Coaching</button>
+    </div>
   </div>
 </div>
 
@@ -483,7 +510,8 @@
     </div>
   </div>
   <div class="zc-messages" id="chatMessages"></div>
-  <div class="zc-input-bar">
+  <div class="zc-readonly-banner" id="chatReadonlyBanner" style="display:none">🔒 Personal Coaching Ended</div>
+  <div class="zc-input-bar" id="chatInputBar">
     <button class="zc-attach-btn" id="chatAttachBtn" type="button" aria-label="Attach image">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66L9.41 16.73a2 2 0 0 1-2.83-2.83l7.07-7.07"/>

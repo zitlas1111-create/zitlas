@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>ZITLAS — Expert Portal</title>
-  <link rel="stylesheet" href="expert-dashboard.css" />
+  <link rel="stylesheet" href="expert-dashboard.css?v=20260705" />
   <link rel="stylesheet" href="../../assets/css/theme.css" />
   <link rel="stylesheet" href="" />
   <!-- Firebase SDK -->
@@ -158,7 +158,7 @@
           <span class="pr-tab-badge" id="pcTabBadgePending" style="display:none">0</span>
         </button>
         <button class="pr-inbox-tab" data-coaching-tab="active">Active</button>
-        <button class="pr-inbox-tab" data-coaching-tab="completed">Completed</button>
+        <button class="pr-inbox-tab" data-coaching-tab="completed">Past Clients</button>
       </div>
 
       <div id="pcRequestList">
@@ -353,7 +353,9 @@
 
     <div class="zc-messages" id="edChatMessages"></div>
 
-    <div class="zc-input-bar">
+    <div class="zc-readonly-banner" id="edChatReadonlyBanner" style="display:none">🔒 Personal Coaching Ended</div>
+
+    <div class="zc-input-bar" id="edChatInputBar">
       <button class="zc-attach-btn" id="edChatAttachBtn" type="button" aria-label="Attach image">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66L9.41 16.73a2 2 0 0 1-2.83-2.83l7.07-7.07"/>

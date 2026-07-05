@@ -78,6 +78,24 @@ let _edChatConversationId = null;  /* active expert chat overlay conversation */
 let _edCurrentReview      = null;  /* review linked to the currently open chat */
 let _prInboxActiveTab     = 'pending'; /* which inbox tab is visible */
 
+/* athleteId → personal_coaching doc, kept live by listenForMyAthletes.
+   Lets the chat overlay lock a conversation read-only once that specific
+   athlete's coaching relationship with this expert has ended. */
+var _pcRelByAthlete = {};
+function _pcChatIsReadOnlyFor(athleteId) {
+  var rel = athleteId && _pcRelByAthlete[athleteId];
+  return !!(rel && rel.status === 'ended');
+}
+function _applyExpertChatReadOnlyState() {
+  var banner   = document.getElementById('edChatReadonlyBanner');
+  var inputBar = document.getElementById('edChatInputBar');
+  if (!banner || !inputBar || !_edChatConversationId) return;
+  var conv = chatGetConversation(_edChatConversationId);
+  var readOnly = _pcChatIsReadOnlyFor(conv ? conv.athleteId : null);
+  banner.style.display   = readOnly ? 'block' : 'none';
+  inputBar.style.display = readOnly ? 'none' : 'flex';
+}
+
 /*
  * Canonical status values:
  *   pending          — submitted, waiting for expert
@@ -1120,6 +1138,7 @@ function openExpertChat(conversationId, athleteName) {
   renderExpertChatMessages(msgWrap, conversationId);
   startExpertChatMessagesListener(conversationId);
   startExpertIncomingCallListener(conversationId, conv ? conv.athleteId : null, name);
+  _applyExpertChatReadOnlyState();
 
   overlay.classList.add('open');
   document.body.style.overflow = 'hidden';
@@ -1272,10 +1291,18 @@ function listenForMyAthletes(expert) {
   ZitlasDB.collection('personal_coaching')
     .where('coachId', '==', uid)
     .onSnapshot(function(snap) {
-      var rels = snap.docs.map(function(d) { return d.data(); })
-        .filter(function(r) {
-          return r.status === 'active' && (!r.endDate || new Date(r.endDate) > new Date());
-        });
+      var all = snap.docs.map(function(d) { return d.data(); });
+
+      /* Keyed by athleteId so the chat overlay can tell whether the
+         conversation it's showing belongs to an ended relationship and
+         should be locked read-only — see _pcChatIsReadOnlyFor(). */
+      _pcRelByAthlete = {};
+      all.forEach(function(r) { if (r.athleteId) _pcRelByAthlete[r.athleteId] = r; });
+      _applyExpertChatReadOnlyState();
+
+      var rels = all.filter(function(r) {
+        return r.status === 'active' && (!r.endDate || new Date(r.endDate) > new Date());
+      });
       console.log('[COACHING] active athletes:', rels.length);
       renderMyAthletes(rels, expert);
     }, function(err) { console.warn('[COACHING] athletes listener error', err); });
@@ -1400,7 +1427,8 @@ function renderCoachingRequests() {
       req.status === 'pending'  ? 'Awaiting your response' :
       req.status === 'accepted' ? 'Accepted — awaiting athlete payment' :
       req.status === 'active'   ? 'Active coaching client' :
-      req.status === 'declined' ? 'Declined' : 'Completed';
+      req.status === 'declined' ? 'Declined' :
+      req.status === 'ended'    ? 'Coaching ended by athlete' : 'Completed';
 
     var card = document.createElement('div');
     card.className = 'ed-athlete-card pc-req-card';
@@ -1417,8 +1445,8 @@ function renderCoachingRequests() {
             '<button class="erc-btn erc-btn--secondary pc-decline">Decline</button>' +
             '<button class="erc-btn erc-btn--primary pc-accept">Accept</button>' +
           '</div>'
-        : (req.status === 'active'
-            ? '<button class="erc-btn erc-btn--primary pc-chat">Chat</button>'
+        : ((req.status === 'active' || req.status === 'ended')
+            ? '<button class="erc-btn erc-btn--primary pc-chat">' + (req.status === 'ended' ? 'View Chat' : 'Chat') + '</button>'
             : ''));
 
     var acceptBtn  = card.querySelector('.pc-accept');
@@ -2145,6 +2173,8 @@ function initExpertChatOverlay() {
   /* Send */
   function expertSend() {
     if (!input || !_edChatConversationId) return;
+    var sendConv = chatGetConversation(_edChatConversationId);
+    if (_pcChatIsReadOnlyFor(sendConv ? sendConv.athleteId : null)) return;
     const text = input.value.trim();
     if (!text) return;
 

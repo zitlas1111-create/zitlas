@@ -959,6 +959,24 @@
 
   let _currentChatCoach = null;
 
+  /* personal_coaching/{uid} doc, kept live by initPersonalCoaching's listener.
+     Shared at module scope so the chat overlay (opened for any coach) can
+     tell whether the coach it's currently talking to is a PAST coach whose
+     relationship has ended, and lock the conversation read-only. */
+  var _pcRelationship = null;
+  function _chatIsReadOnlyFor(coach) {
+    return !!(coach && _pcRelationship &&
+      _pcRelationship.coachId === coach.id && _pcRelationship.status === 'ended');
+  }
+  function _applyChatReadOnlyState() {
+    var banner = document.getElementById('chatReadonlyBanner');
+    var inputBar = document.getElementById('chatInputBar');
+    if (!banner || !inputBar) return;
+    var readOnly = _chatIsReadOnlyFor(_currentChatCoach);
+    banner.style.display = readOnly ? 'block' : 'none';
+    inputBar.style.display = readOnly ? 'none' : 'flex';
+  }
+
   function getAthleteId() {
     var id = localStorage.getItem('zitlas_athlete_id');
     if (id) return id;
@@ -1263,6 +1281,8 @@
     /* Hide the bottom navbar so chat is truly full-screen */
     const navbar = document.getElementById('zitlas-navbar');
     if (navbar) navbar.style.display = 'none';
+
+    _applyChatReadOnlyState();
 
     overlay.classList.add('open');
     document.body.style.overflow = 'hidden';
@@ -3001,6 +3021,7 @@
        callbacks are wired in startIncomingCallListener / _startOutgoingCall. */
 
     function sendMessage() {
+      if (_chatIsReadOnlyFor(_currentChatCoach)) return;
       const text = (input?.value || '').trim();
       if (!text) return;
       const container = document.getElementById('chatMessages');
@@ -3407,6 +3428,11 @@
     var buttons     = ['personalCoachBtn', 'stickyCoachBtn']
       .map(function(id) { return document.getElementById(id); })
       .filter(Boolean);
+    var endWrap        = document.getElementById('endCoachingWrap');
+    var endBtn         = document.getElementById('endCoachingBtn');
+    var endBackdrop    = document.getElementById('endCoachingBackdrop');
+    var endCancelBtn   = document.getElementById('endCoachingCancelBtn');
+    var endConfirmBtn  = document.getElementById('endCoachingConfirmBtn');
 
     var _myCoaching   = null;  /* personal_coaching/{uid} doc */
     var _myRequests   = [];    /* all my personal_coach_requests */
@@ -3436,6 +3462,7 @@
         else if (req)                       btn.innerHTML = COACH_SVG + ' Coaching Requested';
         else                                btn.innerHTML = COACH_SVG + ' Personal Coach';
       });
+      if (endWrap) endWrap.style.display = relMine ? 'block' : 'none';
     }
 
     function showStep(which) {
@@ -3598,15 +3625,70 @@
       });
     }
 
+    /* End Coaching — athlete-initiated. Only flips the relationship's
+       status; diet/training plans, chat history and coach notes are never
+       touched — the athlete simply keeps using the last coach-created
+       plan until they regenerate AI or hire another coach. */
+    function openEndCoachingModal() {
+      if (!endBackdrop) return;
+      endBackdrop.style.display = 'flex';
+      requestAnimationFrame(function() {
+        requestAnimationFrame(function() { endBackdrop.classList.add('open'); });
+      });
+    }
+    function closeEndCoachingModal() {
+      if (!endBackdrop) return;
+      endBackdrop.classList.remove('open');
+      setTimeout(function() { endBackdrop.style.display = 'none'; }, 200);
+    }
+    if (endBtn)       endBtn.addEventListener('click', openEndCoachingModal);
+    if (endCancelBtn) endCancelBtn.addEventListener('click', closeEndCoachingModal);
+    if (endBackdrop)  endBackdrop.addEventListener('click', function(e) {
+      if (e.target === endBackdrop) closeEndCoachingModal();
+    });
+    if (endConfirmBtn) {
+      endConfirmBtn.addEventListener('click', function() {
+        var uid = _getMyUserId();
+        if (!uid || !_myCoaching) { closeEndCoachingModal(); return; }
+        var requestId = _myCoaching.requestId;
+        console.log('[COACHING] ending — personal_coaching/' + uid);
+
+        endConfirmBtn.disabled = true;
+        endConfirmBtn.textContent = 'Ending…';
+        ZitlasDB.collection('personal_coaching').doc(uid).update({
+          status:   'ended',
+          endedAt:  new Date().toISOString(),
+          endedBy:  'athlete',
+          reason:   'athlete',
+        }).then(function() {
+          if (requestId) {
+            ZitlasDB.collection('personal_coach_requests').doc(requestId)
+              .update({ status: 'ended' })
+              .catch(function(e) { console.warn('[COACHING] request status update failed', e); });
+          }
+          closeEndCoachingModal();
+          showToast('Personal coaching ended. Your existing plans remain unchanged.');
+        }).catch(function(err) {
+          console.error('[COACHING] end coaching failed', err);
+          showToast('Could not end coaching — please try again.');
+        }).then(function() {
+          endConfirmBtn.disabled = false;
+          endConfirmBtn.textContent = 'End Coaching';
+        });
+      });
+    }
+
     /* Realtime listeners */
     if (typeof ZitlasDB !== 'undefined') {
       var uid = _getMyUserId();
       if (uid) {
         ZitlasDB.collection('personal_coaching').doc(uid).onSnapshot(function(snap) {
           _myCoaching = snap.exists ? snap.data() : null;
+          _pcRelationship = _myCoaching;
           console.log('[COACHING] relationship:', _myCoaching
             ? _myCoaching.status + ' with ' + _myCoaching.coachName : 'none');
           updateCoachButtons();
+          _applyChatReadOnlyState();
         }, function(err) { console.warn('[COACHING] relationship listener error', err); });
 
         ZitlasDB.collection('personal_coach_requests')
