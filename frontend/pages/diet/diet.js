@@ -1828,6 +1828,7 @@
 
     loadTheme();
 
+    renderPrecautions();
     initDaySelector();
     initSwapModal();
     initNutriSelectModal();
@@ -2022,6 +2023,34 @@
     console.log('[DIET CACHE] No diet plan found — showing assessment CTA');
     showLoading(false);
     renderAssessmentCta();
+  }
+
+  /* ══════════════════════════════════════════
+     TODAY'S PRECAUTIONS — medical-condition safety guidance
+     Deterministic, server-computed (backend/services/medical_conditions.py),
+     never LLM-generated. Absent entirely for users with no reported
+     condition — zitlas_precautions is only ever written when non-empty.
+  ══════════════════════════════════════════ */
+  function renderPrecautions() {
+    var wrap = document.getElementById('precautionsCard');
+    if (!wrap) return;
+    var raw = safeJSON('zitlas_precautions', null);
+    if (!raw || !raw.precautions || !raw.precautions.length) {
+      wrap.style.display = 'none';
+      wrap.innerHTML = '';
+      return;
+    }
+    var condLabel = (raw.conditions || []).join(', ');
+    wrap.innerHTML =
+      '<div class="cw-card" style="margin:0 16px 14px">' +
+        '<p class="cw-card-title">⚠️ Today’s Precautions' + (condLabel ? ' — ' + esc(condLabel) : '') + '</p>' +
+        '<ul style="margin:0;padding-left:18px">' +
+          raw.precautions.map(function (p) {
+            return '<li style="font-size:13px;color:var(--text-sec);line-height:1.6;margin-bottom:4px">' + esc(p) + '</li>';
+          }).join('') +
+        '</ul>' +
+      '</div>';
+    wrap.style.display = 'block';
   }
 
   /* ══════════════════════════════════════════

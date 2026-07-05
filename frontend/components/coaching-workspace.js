@@ -366,6 +366,7 @@
       assessment: 'zitlas_assessment', calculations: 'zitlas_calculations',
       swot: 'zitlas_swot', survey: 'zitlas_survey', goal: 'zitlas_goal',
       diet_plan: 'zitlas_diet_plan', workout_plan: 'zitlas_workout_plan',
+      precautions: 'zitlas_precautions',
     };
     Object.keys(keys).forEach(function (k) {
       try { ctx[k] = JSON.parse(localStorage.getItem(keys[k]) || 'null'); } catch (_) { ctx[k] = null; }
@@ -482,7 +483,35 @@
       progress = g.current_value + ' → ' + g.target_value;
     }
 
-    var html =
+    /* Medical condition — prominent, at the top, never buried in Lifestyle.
+       Precautions/detected-condition labels come from the deterministic
+       backend rules engine (services/medical_conditions.py), not the LLM. */
+    var medRaw = a.medical_conditions;
+    var medNegative = ['none', 'no', 'nil', 'n/a', 'na', 'nothing', ''];
+    var hasMedical = medRaw && medNegative.indexOf(String(medRaw).trim().toLowerCase()) === -1;
+    var prec = ctx.precautions || null;
+
+    var html = '';
+    if (hasMedical) {
+      html += '<div class="cw-card" style="border:1.5px solid rgba(229,72,77,0.35);background:rgba(229,72,77,0.05)">' +
+        '<p class="cw-card-title">🩺 Medical Condition</p>' +
+        '<p style="font-size:15px;font-weight:800;color:var(--text,#1E293B);margin:0 0 8px">' + esc(medRaw) +
+          (prec && prec.conditions && prec.conditions.length
+            ? ' <span style="font-weight:600;font-size:12px;color:var(--text-sec,#64748B)">(' + esc(prec.conditions.join(', ')) + ')</span>'
+            : '') +
+        '</p>' +
+        '<p style="font-size:12.5px;color:var(--text-sec,#64748B);margin:0 0 10px">Special Coaching Notes — the AI has adjusted this athlete’s diet and training plan for this condition (see Diet/Training tabs).</p>' +
+        (prec && prec.precautions && prec.precautions.length
+          ? '<span class="cw-score-label">Today’s Precautions</span><ul style="margin:0;padding-left:18px">' +
+              prec.precautions.map(function (p) {
+                return '<li style="font-size:12.5px;color:var(--text-sec,#64748B);line-height:1.6;margin-bottom:3px">' + esc(p) + '</li>';
+              }).join('') +
+            '</ul>'
+          : '') +
+      '</div>';
+    }
+
+    html +=
       '<div class="cw-card"><p class="cw-card-title">👤 Athlete Profile</p>' +
         kv('Name', S.opts.athleteName) +
         kv('Age', a.age) +

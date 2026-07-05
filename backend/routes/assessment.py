@@ -17,6 +17,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 
 from services import groq_service, rag_service
+from services import medical_conditions as medcon
 from services.assessment_service import AssessmentInput, run_assessment
 
 router = APIRouter()
@@ -682,6 +683,11 @@ async def _generate_diet_plan(
         else "User eats non-vegetarian food — include eggs, chicken, or fish for protein."
     )
 
+    # Medical conditions are a first-priority input, not inert profile text —
+    # this renders "" for healthy users, leaving the prompt unchanged.
+    med_directives = medcon.build_condition_directives(data.medical_conditions)
+    med_diet_block = medcon.format_prompt_block(med_directives, "diet")
+
     prompt = f"""RESEARCH CONTEXT ({goal_label} nutrition knowledge base):
 {rag_context if rag_context else "No specific research retrieved — use general evidence-based principles."}
 
@@ -691,6 +697,7 @@ async def _generate_diet_plan(
 
 DIET RULE: {veg_rule}
 LIVING SITUATION NOTE: {'Hostel/canteen foods — keep suggestions mess-friendly.' if data.living_situation.lower() == 'hostel' else 'Home cooking available.'}
+{med_diet_block}
 
 Generate a complete 7-day {goal_label} diet plan. Hit {calc['weight_loss_calories_kcal']} kcal and {calc['protein_target_g']}g protein EVERY day.
 Output valid JSON only — no extra text."""
@@ -911,6 +918,11 @@ CRITICAL — FOLLOW THESE RULES OR THE PLAN WILL BE REJECTED:
 5. Every workout day must have at least one strength or core exercise.
 6. Do NOT invent exercises outside the fitness level bank given in the system prompt."""
 
+    # Medical conditions are a first-priority input, not inert profile text —
+    # this renders "" for healthy users, leaving the prompt unchanged.
+    med_directives = medcon.build_condition_directives(data.medical_conditions)
+    med_workout_block = medcon.format_prompt_block(med_directives, "workout")
+
     prompt = f"""RESEARCH CONTEXT ({goal_label} fitness and conditioning knowledge base):
 {rag_context if rag_context else "No specific research retrieved — use general evidence-based principles."}
 
@@ -918,6 +930,7 @@ CRITICAL — FOLLOW THESE RULES OR THE PLAN WILL BE REJECTED:
 
 {_build_user_profile_block(data, calc, fitness_goal)}
 {muscle_context}
+{med_workout_block}
 
 Generate a complete 7-day {goal_label} workout plan. All exercises must suit {data.workout_preference} setting.
 Output valid JSON only — no extra text."""
@@ -1140,6 +1153,11 @@ async def generate_plan(body: AssessmentInput) -> dict[str, Any]:
           f"workout_ok={workout_structured is not None}  "
           f"total_tokens={diet_tokens + workout_tokens}  RAM: {_ram()}")
 
+    # Deterministic (never LLM-generated) precautions + detected condition
+    # labels, so the frontend can show "Today's Precautions" and a coach-mode
+    # medical-condition callout regardless of what the LLM produced.
+    med_directives = medcon.build_condition_directives(body.medical_conditions)
+
     return {
         "assessment":   assessment_result["assessment"],
         "calculations": calc,
@@ -1147,6 +1165,8 @@ async def generate_plan(body: AssessmentInput) -> dict[str, Any]:
         "diet_plan":    diet_structured,
         "workout_plan": workout_structured,
         "sources":      all_sources,
+        "precautions":                medcon.format_precautions(med_directives),
+        "medical_conditions_detected": med_directives["labels"],
         "meta": {
             "diet_model":         diet_llm_result.get("model"),
             "workout_model":      workout_llm_result.get("model"),

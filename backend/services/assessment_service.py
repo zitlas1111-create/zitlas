@@ -15,6 +15,8 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
+from services import medical_conditions as medcon
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # INPUT MODEL
@@ -816,14 +818,28 @@ def _generate_swot_items(
         ))
 
     # ── Medical conditions ────────────────────────────────────────────────────
+    # Driven by the same modular rules engine that injects diet/exercise
+    # directives into plan generation, so the SWOT reflects the SAME
+    # condition-specific guidance the athlete's actual plan follows —
+    # not a generic one-liner disconnected from the rest of the plan.
     if has_medical:
+        med_directives = medcon.build_condition_directives(data.medical_conditions)
+        cond_label = ", ".join(med_directives["labels"]) or data.medical_conditions
+        sample_exercise_rule = med_directives["exercise_rules"][0] if med_directives["exercise_rules"] else None
+        sample_diet_rule     = med_directives["diet_rules"][0] if med_directives["diet_rules"] else None
+
         W.append(_item(
-            "Medical Condition Requires Adjusted Approach",
-            f"Your condition ({data.medical_conditions}) may affect metabolism, "
-            "hormone levels, or safe exercise intensity. "
-            "Follow your doctor's guidance alongside this plan — "
+            f"Medical Condition Requires Adjusted Approach — {cond_label}",
+            (sample_exercise_rule or
+             f"Your condition ({cond_label}) may affect metabolism, hormone levels, or safe exercise intensity.") +
+            " Follow your doctor's guidance alongside this plan — "
             "progress may be 30–50% slower, and that is completely normal."
         ))
+        if sample_diet_rule:
+            O.append(_item(
+                f"Diet Adapted for {cond_label}",
+                f"{sample_diet_rule} This works alongside your calorie and protein targets, not instead of them."
+            ))
         if is_muscle:
             T.append(_item(
                 "Condition May Affect Muscle Building Rate",

@@ -2052,6 +2052,17 @@
       }
       if (data.sources)       localStorage.setItem('zitlas_sources',       JSON.stringify(data.sources));
       if (data.assessment)    localStorage.setItem('zitlas_assessment',    JSON.stringify(data.assessment));
+      /* Deterministic (never LLM-generated) medical-condition precautions —
+         computed server-side by services/medical_conditions.py. Empty for
+         healthy users, so this key is simply absent for them. */
+      if (data.precautions && data.precautions.length) {
+        localStorage.setItem('zitlas_precautions', JSON.stringify({
+          precautions: data.precautions,
+          conditions:  data.medical_conditions_detected || [],
+        }));
+      } else {
+        localStorage.removeItem('zitlas_precautions');
+      }
       localStorage.setItem('zitlas_plan_generated_at', new Date().toISOString());
       /* Stamp a new planId so any prior expert review is automatically invalidated */
       var _newPlanId = 'plan_' + Date.now();

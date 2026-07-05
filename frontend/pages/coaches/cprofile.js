@@ -3647,6 +3647,7 @@
            athlete to open the workspace first. */
         var ctx = buildContextPackage();
         try { ctx.goal = JSON.parse(localStorage.getItem('zitlas_goal') || 'null'); } catch(_) {}
+        try { ctx.precautions = JSON.parse(localStorage.getItem('zitlas_precautions') || 'null'); } catch(_) {}
         return ZitlasDB.collection('coaching_plans').doc(uid).set({
           athleteId: uid, athleteName: payload.athleteName,
           coachId: payload.coachId, coachName: payload.coachName,
