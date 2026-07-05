@@ -478,6 +478,83 @@
   color: #578A2C; font-size: 11.5px; font-weight: 700;
 }
 
+/* ── Meal Check-In / Daily Meal Compliance ── */
+.meal-coach-row {
+  padding: 0 18px 14px 74px; /* aligns under meal-info, past the icon circle */
+  display: flex; flex-direction: column; gap: 8px;
+}
+.pc-checkin-btn { width: 100%; }
+.pc-checkin-thumb {
+  width: 100%; max-height: 220px; object-fit: cover;
+  border-radius: 14px; cursor: pointer;
+}
+.pc-checkin-pending {
+  font-size: 12px; font-weight: 700; color: #92600A;
+  background: rgba(245,158,11,0.12); border-radius: 12px;
+  padding: 8px 12px;
+}
+.pc-checkin-feedback {
+  background: rgba(107,165,57,0.07);
+  border: 1px solid rgba(107,165,57,0.25);
+  border-radius: 14px; padding: 10px 13px;
+}
+.pc-checkin-reaction { font-size: 13px; font-weight: 800; color: var(--text, #1E293B); margin-right: 8px; }
+.pc-checkin-score { font-size: 12.5px; font-weight: 800; color: #578A2C; }
+.pc-checkin-comment { font-size: 12.5px; color: var(--text-sec, #475569); margin: 6px 0 0; line-height: 1.5; }
+.cw-daily-score {
+  display: flex; align-items: center; justify-content: space-between;
+  background: rgba(255,255,255,0.85);
+  border: 1px solid rgba(30,41,59,0.07);
+  border-radius: 14px; padding: 10px 14px;
+  margin-bottom: 10px; font-size: 12.5px; font-weight: 700;
+  color: var(--text, #1E293B);
+}
+.cw-daily-score b { color: #578A2C; }
+.cw-coverage-row { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.cw-coverage-chip {
+  flex: 1; min-width: 76px; text-align: center;
+  padding: 8px 6px; border-radius: 12px;
+  background: rgba(30,41,59,0.03);
+  font-size: 11px; font-weight: 700; color: var(--text-sec, #64748B);
+}
+.cw-coverage-chip.done { background: rgba(107,165,57,0.1); color: #578A2C; }
+.cw-coverage-chip.missing { background: rgba(229,72,77,0.08); color: #D93036; }
+.cw-review-card {
+  display: flex; gap: 11px; align-items: center;
+  background: rgba(255,255,255,0.92);
+  border: 1px solid rgba(30,41,59,0.07);
+  border-radius: 16px; padding: 10px; margin-bottom: 9px;
+  cursor: pointer;
+}
+.cw-review-thumb { width: 54px; height: 54px; border-radius: 12px; object-fit: cover; flex-shrink: 0; }
+.cw-review-info { flex: 1; min-width: 0; }
+.cw-review-title { display: block; font-size: 13px; font-weight: 800; color: var(--text, #1E293B); }
+.cw-review-sub { display: block; font-size: 11.5px; color: var(--text-sec, #64748B); margin-top: 2px; }
+.cw-review-status {
+  flex-shrink: 0; font-size: 10.5px; font-weight: 800;
+  padding: 4px 9px; border-radius: 999px;
+}
+.cw-review-status--pending { background: rgba(245,158,11,0.14); color: #92600A; }
+.cw-review-status--done { background: rgba(107,165,57,0.12); color: #578A2C; }
+.cw-review-sec-title { font-size: 11px; font-weight: 800; color: var(--text-sec, #94A3B8); text-transform: uppercase; letter-spacing: 0.5px; margin: 14px 0 8px; }
+.cw-review-sec-title:first-child { margin-top: 0; }
+.cw-review-img-lg { width: 100%; max-height: 44vh; object-fit: cover; border-radius: 16px; margin-bottom: 12px; }
+.cw-reaction-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+.cw-reaction-btn {
+  padding: 11px 8px; border-radius: 13px; cursor: pointer;
+  background: rgba(30,41,59,0.03); border: 1.5px solid rgba(30,41,59,0.08);
+  font-size: 12.5px; font-weight: 700; color: var(--text, #1E293B);
+}
+.cw-reaction-btn.selected { border-color: #6BA539; background: rgba(107,165,57,0.1); }
+.cw-score-label { font-size: 11px; font-weight: 800; color: var(--text-sec, #94A3B8); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 8px; display: block; }
+.cw-score-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 14px; }
+.cw-score-btn {
+  padding: 10px 0; border-radius: 11px; cursor: pointer; text-align: center;
+  background: rgba(30,41,59,0.03); border: 1.5px solid rgba(30,41,59,0.08);
+  font-size: 13px; font-weight: 800; color: var(--text, #1E293B);
+}
+.cw-score-btn.selected { border-color: #6BA539; background: #6BA539; color: #fff; }
+
 /* ── Toast ── */
 .cw-toast {
   position: fixed; left: 50%; bottom: 90px; z-index: 12500;

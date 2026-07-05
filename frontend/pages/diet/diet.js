@@ -608,11 +608,27 @@
             ${swapSvg}
             <span class="swap-label">Can't eat<br>this?</span>
           </button>
-        </article>`;
+        </article>` + buildCoachMealRow(meal, dayData.day_type);
     }).join('');
+
+    /* Daily Meal Compliance score — only appears once today has at least
+       one coach-reviewed meal (never a fabricated 0/0). */
+    var dailyScoreWrap = document.getElementById('pcDailyScore');
+    var dailyScoreHtml = buildDailyScoreHtml(dayData);
+    if (dailyScoreHtml) {
+      if (!dailyScoreWrap) {
+        dailyScoreWrap = document.createElement('div');
+        dailyScoreWrap.id = 'pcDailyScore';
+        mealList.parentNode.insertBefore(dailyScoreWrap, mealList);
+      }
+      dailyScoreWrap.innerHTML = dailyScoreHtml;
+    } else if (dailyScoreWrap) {
+      dailyScoreWrap.innerHTML = '';
+    }
 
     /* Re-wire swap buttons for newly rendered cards */
     wireSwapButtons();
+    wireCoachCheckinButtons();
 
     /* Animate cards in */
     requestAnimationFrame(() => {
@@ -1497,6 +1513,7 @@
     };
     planSource = 'coach';
     _pcActive = true;
+    _pcAttachCheckinsListener();
     showLoading(false);
     _pcRenderBanner();
     try { renderFocusCard(weeklyPlan, null); } catch (_) {}
@@ -1592,12 +1609,17 @@
     if (askBtn) askBtn.addEventListener('click', function () { _pcAskExpert(c); });
   }
 
+  function _pcAthleteName() {
+    try {
+      var fb = JSON.parse(localStorage.getItem('zitlas_firebase_user') || 'null');
+      return (fb && fb.displayName) || (fb && fb.name) || 'Athlete';
+    } catch (_) { return 'Athlete'; }
+  }
+
   function _pcAskExpert(c) {
     var uid = _pcUid();
     var id = 'CMR_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
-    var athleteName = (function () {
-      try { var fb = JSON.parse(localStorage.getItem('zitlas_firebase_user') || 'null'); return (fb && fb.displayName) || (fb && fb.name) || 'Athlete'; } catch (_) { return 'Athlete'; }
-    })();
+    var athleteName = _pcAthleteName();
     var req = {
       requestId: id, athleteId: uid, athleteName: athleteName,
       coachId: _pcRel.coachId,
@@ -1619,6 +1641,181 @@
         showToast('📨 Request sent — your coach will reply with new options.');
       })
       .catch(function (e) { console.warn('[DIET COACH] ask failed', e); showToast('Could not send — try again.'); });
+  }
+
+  /* ══════════════════════════════════════════
+     DAILY MEAL COMPLIANCE — 📸 Send Meal to Coach
+     Only ever shown/wired when Personal Coaching is ACTIVE (_pcRel.status
+     === 'active'). Photo goes through the same validated upload pipeline
+     chat images use (assets/js/chat-attachments.js → /api/chat/upload) —
+     no separate Firebase Storage integration exists in this project, so
+     this reuses the one already proven in production instead of adding an
+     unconfigured/untested new upload path.
+     Firestore: meal_checkins/{id} — schema also carries null placeholder
+     fields (estimatedCalories/Protein/Carbs/Fat, foodRecognition,
+     confidenceScore) so future AI recognition can populate them later
+     without a schema change.
+  ══════════════════════════════════════════ */
+  var _pcCheckins = [];
+  var PC_REACTION_LABEL = {
+    perfect: '🟢 Perfect', great: '🟢 Great', good: '🟡 Good',
+    needs_improvement: '🟠 Needs Improvement', not_recommended: '🔴 Not Recommended',
+  };
+
+  function _pcTodayName() {
+    return ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()];
+  }
+  function _pcCheckinFor(day, mealType) {
+    var matches = _pcCheckins.filter(function (c) { return c.day === day && c.mealType === mealType; });
+    matches.sort(function (a, b) { return (b.timestamp || '') < (a.timestamp || '') ? -1 : 1; });
+    return matches[0] || null;
+  }
+
+  function _pcAttachCheckinsListener() {
+    if (_pcAttachCheckinsListener._attached || typeof ZitlasDB === 'undefined') return;
+    _pcAttachCheckinsListener._attached = true;
+    var uid = _pcUid();
+    ZitlasDB.collection('meal_checkins').where('athleteId', '==', uid)
+      .onSnapshot(function (snap) {
+        _pcCheckins = snap.docs.map(function (d) { return d.data(); })
+          .filter(function (c) { return c.coachId === _pcRel.coachId; });
+        console.log('[MEAL CHECKIN] snapshot —', _pcCheckins.length, 'total');
+        if (_pcActive) renderDay(currentDay);
+      }, function (e) { console.warn('[MEAL CHECKIN] listener error', e); });
+  }
+
+  /* Compact per-meal row: camera button (nothing sent yet) OR the photo +
+     coach feedback / pending state (already sent). Only rendered for
+     TODAY — check-ins are a real-time compliance signal, not a historical
+     editor (history stays visible via the coach's Meal Reviews tab). */
+  function buildCoachMealRow(meal, dayName) {
+    if (!meal._coach || !_pcRel || _pcRel.status !== 'active') return '';
+    if (dayName !== _pcTodayName()) return '';
+    var mealType = (meal.meal_name || 'meal').toLowerCase();
+    var checkin = _pcCheckinFor(dayName, mealType);
+
+    if (!checkin) {
+      return '<div class="meal-coach-row">' +
+        '<button class="cw-meal-btn cw-meal-btn--swap pc-checkin-btn" data-pc-checkin="' + esc(meal.meal_name || '') + '">📸 Send Meal to Coach</button>' +
+        '</div>';
+    }
+    var feedback = checkin.status === 'reviewed'
+      ? '<div class="pc-checkin-feedback">' +
+          '<span class="pc-checkin-reaction">' + esc(PC_REACTION_LABEL[checkin.reaction] || 'Reviewed') + '</span>' +
+          (checkin.score != null ? '<span class="pc-checkin-score">' + esc(checkin.score) + '/10</span>' : '') +
+          (checkin.comment ? '<p class="pc-checkin-comment">' + esc(checkin.comment) + '</p>' : '') +
+        '</div>'
+      : '<div class="pc-checkin-pending">⏳ Sent — waiting for your coach’s review</div>';
+    return '<div class="meal-coach-row">' +
+      '<img class="pc-checkin-thumb" src="' + esc(checkin.imageUrl) + '" alt="Your ' + esc(meal.meal_name || 'meal') + ' photo">' +
+      feedback +
+      '</div>';
+  }
+
+  /* Today's real, computed compliance line — omitted entirely (no "0/0")
+     when nothing has been reviewed yet, per "do not fake data". */
+  function buildDailyScoreHtml(dayData) {
+    if (!_pcRel || _pcRel.status !== 'active' || dayData.day_type !== _pcTodayName()) return '';
+    var reviewed = (dayData.meals || [])
+      .filter(function (m) { return m._coach; })
+      .map(function (m) { return _pcCheckinFor(dayData.day_type, (m.meal_name || '').toLowerCase()); })
+      .filter(function (c) { return c && c.status === 'reviewed' && c.score != null; });
+    if (!reviewed.length) return '';
+    var sum = reviewed.reduce(function (s, c) { return s + c.score; }, 0);
+    var max = reviewed.length * 10;
+    return '<div class="cw-daily-score"><span>Today’s Meal Score</span><b>' +
+      sum + '/' + max + ' · ' + Math.round((sum / max) * 100) + '%</b></div>';
+  }
+
+  function wireCoachCheckinButtons() {
+    document.querySelectorAll('[data-pc-checkin]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var mealName = btn.dataset.pcCheckin;
+        var day = weeklyPlan && weeklyPlan.days && weeklyPlan.days[currentDay];
+        var meals = day && day.meals ? day.meals : [];
+        var meal = meals.find(function (m) { return (m.meal_name || '') === mealName; });
+        if (meal) openMealCheckinCamera(meal);
+      });
+    });
+  }
+
+  /* capture="environment" opens the device camera directly on mobile
+     (no gallery step); desktop browsers fall back to their file picker,
+     which is the closest the web platform allows. */
+  function openMealCheckinCamera(meal) {
+    var input = document.getElementById('pcCameraInput');
+    if (!input) {
+      input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.capture = 'environment';
+      input.id = 'pcCameraInput';
+      input.style.display = 'none';
+      document.body.appendChild(input);
+    }
+    input.onchange = function () {
+      var f = input.files && input.files[0];
+      input.value = '';
+      if (f) _pcOpenCheckinPreview(f, meal);
+    };
+    input.click();
+  }
+
+  function _pcOpenCheckinPreview(file, meal) {
+    var url = URL.createObjectURL(file);
+    _pcOpenSheet(
+      '<p class="cw-sheet-title">Send ' + esc(meal.meal_name || 'Meal') + ' to Coach</p>' +
+      '<img src="' + url + '" class="cw-review-img-lg" alt="Meal preview">' +
+      '<div class="cw-save-bar" style="position:static;background:none">' +
+        '<button class="cw-ghost-btn" id="pcRetake">Retake</button>' +
+        '<button class="cw-save-btn" id="pcSendCheckin">Send</button>' +
+      '</div>'
+    );
+    document.getElementById('pcRetake').addEventListener('click', function () {
+      URL.revokeObjectURL(url);
+      openMealCheckinCamera(meal);
+    });
+    document.getElementById('pcSendCheckin').addEventListener('click', function () {
+      _pcSendCheckin(file, meal, url);
+    });
+  }
+
+  function _pcSendCheckin(file, meal, previewUrl) {
+    var btn = document.getElementById('pcSendCheckin');
+    if (btn) { btn.disabled = true; btn.textContent = 'Uploading…'; }
+    if (typeof ZitlasChatAttach === 'undefined') { showToast('Upload unavailable — please retry.'); return; }
+
+    ZitlasChatAttach.upload(file).then(function (url) {
+      var uid = _pcUid();
+      var athleteName = _pcAthleteName();
+      var id = 'MCI_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+      var doc = {
+        checkinId: id, athleteId: uid, athleteName: athleteName, coachId: _pcRel.coachId,
+        day: _pcTodayName(), mealType: (meal.meal_name || 'meal').toLowerCase(), mealName: meal.meal_name || 'Meal',
+        imageUrl: url, timestamp: new Date().toISOString(), status: 'pending',
+        reaction: null, score: null, comment: null, reviewedAt: null, reviewedBy: null,
+        /* Reserved for future AI meal recognition — never populated today */
+        estimatedCalories: null, estimatedProtein: null, estimatedCarbs: null, estimatedFat: null,
+        foodRecognition: null, confidenceScore: null,
+      };
+      console.log('[MEAL CHECKIN] submitting', doc);
+      return ZitlasDB.collection('meal_checkins').doc(id).set(doc).then(function () {
+        var nid = 'CN_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+        return ZitlasDB.collection('coaching_notifications').doc(nid).set({
+          id: nid, toId: _pcRel.coachId, fromId: uid, fromName: athleteName,
+          text: '📸 ' + athleteName + ' submitted ' + doc.mealName + ' for review.',
+          type: 'meal_checkin', createdAt: new Date().toISOString(), read: false,
+        });
+      });
+    }).then(function () {
+      URL.revokeObjectURL(previewUrl);
+      _pcCloseSheet();
+      showToast('✅ Sent to your coach for review.');
+    }).catch(function (e) {
+      console.error('[MEAL CHECKIN] failed', e);
+      showToast(e && e.message ? e.message : 'Could not send — try again.');
+      if (btn) { btn.disabled = false; btn.textContent = 'Send'; }
+    });
   }
 
   async function init() {

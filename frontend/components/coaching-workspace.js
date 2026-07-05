@@ -46,9 +46,17 @@
     dietDraft: null, dietDirty: false,
     trainDraft: null, trainDirty: false,
     mealReqs: [],
+    checkins: [],
+    reviewDraft: null,   /* { reaction, score, comment } while the review sheet is open */
     chatMsgs: [],
     saving: false,
   };
+
+  var REACTION_LABEL = {
+    perfect: '🟢 Perfect', great: '🟢 Great', good: '🟡 Good',
+    needs_improvement: '🟠 Needs Improvement', not_recommended: '🔴 Not Recommended',
+  };
+  var DEFAULT_MEAL_TYPES = ['breakfast', 'lunch', 'dinner', 'snacks'];
 
   /* ── tiny helpers ── */
   function db()  { return (typeof ZitlasDB !== 'undefined') ? ZitlasDB : null; }
@@ -184,6 +192,7 @@
         '<button class="cw-tab active" data-cw-tab="overview">📋 Overview</button>' +
         '<button class="cw-tab" data-cw-tab="diet">🥗 Diet<span class="cw-tab-badge" id="cwDietBadge" style="display:none">0</span></button>' +
         '<button class="cw-tab" data-cw-tab="training">💪 Training</button>' +
+        '<button class="cw-tab" data-cw-tab="checkins">🍽 Meal Reviews<span class="cw-tab-badge" id="cwCheckinBadge" style="display:none">0</span></button>' +
         '<button class="cw-tab" data-cw-tab="chat">💬 Chat</button>' +
       '</nav>' +
       '<main class="cw-body" id="cwBody"></main>';
@@ -323,6 +332,21 @@
         if (S.tab === 'diet' && !S.dietDirty) renderTab();
       }, function (e) { console.warn('[CW] meal requests listener error', e); }));
 
+    S.unsubs.push(d.collection('meal_checkins')
+      .where('athleteId', '==', S.opts.athleteId)
+      .onSnapshot(function (snap) {
+        S.checkins = snap.docs.map(function (x) { return x.data(); })
+          .filter(function (c) { return c.coachId === S.opts.coachId; })
+          .sort(function (a, b) { return (b.timestamp || '') < (a.timestamp || '') ? -1 : 1; });
+        var pending = S.checkins.filter(function (c) { return c.status === 'pending'; }).length;
+        var badge = $('cwCheckinBadge');
+        if (badge && S.opts.role === 'coach') {
+          badge.textContent = pending;
+          badge.style.display = pending > 0 ? 'flex' : 'none';
+        }
+        if (S.tab === 'checkins') renderCheckins();
+      }, function (e) { console.warn('[CW] meal checkins listener error', e); }));
+
     S.unsubs.push(d.collection('chat_rooms').doc(chatId()).collection('messages')
       .orderBy('timestamp')
       .onSnapshot(function (snap) {
@@ -407,6 +431,7 @@
     if (S.tab === 'overview')      renderOverview();
     else if (S.tab === 'diet')     renderDiet();
     else if (S.tab === 'training') renderTraining();
+    else if (S.tab === 'checkins') renderCheckins();
     else if (S.tab === 'chat')     renderChatShell();
   }
 
@@ -1221,6 +1246,161 @@
         console.warn('[CW] history load failed', e);
         openSheet('<p class="cw-sheet-title">🕘 Versions</p><p class="cw-sheet-sub">Could not load history — try again.</p>');
       });
+  }
+
+  /* ══════════════════════════════════════════════
+     MEAL REVIEWS TAB — Daily Meal Compliance
+     meal_checkins/{id}: athlete submits a photo per meal (from the Diet
+     page's 📸 Send Meal to Coach button); the coach reacts + scores (1-10,
+     required) + optionally comments. Coach sees a review queue; athlete
+     sees their submission history read-only. Today's coverage strip and
+     the score total are both computed live from real submissions —
+     nothing here is fabricated when data is missing.
+  ══════════════════════════════════════════════ */
+  function _todayName() {
+    return ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()];
+  }
+
+  function renderCheckins() {
+    var body = $('cwBody');
+    var today = _todayName();
+    var todays = S.checkins.filter(function (c) { return c.day === today; });
+    var earlier = S.checkins.filter(function (c) { return c.day !== today; });
+
+    var coverage = '<div class="cw-coverage-row">' + DEFAULT_MEAL_TYPES.map(function (mt) {
+      var has = todays.some(function (c) { return c.mealType === mt; });
+      return '<div class="cw-coverage-chip ' + (has ? 'done' : 'missing') + '">' +
+        (has ? '✅' : '❌') + ' ' + cap(mt) + '</div>';
+    }).join('') + '</div>';
+
+    var reviewedToday = todays.filter(function (c) { return c.status === 'reviewed' && c.score != null; });
+    var scoreLine = '';
+    if (reviewedToday.length) {
+      var sum = reviewedToday.reduce(function (s, c) { return s + c.score; }, 0);
+      var max = reviewedToday.length * 10;
+      scoreLine = '<div class="cw-daily-score"><span>Today’s Meal Score</span><b>' +
+        sum + '/' + max + ' · ' + Math.round((sum / max) * 100) + '%</b></div>';
+    }
+
+    function card(c) {
+      var statusCls = c.status === 'reviewed' ? 'cw-review-status--done' : 'cw-review-status--pending';
+      var statusTxt = c.status === 'reviewed' ? (c.score != null ? c.score + '/10' : 'Reviewed') : 'Pending';
+      return '<div class="cw-review-card" data-cw-review="' + esc(c.checkinId) + '">' +
+        '<img class="cw-review-thumb" src="' + esc(c.imageUrl) + '" alt="' + esc(c.mealName || 'meal') + '">' +
+        '<div class="cw-review-info">' +
+          '<span class="cw-review-title">' + esc(cap(c.mealType)) + ' — ' + esc(c.mealName || '') + '</span>' +
+          '<span class="cw-review-sub">' + esc(c.day) + ' · ' + esc(fmtTime(c.timestamp)) +
+            (S.opts.role === 'coach' ? '' : (c.reaction ? ' · ' + esc(REACTION_LABEL[c.reaction] || '') : '')) +
+          '</span>' +
+        '</div>' +
+        '<span class="cw-review-status ' + statusCls + '">' + esc(statusTxt) + '</span>' +
+      '</div>';
+    }
+
+    if (!S.checkins.length) {
+      body.innerHTML = coverage +
+        '<div class="cw-card"><div class="cw-empty"><span class="cw-empty-icon">🍽️</span>' +
+        (S.opts.role === 'coach'
+          ? 'No meal check-ins yet. They’ll appear here the moment the athlete sends one from their Diet page.'
+          : 'Send a meal photo from your Diet page to get your coach’s feedback here.') +
+        '</div></div>';
+      return;
+    }
+
+    body.innerHTML = coverage + scoreLine +
+      (todays.length ? '<p class="cw-review-sec-title">Today</p>' + todays.map(card).join('') : '') +
+      (earlier.length ? '<p class="cw-review-sec-title">Earlier</p>' + earlier.map(card).join('') : '');
+
+    body.querySelectorAll('[data-cw-review]').forEach(function (el) {
+      el.addEventListener('click', function () {
+        var c = S.checkins.find(function (x) { return x.checkinId === el.dataset.cwReview; });
+        if (c) openCheckinSheet(c);
+      });
+    });
+  }
+
+  function openCheckinSheet(c) {
+    if (S.opts.role === 'coach') openCheckinReviewSheet(c);
+    else openCheckinHistorySheet(c);
+  }
+
+  /* Athlete: read-only — see the photo + coach's reaction/score/comment */
+  function openCheckinHistorySheet(c) {
+    var body =
+      '<p class="cw-sheet-title">' + esc(cap(c.mealType)) + ' — ' + esc(c.day) + '</p>' +
+      '<img class="cw-review-img-lg" src="' + esc(c.imageUrl) + '" alt="' + esc(c.mealName || 'meal') + '">' +
+      (c.status === 'reviewed'
+        ? '<div class="pc-checkin-feedback">' +
+            '<span class="pc-checkin-reaction">' + esc(REACTION_LABEL[c.reaction] || 'Reviewed') + '</span>' +
+            (c.score != null ? '<span class="pc-checkin-score">' + esc(c.score) + '/10</span>' : '') +
+            (c.comment ? '<p class="pc-checkin-comment">' + esc(c.comment) + '</p>' : '') +
+          '</div>'
+        : '<div class="pc-checkin-pending">⏳ Waiting for your coach’s review</div>');
+    openSheet(body);
+  }
+
+  /* Coach: reaction (required) + score 1-10 (required) + optional comment */
+  function openCheckinReviewSheet(c) {
+    S.reviewDraft = { reaction: c.reaction || null, score: c.score || null, comment: c.comment || '' };
+    renderCheckinReviewSheet(c);
+  }
+
+  function renderCheckinReviewSheet(c) {
+    var d = S.reviewDraft;
+    var reactions = ['perfect', 'great', 'good', 'needs_improvement', 'not_recommended'];
+    openSheet(
+      '<p class="cw-sheet-title">' + esc(cap(c.mealType)) + ' — ' + esc(c.athleteName || 'Athlete') + '</p>' +
+      '<p class="cw-sheet-sub">' + esc(c.day) + ' · ' + esc(fmtTime(c.timestamp)) + '</p>' +
+      '<img class="cw-review-img-lg" src="' + esc(c.imageUrl) + '" alt="' + esc(c.mealName || 'meal') + '">' +
+      '<span class="cw-score-label">Reaction (required)</span>' +
+      '<div class="cw-reaction-grid">' + reactions.map(function (r) {
+        return '<button class="cw-reaction-btn' + (d.reaction === r ? ' selected' : '') + '" data-cw-reaction="' + r + '">' +
+          esc(REACTION_LABEL[r]) + '</button>';
+      }).join('') + '</div>' +
+      '<span class="cw-score-label">Meal Score (required)</span>' +
+      '<div class="cw-score-grid">' + [1,2,3,4,5,6,7,8,9,10].map(function (n) {
+        return '<button class="cw-score-btn' + (d.score === n ? ' selected' : '') + '" data-cw-score="' + n + '">' + n + '</button>';
+      }).join('') + '</div>' +
+      '<textarea class="cw-textarea" id="cwReviewComment" rows="2" placeholder="Optional comment (e.g. “Increase protein”)">' + esc(d.comment || '') + '</textarea>' +
+      '<div class="cw-save-bar" style="position:static;background:none;padding-top:12px">' +
+        '<button class="cw-save-btn" id="cwReviewSave"' + (!d.reaction || !d.score ? ' disabled' : '') + '>Save Review</button>' +
+      '</div>'
+    );
+    var sheet = $('cwSheet');
+    sheet.querySelectorAll('[data-cw-reaction]').forEach(function (b) {
+      b.addEventListener('click', function () { S.reviewDraft.reaction = b.dataset.cwReaction; renderCheckinReviewSheet(c); });
+    });
+    sheet.querySelectorAll('[data-cw-score]').forEach(function (b) {
+      b.addEventListener('click', function () { S.reviewDraft.score = parseInt(b.dataset.cwScore, 10); renderCheckinReviewSheet(c); });
+    });
+    var commentEl = $('cwReviewComment');
+    if (commentEl) commentEl.addEventListener('input', function () { S.reviewDraft.comment = commentEl.value; });
+    var saveBtn = $('cwReviewSave');
+    if (saveBtn) saveBtn.addEventListener('click', function () { saveCheckinReview(c); });
+  }
+
+  function saveCheckinReview(c) {
+    var d = db();
+    if (!d || !S.reviewDraft || !S.reviewDraft.reaction || !S.reviewDraft.score) return;
+    var btn = $('cwReviewSave');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+    var now = new Date().toISOString();
+    d.collection('meal_checkins').doc(c.checkinId).update({
+      status: 'reviewed',
+      reaction: S.reviewDraft.reaction,
+      score: S.reviewDraft.score,
+      comment: (S.reviewDraft.comment || '').trim() || null,
+      reviewedAt: now, reviewedBy: myName() || 'Coach',
+    }).then(function () {
+      notify(c.athleteId, '🍽 Coach reviewed your ' + cap(c.mealType) + ' — ' + S.reviewDraft.score + '/10.', 'meal_reviewed');
+      S.reviewDraft = null;
+      closeSheet();
+      toast('✅ Review sent to ' + (c.athleteName || 'the athlete'));
+    }).catch(function (e) {
+      console.error('[CW] review save failed', e);
+      toast('Could not save — try again.');
+      if (btn) { btn.disabled = false; btn.textContent = 'Save Review'; }
+    });
   }
 
   /* ══════════════════════════════════════════════
