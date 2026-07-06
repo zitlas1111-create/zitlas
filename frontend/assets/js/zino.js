@@ -406,7 +406,7 @@
       if ($('znFab')) return;
       var fab = document.createElement('button');
       fab.id = 'znFab'; fab.className = 'zn-fab'; fab.setAttribute('aria-label', 'Ask Zino');
-      fab.innerHTML = '<img src="' + IMG.done + '" alt="Zino"><span class="zn-fab-badge" id="znFabBadge"></span>';
+      fab.innerHTML = '<img src="' + IMG.fab + '" alt="Zino"><span class="zn-fab-badge" id="znFabBadge"></span>';
       document.body.appendChild(fab);
       fab.addEventListener('click', open);
 
