@@ -3033,12 +3033,46 @@
     };
   }
 
+  /* Re-render (never re-init — init() wires modals/listeners that must not
+     be double-attached) when another device changes the AI diet plan
+     while this page stays open. Reuses the exact same pure load/build/
+     normalize pipeline init() itself uses, so behavior is identical.
+     Coach-mode rendering owns the screen while a coach is active — this
+     only applies to the base AI plan. */
+  function _reloadAndRenderPlan() {
+    if (planSource === 'coach') return;
+    var storage = loadDietStorage();
+    var effective = storage ? buildEffectivePlan(storage) : null;
+    if (!effective || !effective.days || !effective.days.length) return;
+    var hasMods = storage.expertModifications && Object.keys(storage.expertModifications).length > 0;
+    planSource = (hasMods || storage.isExpertPlan) ? 'expert' : 'ai';
+    weeklyPlan = normalizePlan(effective);
+    if (currentDay >= weeklyPlan.days.length) currentDay = 0;
+    renderPlanMeta();
+    renderFocusCard(weeklyPlan, null);
+    renderDay(currentDay);
+    console.log('[CLOUD SYNC] diet plan re-rendered from a remote change');
+  }
+
   /* ══════════════════════════════════════════
      BOOT
+     Cross-device sync: hydrate this device's cache from Firestore BEFORE
+     the first render, then re-render (not re-init) on remote changes.
   ══════════════════════════════════════════ */
+  function boot() {
+    if (typeof ZitlasAuth === 'undefined' || typeof ZitlasCloudSync === 'undefined') { init(); return; }
+    ZitlasAuth.onAuthStateChanged(function (user) {
+      if (!user) { init(); return; }
+      ZitlasCloudSync.hydrateOnLoad(user.uid).then(function () {
+        init();
+        ZitlasCloudSync.attachRealtime(user.uid, _reloadAndRenderPlan);
+      });
+    });
+  }
+
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
+    document.addEventListener('DOMContentLoaded', boot);
   } else {
-    init();
+    boot();
   }
 })();

@@ -2103,6 +2103,26 @@
        'expertReviewedPlan', 'approvedPlan', 'expertWorkoutOverride',
       ].forEach(function(k) { localStorage.removeItem(k); });
       console.log('[AI-COACH] New plan saved — all expert review keys cleared');
+
+      /* Push everything to Firestore in one write so every other device
+         logged into this account sees the identical plan — this was
+         previously localStorage-only, the root cause of cross-device
+         desync (goal/diet/workout/assessment/SWOT never left the device
+         that generated them). */
+      if (typeof ZitlasCloudSync !== 'undefined') {
+        var _bulk = { goal: goal, survey: state.answers };
+        if (data.calculations) _bulk.calculations = data.calculations;
+        if (data.swot)         _bulk.swot = data.swot;
+        if (data.assessment)   _bulk.assessment = data.assessment;
+        if (data.diet_plan)    _bulk.dietPlan = JSON.parse(localStorage.getItem('zitlas_diet_plan'));
+        if (data.workout_plan) _bulk.workoutPlan = JSON.parse(localStorage.getItem('zitlas_workout_plan'));
+        var _precautionsRaw = localStorage.getItem('zitlas_precautions');
+        _bulk.precautions = _precautionsRaw ? JSON.parse(_precautionsRaw) : null;
+        _bulk.planGeneratedAt = new Date().toISOString();
+        _bulk.planId = _newPlanId;
+        ZitlasCloudSync.saveBulk(_bulk);
+        console.log('[AI-COACH] plan synced to Firestore — visible on every device now');
+      }
     } catch (_) {}
   }
 

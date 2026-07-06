@@ -32,6 +32,9 @@
 
   function saveWallet(w) {
     try { localStorage.setItem(KEY, JSON.stringify(w)); } catch (_) {}
+    /* Cross-device sync — wallet balance was 100% localStorage before this;
+       gracefully no-ops on any page that doesn't load Firebase/cloud-sync. */
+    if (typeof ZitlasCloudSync !== 'undefined') ZitlasCloudSync.saveCloudOnly('wallet', w);
   }
 
   /* ══════════════════════════════════════════
@@ -795,10 +798,27 @@
      AUTO-INJECT
   ══════════════════════════════════════════ */
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', inject);
-  } else {
+  /* Hydrate the balance from Firestore before first inject (so a second
+     device shows the correct balance immediately), then keep it live —
+     .refresh() just re-reads localStorage into the button, no re-inject. */
+  function boot() {
     inject();
+    if (typeof ZitlasAuth === 'undefined' || typeof ZitlasCloudSync === 'undefined') return;
+    ZitlasAuth.onAuthStateChanged(function (user) {
+      if (!user) return;
+      ZitlasCloudSync.hydrateOnLoad(user.uid).then(function () {
+        syncBtnLabel(getWallet().balance);
+        ZitlasCloudSync.attachRealtime(user.uid, function () {
+          syncBtnLabel(getWallet().balance);
+        });
+      });
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
   }
 
 })();

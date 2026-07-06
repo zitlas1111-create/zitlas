@@ -34,6 +34,16 @@
      BOOT
   ══════════════════════════════════════════ */
   function init() {
+    /* If a previous run replaced the whole page with the "No Plan Found"
+       error state (showError() overwrites #wpPage's innerHTML, destroying
+       #wpContent/#wpLoading), and this run — e.g. triggered by a remote
+       cloud-sync event once a plan now exists on another device — needs
+       to render, restore the original skeleton first so render()'s
+       el('wpContent') etc. lookups don't hit null. */
+    if (!el('wpContent') && showError._savedHtml) {
+      el('wpPage').innerHTML = showError._savedHtml;
+    }
+
     var _nb = document.getElementById('zitlas-navbar');
     if (_nb) document.documentElement.style.setProperty('--nav-height', (window.innerHeight - _nb.getBoundingClientRect().top) + 'px');
 
@@ -954,9 +964,22 @@
   /* ══════════════════════════════════════════
      BOOT
   ══════════════════════════════════════════ */
+  /* Cross-device sync: hydrate this device's cache from Firestore before
+     the first render, then re-run ONLY init() (never initButtons() again,
+     which would double-attach its click handlers) when another device
+     changes the workout plan while this page stays open. init() is
+     already idempotent — initCoachTrainingMode() guards its own listener
+     attach and loadPlan()/render() are pure. */
   function boot() {
     initButtons();
-    init();
+    if (typeof ZitlasAuth === 'undefined' || typeof ZitlasCloudSync === 'undefined') { init(); return; }
+    ZitlasAuth.onAuthStateChanged(function (user) {
+      if (!user) { init(); return; }
+      ZitlasCloudSync.hydrateOnLoad(user.uid).then(function () {
+        init();
+        ZitlasCloudSync.attachRealtime(user.uid, init);
+      });
+    });
   }
 
   if (document.readyState === 'loading') {

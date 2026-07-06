@@ -904,9 +904,20 @@
   /* ══════════════════════════════════════════
      BOOT
   ══════════════════════════════════════════ */
+  function boot() {
+    if (typeof ZitlasAuth === 'undefined' || typeof ZitlasCloudSync === 'undefined') { init(); return; }
+    ZitlasAuth.onAuthStateChanged(function (user) {
+      if (!user) { init(); return; }
+      ZitlasCloudSync.hydrateOnLoad(user.uid).then(function () {
+        init();
+        ZitlasCloudSync.attachRealtime(user.uid, init);
+      });
+    });
+  }
+
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
+    document.addEventListener('DOMContentLoaded', boot);
   } else {
-    init();
+    boot();
   }
 })();

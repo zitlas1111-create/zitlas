@@ -174,7 +174,8 @@
   }
 
   function saveGoal(goal) {
-    localStorage.setItem(GOAL_KEY, JSON.stringify(goal));
+    if (typeof ZitlasCloudSync !== 'undefined') ZitlasCloudSync.save('goal', goal);
+    else localStorage.setItem(GOAL_KEY, JSON.stringify(goal));
   }
 
   function clearGoal() {
@@ -1803,10 +1804,31 @@
     console.log('[ZITLAS] init() complete — all handlers attached');
   }
 
+  /* Cross-device sync: hydrate this device's cache from Firestore BEFORE the
+     first render (so a second device shows the identical goal/plan on open,
+     not a stale/empty flash), then re-run only the render functions — never
+     the whole init() — when another device changes something while this
+     page stays open. Falls straight through to the original behavior for
+     logged-out users or when cloud-sync isn't loaded on this page. */
+  function boot() {
+    if (typeof ZitlasAuth === 'undefined' || typeof ZitlasCloudSync === 'undefined') { init(); return; }
+    ZitlasAuth.onAuthStateChanged(function (user) {
+      if (!user) { init(); return; }
+      ZitlasCloudSync.hydrateOnLoad(user.uid).then(function () {
+        init();
+        ZitlasCloudSync.attachRealtime(user.uid, function () {
+          safeRun('renderGoalCard',      renderGoalCard);
+          safeRun('renderSwotWidget',    renderSwotWidget);
+          safeRun('renderTrainingWidget', renderTrainingWidget);
+        });
+      });
+    });
+  }
+
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
+    document.addEventListener('DOMContentLoaded', boot);
   } else {
-    init();
+    boot();
   }
 
   /* ══════════════════════════════════════════

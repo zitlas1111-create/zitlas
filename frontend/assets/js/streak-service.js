@@ -50,11 +50,59 @@
       ZitlasDB.collection('users').doc(ZitlasAuth.currentUser.uid).set({
         currentStreak: state.currentStreak,
         longestStreak: state.longestStreak,
+        lastGoalDate:  state.lastGoalDate || null,
       }, { merge: true }).catch(function (e) {
         console.warn('[STREAK] Firestore sync failed (will retry next sync):', e && e.code);
       });
     } catch (_) {}
   }
+
+  /* ══════════════════════════════════════════
+     CROSS-DEVICE SYNC
+     This was write-only before: a fresh device never pulled down an
+     existing streak, so the SAME account showed 0 on one phone and 12 on
+     another. Hydrate once on login, then stay live via onSnapshot — same
+     users/{uid} doc login.js/activity-service.js/cloud-sync.js already
+     share, each merging only their own fields.
+  ══════════════════════════════════════════ */
+  var _subscribers = [];
+  function onSync(cb) { if (typeof cb === 'function') _subscribers.push(cb); }
+  function _notify() {
+    _subscribers.forEach(function (fn) {
+      try { fn(); } catch (e) { console.error('[STREAK] subscriber threw', e); }
+    });
+  }
+
+  function _mergeRemote(data) {
+    if (!data || typeof data.currentStreak !== 'number') return false;
+    var local = load();
+    var merged = {
+      currentStreak: data.currentStreak,
+      longestStreak: Math.max(data.longestStreak || 0, local.longestStreak || 0),
+      lastGoalDate:  data.lastGoalDate || local.lastGoalDate || null,
+    };
+    var changed = JSON.stringify(merged) !== JSON.stringify(local);
+    if (changed) { try { localStorage.setItem(KEY, JSON.stringify(merged)); } catch (_) {} }
+    return changed;
+  }
+
+  var _attachedFor = null;
+  function _initCloudSync() {
+    if (typeof ZitlasAuth === 'undefined') return;
+    ZitlasAuth.onAuthStateChanged(function (user) {
+      if (!user || typeof ZitlasDB === 'undefined' || _attachedFor === user.uid) return;
+      _attachedFor = user.uid;
+      var uid = user.uid;
+      ZitlasDB.collection('users').doc(uid).get().then(function (snap) {
+        if (snap.exists && _mergeRemote(snap.data())) _notify();
+      }).catch(function (e) { console.warn('[STREAK] hydrate failed', e); });
+
+      ZitlasDB.collection('users').doc(uid).onSnapshot(function (snap) {
+        if (snap.exists && _mergeRemote(snap.data())) _notify();
+      }, function (e) { console.warn('[STREAK] realtime error', e); });
+    });
+  }
+  _initCloudSync();
 
   /* A day whose goal was never met has ended — streak breaks.
      No-op if the goal was met that same day (lastGoalDate covers it). */
@@ -99,6 +147,7 @@
     updateStreak:    updateStreak,
     recordMissedDay: recordMissedDay,
     getStreak:       getStreak,
+    onSync:          onSync,
     _localDateStr:   localDateStr,
     _prevDateStr:    prevDateStr,
   };

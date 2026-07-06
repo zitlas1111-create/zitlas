@@ -339,6 +339,16 @@
         survey.preferred_height_unit = heightUnit;
         survey.preferred_weight_unit = weightUnit;
         localStorage.setItem(SURVEY_KEY, JSON.stringify(survey));
+
+        /* Cross-device sync — every OTHER device on this account must see
+           this same name/age/height/weight/etc. The photo stays local-only:
+           a base64 image can exceed Firestore's 1 MiB document cap. */
+        if (typeof ZitlasCloudSync !== 'undefined') {
+          var _cloudData = Object.assign({}, data);
+          delete _cloudData.photo;
+          ZitlasCloudSync.saveCloudOnly('personalInfo', _cloudData);
+          ZitlasCloudSync.save('survey', survey);
+        }
       } catch (_) {
         showToast(window.ZitlasLang ? ZitlasLang.t('toast_storage_full') : 'Could not save — storage full');
         return;
@@ -387,10 +397,23 @@
     requestAnimationFrame(initEntranceAnimations);
   }
 
+  /* Hydrate from Firestore before the form's first paint, so opening this
+     page on a second device shows the latest name/age/height/weight/etc.
+     No realtime re-render here on purpose — this is an active edit form,
+     and silently rewriting fields out from under someone mid-edit would
+     be worse than a stale value until they reopen the page. */
+  function boot() {
+    if (typeof ZitlasAuth === 'undefined' || typeof ZitlasCloudSync === 'undefined') { init(); return; }
+    ZitlasAuth.onAuthStateChanged(function (user) {
+      if (!user) { init(); return; }
+      ZitlasCloudSync.hydrateOnLoad(user.uid).then(init);
+    });
+  }
+
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
+    document.addEventListener('DOMContentLoaded', boot);
   } else {
-    init();
+    boot();
   }
 
 })();

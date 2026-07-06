@@ -313,9 +313,24 @@
     initExpertAppliedBanner();
   }
 
+  /* Cross-device sync: hydrate before the first render so a second device
+     shows the same name/goal immediately, then re-render just the profile
+     summary (never the whole init(), which would double-wire the modals/
+     nav listeners) when another device changes something. */
+  function boot() {
+    if (typeof ZitlasAuth === 'undefined' || typeof ZitlasCloudSync === 'undefined') { init(); return; }
+    ZitlasAuth.onAuthStateChanged(function (user) {
+      if (!user) { init(); return; }
+      ZitlasCloudSync.hydrateOnLoad(user.uid).then(function () {
+        init();
+        ZitlasCloudSync.attachRealtime(user.uid, loadAthleteProfile);
+      });
+    });
+  }
+
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
+    document.addEventListener('DOMContentLoaded', boot);
   } else {
-    init();
+    boot();
   }
 })();
