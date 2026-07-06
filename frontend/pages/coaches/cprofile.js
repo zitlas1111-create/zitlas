@@ -92,6 +92,59 @@
   }
 
   /* ══════════════════════════════════════════
+     VERIFIED CERTIFICATES (Expert Verification System)
+     Only certificates with verificationStatus === 'verified' are ever
+     shown to athletes — pending/rejected certs stay expert/admin-only.
+  ══════════════════════════════════════════ */
+  var _bestVerifiedCert = null; /* highest-score verified cert, backs the badge's tap-to-view modal */
+
+  function initVerifiedCertificates(coach) {
+    if (typeof ZitlasCertificates === 'undefined' || typeof ZitlasDB === 'undefined') return;
+    ZitlasDB.collection('expert_certificates')
+      .where('expertId', '==', coach.id)
+      .where('verificationStatus', '==', 'verified')
+      .onSnapshot(function(snap) {
+        var certs = snap.docs.map(function(d) { return d.data(); })
+          .sort(function(a, b) { return (b.verificationScore || 0) - (a.verificationScore || 0); });
+        _bestVerifiedCert = certs[0] || null;
+        renderVerifiedCertificates(certs);
+      }, function(err) { console.warn('[CERT] verified-certs listener error', err); });
+  }
+
+  function renderVerifiedCertificates(certs) {
+    var section = document.getElementById('verifiedCertsSection');
+    var list    = document.getElementById('verifiedCertsList');
+    if (!section || !list) return;
+    if (!certs.length) { section.style.display = 'none'; return; }
+    section.style.display = '';
+
+    list.innerHTML = certs.map(function(cert) {
+      return '<div class="cert-card">' +
+        '<div class="cert-card-top">' +
+          '<div class="cert-card-icon">🎓</div>' +
+          '<div style="flex:1">' +
+            '<div class="cert-card-title">✓ ' + esc(cert.certificateName || 'Certificate') + '</div>' +
+            '<div class="cert-card-org">Issued by: ' + esc(cert.issuingOrganization || '—') + '</div>' +
+          '</div>' +
+          '<span class="cert-status-pill cert-status-pill--verified">✓ Verified</span>' +
+        '</div>' +
+        '<div class="cert-kv-row"><span>Certificate ID</span><b>' + esc(cert.certificateNumber || '—') + '</b></div>' +
+        '<div class="cert-kv-row"><span>Issued</span><b>' + esc(cert.issuedDate || '—') + '</b></div>' +
+        '<div class="cert-kv-row"><span>Expires</span><b>' + esc(cert.expiryDate || '—') + '</b></div>' +
+        '<div class="cert-kv-row"><span>Verification Score</span><b>' + esc(String(cert.verificationScore)) + '%</b></div>' +
+        '<div class="cert-card-actions"><button class="cert-view-btn" data-cert-id="' + esc(cert.certId) + '">View Certificate</button></div>' +
+      '</div>';
+    }).join('');
+
+    list.querySelectorAll('[data-cert-id]').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var cert = certs.find(function(c) { return c.certId === btn.dataset.certId; });
+        if (cert) ZitlasCertificates.openViewCertificate(cert);
+      });
+    });
+  }
+
+  /* ══════════════════════════════════════════
      SECTION RENDERERS
   ══════════════════════════════════════════ */
   function renderMetrics(coach) {
@@ -304,6 +357,18 @@
         availText.textContent = 'Next: ' + (avail && avail.nextSlot ? avail.nextSlot : 'Tomorrow');
         availPill.classList.add('busy');
       }
+    }
+
+    /* Verified Expert badge — real, driven by experts/{id}.verified (only
+       true once at least one certificate passes AI verification or admin
+       approval). Never hardcoded. */
+    var verifiedBadge = document.getElementById('cpVerifiedBadge');
+    if (verifiedBadge) {
+      verifiedBadge.style.display = coach.verified ? '' : 'none';
+      verifiedBadge.addEventListener('click', function() {
+        if (typeof ZitlasCertificates === 'undefined') return;
+        ZitlasCertificates.openVerificationInfo(coach.name, _bestVerifiedCert);
+      });
     }
 
     /* Sections */
@@ -3838,6 +3903,7 @@
 
   function _initWithCoach(coach, params) {
     populatePage(coach);
+    initVerifiedCertificates(coach);
     initContextModal(coach);
     initVerifyModal(coach);
     initVerifyPlanBtn(coach);
@@ -3893,6 +3959,7 @@
       stats:        Array.isArray(d.stats) ? d.stats : [],
       reviews:      Array.isArray(d.clientReviews) ? d.clientReviews : [],
       gallery:      Array.isArray(d.gallery) ? d.gallery : [],
+      verified:     d.verified === true,
     };
   }
 
@@ -3927,6 +3994,7 @@
       stats:        [],
       reviews:      [],
       gallery:      [],
+      verified:     false,
     };
   }
 

@@ -30,6 +30,7 @@ from routes import support
 from routes import rag
 from routes import review
 from routes import system
+from routes import certificates
 from services import rag_service
 
 # ── Directory paths ──────────────────────────────────────────────────────────
@@ -103,6 +104,7 @@ app.include_router(support.router,    prefix="/api/support",    tags=["Support"]
 app.include_router(review.router,     prefix="/api/review",     tags=["Review"])
 app.include_router(system.router,     prefix="/api/system",     tags=["System"])
 app.include_router(chat.router,       prefix="/api/chat",       tags=["Chat"])
+app.include_router(certificates.router, prefix="/api/certificates", tags=["Certificates"])
 
 # ── Root redirect ────────────────────────────────────────────────────────────
 @app.get("/")

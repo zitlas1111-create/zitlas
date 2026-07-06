@@ -18,6 +18,7 @@
   <link rel="stylesheet" href="../../assets/css/call-ui.css" />
   <link rel="stylesheet" href="../../assets/css/coaching-workspace.css?v=20260705b" />
   <link rel="stylesheet" href="../../assets/css/zino.css?v=20260706" />
+  <link rel="stylesheet" href="../../assets/css/certificates.css?v=20260706" />
   <script src="../../assets/js/firebase-config.js"></script>
   <script src="../../assets/js/webrtc-call.js"></script>
   <script src="../../assets/js/call-ui.js"></script>
@@ -90,10 +91,10 @@
 
     <!-- Verified badges -->
     <div class="cp-hero-badges">
-      <span class="cp-badge cp-badge--verified">
+      <button type="button" class="cp-badge cp-badge--verified" id="cpVerifiedBadge" style="display:none">
         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
         Verified Expert
-      </span>
+      </button>
       <span class="cp-badge cp-badge--ai">
         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z"/><path d="M12 8v4l3 3"/></svg>
         AI Matched
@@ -260,6 +261,12 @@
     <p class="cp-about-text" id="aboutText"></p>
     <button class="cp-read-more" id="readMoreBtn">Read More ▾</button>
   </div>
+</section>
+
+<!-- ══ 5b. VERIFIED CERTIFICATES ═══════════════════════════════════════ -->
+<section class="cp-section" id="verifiedCertsSection" style="display:none">
+  <h2 class="cp-section-title">Verified Certificates</h2>
+  <div id="verifiedCertsList"></div>
 </section>
 
 <!-- ══ 6. EXPERTISE TAGS ═════════════════════════════════════════════ -->
@@ -607,6 +614,7 @@
 <script src="../../components/wallet.js"></script>
   <script src="../../components/navbar.js"></script>
 <script src="../../assets/js/expert-profile.js"></script>
+<script src="../../assets/js/certificate-manager.js?v=20260706"></script>
 <script src="cprofile.js"></script>
 <script src="../../assets/js/zino.js?v=20260706"></script>
 </body>

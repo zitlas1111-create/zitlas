@@ -60,9 +60,9 @@ function renderNutritionistCard(n) {
   <div class="nutri-body">
     <div class="nutri-name-row">
       <span class="nutri-name">${n.name}</span>
-      <svg class="verified-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-label="Verified expert">
+      ${n.verified ? `<svg class="verified-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-label="Verified expert">
         <polyline points="20 6 9 17 4 12"/>
-      </svg>
+      </svg>` : ''}
     </div>
     <span class="nutri-role">${n.role}</span>
     <div class="nutri-rating-row">
@@ -230,6 +230,7 @@ function loadExpertsFromFirebase() {
           available:  d.status !== 'offline',
           specialties: Array.isArray(d.specialties) ? d.specialties : [],
           lang:       Array.isArray(d.languages)    ? d.languages   : ['EN'],
+          verified:   d.verified === true,
         });
       });
       /* Firestore is the single source of truth for the expert list.

@@ -160,3 +160,53 @@ async def generate(
         "prompt_tokens":     prompt_tokens,
         "completion_tokens": completion_tokens,
     }
+
+
+async def analyze_image(
+    image_bytes: bytes,
+    mime_type:   str,
+    prompt:      str,
+    max_tokens:  int = 1500,
+) -> dict[str, Any]:
+    """
+    Multimodal image + text prompt call, JSON response only. Groq has no
+    vision model in this project's provider chain, so image-understanding
+    calls (certificate verification, etc.) always go directly to Gemini —
+    there is no fallback chain here.
+    """
+    from google.genai import types  # lazy import
+
+    client = _get_client()
+    config = types.GenerateContentConfig(
+        temperature=0.2,
+        max_output_tokens=max_tokens,
+        response_mime_type="application/json",
+    )
+    contents = [
+        {"role": "user", "parts": [
+            types.Part.from_text(text=prompt),
+            types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
+        ]},
+    ]
+
+    print(f"[Gemini] analyze_image — model={GEMINI_MODEL} mime={mime_type} "
+          f"bytes={len(image_bytes)} max_tokens={max_tokens}")
+
+    def _sync_call():
+        try:
+            return client.models.generate_content(
+                model=GEMINI_MODEL, contents=contents, config=config,
+            )
+        except Exception as e:
+            print(f"\n[Gemini] analyze_image _sync_call EXCEPTION: {type(e).__name__}: {e}")
+            print(_tb.format_exc())
+            raise
+
+    loop     = asyncio.get_event_loop()
+    response = await loop.run_in_executor(None, _sync_call)
+    text     = _extract_text(response)
+
+    preview = (text[:400] + "…") if len(text) > 400 else text
+    print(f"[Gemini] analyze_image raw response preview ({len(text)} chars):\n{preview}")
+
+    return {"reply": text, "model": GEMINI_MODEL}

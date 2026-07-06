@@ -2843,6 +2843,118 @@ function initEditProfile() {
   });
 }
 
+/* ══════════════════════════════════════════════
+   PROFESSIONAL CERTIFICATION — Expert Verification System
+   Upload -> AI validates + OCRs + scores (backend, no Firestore) -> this
+   client persists the result to expert_certificates/{id} and recomputes
+   experts/{uid}.verified. Multiple certificates per expert are supported
+   by design (ACE, NASM, ISSA, Sports Nutrition, Yoga, ...), each with its
+   own independent verificationStatus.
+══════════════════════════════════════════════ */
+var CERT_STATUS_LABEL = {
+  verified: '✓ AI Passed', pending_review: '⏳ Manual Review Required', rejected: '✕ Rejected',
+};
+var CERT_STATUS_CLASS = {
+  verified: 'cert-status-pill--verified', pending_review: 'cert-status-pill--pending', rejected: 'cert-status-pill--rejected',
+};
+
+function initCertificateUpload(expert) {
+  if (initCertificateUpload._wired) return;
+  initCertificateUpload._wired = true;
+  if (typeof ZitlasCertificates === 'undefined') return;
+
+  var btn   = document.getElementById('certUploadBtn');
+  var input = document.getElementById('certFileInput');
+  var prog  = document.getElementById('certUploadProgress');
+  var progText = document.getElementById('certUploadProgressText');
+  if (!btn || !input) return;
+
+  btn.addEventListener('click', function () { input.click(); });
+  input.addEventListener('change', function () {
+    var file = input.files && input.files[0];
+    input.value = '';
+    if (!file) return;
+
+    var expertId = (_currentExpert && _currentExpert.id) ||
+      (typeof ZitlasAuth !== 'undefined' && ZitlasAuth.currentUser && ZitlasAuth.currentUser.uid);
+    if (!expertId) { ZitlasCertificates.toast('Could not identify your account — please reload.'); return; }
+
+    btn.disabled = true;
+    if (prog) prog.classList.add('show');
+    if (progText) progText.textContent = 'Analyzing certificate…';
+
+    console.log('[CERT] uploading', file.name, file.type, file.size + 'B');
+    ZitlasCertificates.uploadAndVerify(expertId, file)
+      .then(function (result) {
+        if (!result.accepted) {
+          console.warn('[CERT] rejected by AI:', result.reason);
+          ZitlasCertificates.toast('❌ ' + result.reason);
+          return;
+        }
+        console.log('[CERT] AI accepted', result);
+        return ZitlasCertificates.saveCertificate(expertId, _currentExpert && _currentExpert.name, result)
+          .then(function () {
+            ZitlasCertificates.toast(result.verificationStatus === 'verified'
+              ? '✅ Certificate verified! Your Verified Expert badge is now live.'
+              : '📋 Certificate uploaded — pending manual review (AI confidence ' + result.verificationScore + '%).');
+          });
+      })
+      .catch(function (err) {
+        console.error('[CERT] upload failed', err);
+        ZitlasCertificates.toast(err && err.message ? err.message : 'Could not verify certificate — please try again.');
+      })
+      .then(function () {
+        btn.disabled = false;
+        if (prog) prog.classList.remove('show');
+      });
+  });
+}
+
+function listenForMyCertificates(expert) {
+  if (listenForMyCertificates._attachedFor) return;
+  if (typeof ZitlasCertificates === 'undefined') return;
+  var expertId = (expert && expert.id) ||
+    (typeof ZitlasAuth !== 'undefined' && ZitlasAuth.currentUser && ZitlasAuth.currentUser.uid);
+  if (!expertId) return;
+  listenForMyCertificates._attachedFor = expertId;
+  ZitlasCertificates.listenForExpertCertificates(expertId, renderMyCertificates);
+}
+
+function renderMyCertificates(certs) {
+  var wrap  = document.getElementById('certListWrap');
+  var empty = document.getElementById('certEmpty');
+  if (!wrap) return;
+  wrap.querySelectorAll('.cert-card').forEach(function (el) { el.remove(); });
+  if (!certs.length) { if (empty) empty.style.display = ''; return; }
+  if (empty) empty.style.display = 'none';
+
+  certs.forEach(function (cert) {
+    var card = document.createElement('div');
+    card.className = 'cert-card ' + (cert.verificationStatus === 'rejected' ? 'cert-card--rejected'
+      : cert.verificationStatus === 'pending_review' ? 'cert-card--pending' : '');
+    card.innerHTML =
+      '<div class="cert-card-top">' +
+        '<div class="cert-card-icon">🎓</div>' +
+        '<div style="flex:1">' +
+          '<div class="cert-card-title">' + esc(cert.certificateName || 'Certificate') + '</div>' +
+          '<div class="cert-card-org">' + esc(cert.issuingOrganization || '') + '</div>' +
+        '</div>' +
+        '<span class="cert-status-pill ' + CERT_STATUS_CLASS[cert.verificationStatus] + '">' + CERT_STATUS_LABEL[cert.verificationStatus] + '</span>' +
+      '</div>' +
+      '<div class="cert-kv-row"><span>Certificate ID</span><b>' + esc(cert.certificateNumber || '—') + '</b></div>' +
+      '<div class="cert-kv-row"><span>Issued</span><b>' + esc(cert.issuedDate || '—') + '</b></div>' +
+      '<div class="cert-kv-row"><span>Expires</span><b>' + esc(cert.expiryDate || '—') + '</b></div>' +
+      '<div class="cert-kv-row"><span>Verification Score</span><b>' + esc(String(cert.verificationScore)) + '%</b></div>' +
+      (cert.verificationStatus === 'rejected' && cert.rejectionReason
+        ? '<div class="cert-reject-note">Rejected: ' + esc(cert.rejectionReason) + '</div>' : '') +
+      '<div class="cert-card-actions"><button class="cert-view-btn" data-cert-view>View Certificate</button></div>';
+    card.querySelector('[data-cert-view]').addEventListener('click', function () {
+      ZitlasCertificates.openViewCertificate(cert);
+    });
+    wrap.appendChild(card);
+  });
+}
+
 /* ── Private helpers ── */
 
 function _epRefreshPhotoPreview() {
@@ -4752,6 +4864,8 @@ function renderAll(baseExpert) {
   initNavigation();
   initLogout();
   initEditProfile();
+  initCertificateUpload(expert);
+  listenForMyCertificates(expert);
   initDeleteAccount();
   initExpertChatOverlay();
   initReviewTools(expert);

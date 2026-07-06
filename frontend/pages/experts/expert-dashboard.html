@@ -14,11 +14,13 @@
   <link rel="stylesheet" href="../../assets/css/chat-cards.css" />
   <link rel="stylesheet" href="../../assets/css/call-ui.css" />
   <link rel="stylesheet" href="../../assets/css/coaching-workspace.css?v=20260705b" />
+  <link rel="stylesheet" href="../../assets/css/certificates.css?v=20260706" />
   <script src="../../assets/js/firebase-config.js"></script>
   <script src="../../assets/js/webrtc-call.js"></script>
   <script src="../../assets/js/call-ui.js"></script>
   <script src="../../assets/js/chat-attachments.js"></script>
   <script src="../../components/coaching-workspace.js?v=20260705b"></script>
+  <script src="../../assets/js/certificate-manager.js?v=20260706"></script>
 </head>
 <body class="zitlas-premium-bg">
 
@@ -228,6 +230,23 @@
             <span class="epf-fee-label">Session</span>
             <span class="epf-fee-val" id="epfFeeDuration">-</span>
           </div>
+        </div>
+
+        <!-- ── Professional Certification (Expert Verification System) ── -->
+        <div class="cert-section-label">Professional Certification</div>
+        <div class="cert-upload-card">
+          <span class="cert-upload-icon">🎓</span>
+          <p class="cert-upload-title">Upload Coaching Certificate</p>
+          <p class="cert-upload-hint">Accepted: JPG, PNG, PDF · Maximum 10 MB</p>
+          <button class="cert-upload-btn" id="certUploadBtn" type="button">Upload Certificate</button>
+          <input type="file" id="certFileInput" accept="image/jpeg,image/png,application/pdf" style="display:none">
+          <div class="cert-upload-progress" id="certUploadProgress">
+            <span class="cert-spinner"></span>
+            <span id="certUploadProgressText">Analyzing certificate…</span>
+          </div>
+        </div>
+        <div id="certListWrap">
+          <div class="cert-empty" id="certEmpty">No certificates uploaded yet. Upload one to earn the Verified Expert badge.</div>
         </div>
 
         <button class="ep-edit-btn" id="epEditProfileBtn">
