@@ -1,0 +1,161 @@
+/*!
+ * ZITLAS — Pending Requests Status Bar (assets/css/pending-requests-bar.css)
+ * Self-contained (prb- prefix). Injected by assets/js/pending-requests-bar.js
+ * on the Experts listing page. Floats above the bottom navbar.
+ */
+
+.prb-bar {
+  position: fixed;
+  left: 50%; transform: translateX(-50%) translateY(14px);
+  bottom: calc(88px + env(safe-area-inset-bottom, 0px));
+  width: 92%; max-width: 480px;
+  z-index: 9500;
+  background: rgba(255,255,255,0.92);
+  backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+  border-radius: 18px;
+  border-left: 4px solid #F59E0B;
+  box-shadow: 0 14px 38px rgba(30,41,59,0.18);
+  padding: 12px 14px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  display: none;
+}
+.prb-bar.show { display: block; }
+.prb-bar.open { opacity: 1; transform: translateX(-50%) translateY(0); }
+.prb-bar--accepted { border-left-color: #6BA539; }
+.prb-bar--rejected { border-left-color: #E5484D; }
+
+.prb-row { display: flex; align-items: center; gap: 10px; }
+.prb-icon {
+  width: 34px; height: 34px; flex-shrink: 0;
+  border-radius: 50%;
+  background: rgba(245,158,11,0.14);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px;
+  animation: prbPulse 1.8s ease-in-out infinite;
+}
+@keyframes prbPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(245,158,11,0.35); }
+  50%      { box-shadow: 0 0 0 7px rgba(245,158,11,0); }
+}
+.prb-body { flex: 1; min-width: 0; }
+.prb-title { font-size: 13px; font-weight: 800; color: var(--text, #1E293B); margin: 0; }
+.prb-sub {
+  font-size: 11.5px; color: var(--text-sec, #64748B); margin: 2px 0 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.prb-chevron { flex-shrink: 0; color: var(--text-sec, #94A3B8); transition: transform 0.2s ease; }
+.prb-bar.expanded .prb-chevron { transform: rotate(180deg); }
+
+.prb-list {
+  margin-top: 10px; padding-top: 10px;
+  border-top: 1px solid rgba(30,41,59,0.08);
+  display: none;
+}
+.prb-bar.expanded .prb-list { display: block; }
+.prb-item {
+  display: flex; align-items: center; gap: 9px;
+  padding: 8px 0;
+}
+.prb-item + .prb-item { border-top: 1px solid rgba(30,41,59,0.05); }
+.prb-item-dot { width: 7px; height: 7px; border-radius: 50%; background: #F59E0B; flex-shrink: 0; }
+.prb-item-text { flex: 1; min-width: 0; font-size: 12.5px; font-weight: 700; color: var(--text, #1E293B); }
+.prb-item-sub { display: block; font-size: 11px; font-weight: 500; color: var(--text-sec, #94A3B8); margin-top: 1px; }
+
+/* ── Success overlay (personal coaching accepted) ── */
+.prb-success-overlay {
+  position: fixed; inset: 0; z-index: 12000;
+  background: rgba(255,255,255,0.97);
+  display: none; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; padding: 24px;
+  opacity: 0; transition: opacity 0.25s ease;
+}
+.prb-success-overlay.show { display: flex; }
+.prb-success-overlay.open { opacity: 1; }
+.prb-success-check {
+  font-size: 56px; margin-bottom: 16px;
+  animation: prbPop 0.4s cubic-bezier(0.34,1.56,0.64,1);
+}
+@keyframes prbPop { from { transform: scale(0.3); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.prb-success-title { font-size: 17px; font-weight: 800; color: var(--text, #1E293B); margin: 0 0 8px; max-width: 320px; }
+.prb-success-sub { font-size: 13px; color: var(--text-sec, #64748B); }
+
+/* ── Detail modal ── */
+.prb-modal-backdrop {
+  position: fixed; inset: 0; z-index: 11700;
+  background: rgba(30,41,59,0.5);
+  backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px);
+  display: none; align-items: center; justify-content: center;
+  padding: 20px;
+  opacity: 0; transition: opacity 0.2s ease;
+}
+.prb-modal-backdrop.open { opacity: 1; }
+.prb-modal {
+  background: rgba(255,255,255,0.96);
+  backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+  border-radius: 22px;
+  padding: 22px 20px 20px;
+  max-width: 360px; width: 100%;
+  box-shadow: 0 24px 70px rgba(30,41,59,0.3);
+  transform: scale(0.95);
+  transition: transform 0.2s ease;
+}
+.prb-modal-backdrop.open .prb-modal { transform: scale(1); }
+.prb-modal-title { font-size: 16px; font-weight: 800; color: var(--text, #1E293B); margin: 0 0 14px; }
+.prb-modal-row {
+  display: flex; justify-content: space-between; gap: 12px;
+  padding: 9px 0; border-bottom: 1px solid rgba(30,41,59,0.06);
+  font-size: 13px;
+}
+.prb-modal-row:last-of-type { border-bottom: none; }
+.prb-modal-row span { color: var(--text-sec, #64748B); font-weight: 600; }
+.prb-modal-row b { color: var(--text, #1E293B); font-weight: 700; text-align: right; }
+.prb-status-pill {
+  display: inline-block; padding: 3px 10px; border-radius: 999px;
+  font-size: 11.5px; font-weight: 800;
+}
+.prb-status-pill--pending  { background: rgba(245,158,11,0.14); color: #92600A; }
+.prb-status-pill--accepted { background: rgba(107,165,57,0.14); color: #578A2C; }
+.prb-status-pill--rejected { background: rgba(229,72,77,0.12); color: #B3261E; }
+.prb-status-pill--completed{ background: rgba(59,130,246,0.14); color: #1D4ED8; }
+.prb-modal-actions { display: flex; gap: 10px; margin-top: 16px; }
+.prb-modal-btn {
+  flex: 1; padding: 12px; border-radius: 14px;
+  font-size: 13.5px; font-weight: 700; cursor: pointer; text-align: center;
+}
+.prb-modal-btn--msg {
+  background: rgba(255,255,255,0.9);
+  border: 1.5px solid rgba(30,41,59,0.14);
+  color: var(--text, #1E293B);
+}
+.prb-modal-btn--withdraw {
+  background: transparent;
+  border: 1.5px solid rgba(229,72,77,0.45);
+  color: #D93036;
+}
+.prb-modal-btn:disabled { opacity: 0.6; }
+.prb-modal-close {
+  width: 100%; margin-top: 8px; padding: 11px;
+  border-radius: 14px; background: transparent; border: none;
+  font-size: 13px; font-weight: 700; color: var(--text-sec, #64748B); cursor: pointer;
+}
+
+/* ── Toast ── */
+.prb-toast {
+  position: fixed; left: 50%; bottom: 160px; z-index: 12500;
+  transform: translateX(-50%) translateY(12px);
+  background: rgba(30,41,59,0.93); color: #fff;
+  font-size: 13px; font-weight: 600;
+  padding: 11px 18px; border-radius: 14px;
+  max-width: 86vw; text-align: center; line-height: 1.45;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.22s ease, transform 0.22s ease;
+}
+.prb-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+@media (prefers-reduced-motion: reduce) {
+  .prb-bar, .prb-icon, .prb-success-overlay, .prb-success-check, .prb-modal, .prb-modal-backdrop, .prb-toast {
+    transition: none; animation: none;
+  }
+}

@@ -1437,7 +1437,7 @@ function renderCoachingRequests() {
   var bucket = _pcRequests.filter(function(r) {
     if (_pcActiveTab === 'pending')   return r.status === 'pending';
     if (_pcActiveTab === 'active')    return r.status === 'accepted' || r.status === 'active';
-    return r.status === 'declined' || r.status === 'completed' || r.status === 'ended';
+    return r.status === 'declined' || r.status === 'completed' || r.status === 'ended' || r.status === 'withdrawn';
   });
 
   wrap.querySelectorAll('.pc-req-card').forEach(function(el) { el.remove(); });
@@ -1452,7 +1452,8 @@ function renderCoachingRequests() {
       req.status === 'accepted' ? 'Accepted — awaiting athlete payment' :
       req.status === 'active'   ? 'Active coaching client' :
       req.status === 'declined' ? 'Declined' :
-      req.status === 'ended'    ? 'Coaching ended by athlete' : 'Completed';
+      req.status === 'ended'    ? 'Coaching ended by athlete' :
+      req.status === 'withdrawn'? 'Withdrawn by athlete' : 'Completed';
 
     var card = document.createElement('div');
     card.className = 'ed-athlete-card pc-req-card';
