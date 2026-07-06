@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>ZITLAS — Notifications</title>
+  <link rel="stylesheet" href="notifications.css" />
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <script src="../../assets/js/firebase-config.js"></script>
+  <script src="../../assets/js/notification-center.js?v=20260706"></script>
+</head>
+<body>
+
+  <header class="nc-header">
+    <button class="nc-back" id="ncBack" aria-label="Back">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+    </button>
+    <span class="nc-title">Notifications</span>
+    <button class="nc-mark-all" id="ncMarkAll">Mark All Read</button>
+  </header>
+
+  <div class="nc-filters" id="ncFilters">
+    <button class="nc-filter-chip active" data-filter="all">All</button>
+    <button class="nc-filter-chip" data-filter="unread">Unread</button>
+    <button class="nc-filter-chip" data-filter="coach">Coach</button>
+    <button class="nc-filter-chip" data-filter="ai">AI</button>
+    <button class="nc-filter-chip" data-filter="payments">Payments</button>
+    <button class="nc-filter-chip" data-filter="chats">Chats</button>
+    <button class="nc-filter-chip" data-filter="achievements">Achievements</button>
+  </div>
+
+  <main class="nc-main" id="ncMain"></main>
+
+  <script src="notifications.js"></script>
+</body>
+</html>

@@ -1,0 +1,108 @@
+/*!
+ * ZITLAS — Notification Center (pages/notifications/notifications.css)
+ * Premium glass UI, orange verification/unread accents.
+ */
+:root {
+  --nc-bg: #F4F1EA; --nc-text: #1E293B; --nc-text-sec: #64748B;
+  --nc-orange: #FF7A00; --nc-orange-soft: rgba(255,153,0,0.12);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: linear-gradient(180deg, #F7F4EC 0%, #F1EEE6 100%);
+  color: var(--nc-text); min-height: 100vh;
+}
+
+.nc-header {
+  position: sticky; top: 0; z-index: 20;
+  background: rgba(255,255,255,0.92);
+  backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+  border-bottom: 1px solid rgba(30,41,59,0.08);
+  padding: 14px 16px; padding-top: calc(14px + env(safe-area-inset-top, 0px));
+  display: flex; align-items: center; gap: 12px;
+}
+.nc-back {
+  width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+  background: rgba(30,41,59,0.06); border: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; color: var(--nc-text);
+}
+.nc-title { font-size: 16px; font-weight: 800; flex: 1; }
+.nc-mark-all {
+  padding: 8px 13px; border-radius: 12px; cursor: pointer;
+  background: rgba(255,153,0,0.1); border: 1px solid rgba(255,153,0,0.3);
+  color: #B35900; font-size: 12px; font-weight: 800; white-space: nowrap;
+}
+.nc-mark-all:disabled { opacity: 0.5; }
+
+.nc-filters {
+  display: flex; gap: 7px; overflow-x: auto; scrollbar-width: none;
+  padding: 12px 16px 4px;
+}
+.nc-filters::-webkit-scrollbar { display: none; }
+.nc-filter-chip {
+  flex-shrink: 0; padding: 8px 14px; border-radius: 999px; cursor: pointer;
+  border: 1.5px solid rgba(30,41,59,0.1); background: rgba(255,255,255,0.7);
+  font-size: 12.5px; font-weight: 700; color: var(--nc-text-sec); white-space: nowrap;
+}
+.nc-filter-chip.active {
+  background: linear-gradient(135deg, #FFA940, #FF7A00);
+  border-color: transparent; color: #fff;
+  box-shadow: 0 6px 16px rgba(255,122,0,0.35);
+}
+
+.nc-main { max-width: 640px; margin: 0 auto; padding: 8px 14px 60px; }
+.nc-group-label {
+  font-size: 12px; font-weight: 800; color: var(--nc-text-sec);
+  text-transform: uppercase; letter-spacing: 0.6px;
+  margin: 18px 4px 8px;
+}
+.nc-group-label:first-child { margin-top: 10px; }
+
+.nc-item-wrap { position: relative; margin-bottom: 8px; border-radius: 18px; overflow: hidden; }
+.nc-item-delete-bg {
+  position: absolute; inset: 0; z-index: 0;
+  background: #E5484D; display: flex; align-items: center; justify-content: flex-end;
+  padding-right: 22px; color: #fff; font-size: 13px; font-weight: 800;
+}
+.nc-item {
+  position: relative; z-index: 1;
+  display: flex; align-items: flex-start; gap: 12px;
+  background: rgba(255,255,255,0.94);
+  border: 1px solid rgba(30,41,59,0.06);
+  border-radius: 18px; padding: 13px 14px;
+  cursor: pointer;
+  touch-action: pan-y;
+  transition: transform 0.05s linear, box-shadow 0.2s ease;
+  animation: ncSlideIn 0.32s cubic-bezier(.34,1.1,.64,1);
+}
+@keyframes ncSlideIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.nc-item--unread {
+  border-color: rgba(255,153,0,0.35);
+  box-shadow: 0 0 0 1px rgba(255,153,0,0.15), 0 8px 22px rgba(255,153,0,0.12);
+}
+.nc-item-icon {
+  width: 42px; height: 42px; flex-shrink: 0; border-radius: 13px;
+  background: var(--nc-orange-soft);
+  display: flex; align-items: center; justify-content: center; font-size: 19px;
+}
+.nc-item-body { flex: 1; min-width: 0; }
+.nc-item-title { font-size: 13.5px; font-weight: 800; color: var(--nc-text); line-height: 1.4; }
+.nc-item-msg { font-size: 12.5px; color: var(--nc-text-sec); line-height: 1.45; margin-top: 2px; }
+.nc-item-time { font-size: 10.5px; color: #94A3B8; font-weight: 600; margin-top: 5px; }
+.nc-item-dot {
+  width: 9px; height: 9px; border-radius: 50%; background: var(--nc-orange);
+  flex-shrink: 0; margin-top: 5px;
+  box-shadow: 0 0 0 3px rgba(255,122,0,0.18);
+}
+.nc-priority-critical { border-left: 3px solid #E5484D; }
+.nc-priority-high { border-left: 3px solid #F59E0B; }
+
+.nc-empty { text-align: center; padding: 90px 24px 40px; }
+.nc-empty-icon { font-size: 52px; display: block; margin-bottom: 16px; }
+.nc-empty-title { font-size: 16px; font-weight: 800; margin: 0 0 8px; }
+.nc-empty-sub { font-size: 13px; color: var(--nc-text-sec); line-height: 1.6; max-width: 300px; margin: 0 auto; }
+
+@media (prefers-reduced-motion: reduce) {
+  .nc-item { animation: none; }
+}

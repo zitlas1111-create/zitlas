@@ -138,6 +138,28 @@
       text: text, type: type || 'info',
       createdAt: new Date().toISOString(), read: false,
     }).catch(function (e) { console.warn('[CW] notify failed', e); });
+
+    /* Mirror into the unified Notification Center — additive, the toast
+       above is untouched. Category/navigation are derived from the
+       coaching-specific `type`; for 'chat' the recipient's role decides
+       whether tapping opens the athlete's coach profile or the expert
+       dashboard, since the same event fires in both directions. */
+    if (typeof ZitlasNotify !== 'undefined' && S.opts) {
+      var toIsAthlete = toId === S.opts.athleteId;
+      var category =
+        type === 'diet_update'     ? 'diet' :
+        type === 'training_update' ? 'training' :
+        type === 'meal_reviewed'   ? 'meal_snap' :
+        type === 'meal_request'    ? 'expert' :
+        type === 'chat'            ? 'chat' : 'expert';
+      var action =
+        type === 'diet_update'     ? 'diet' :
+        type === 'training_update' ? 'training' :
+        type === 'meal_reviewed'   ? 'diet' :
+        (toIsAthlete ? 'chat' : 'expert_dashboard');
+      var actionId = toIsAthlete ? S.opts.coachId : null;
+      ZitlasNotify.send(toId, { title: text, category: category, type: type, action: action, actionId: actionId });
+    }
   }
 
   var _notifAttachedFor = null;

@@ -347,8 +347,35 @@
         return ZitlasDB.collection('chat_rooms').doc(chatId).collection('messages').doc(msg.id).set(msg);
       }).catch(function (e) { console.warn('[HEALTH] chat message failed', e); });
 
+      if (typeof ZitlasNotify !== 'undefined') {
+        ZitlasNotify.send(rel.coachId, {
+          title: '🚨 Health Alert — ' + athleteName(), message: summary,
+          category: 'health', type: 'health_alert', action: 'expert_dashboard',
+          priority: adj.safety ? 'critical' : 'high',
+        });
+      }
+
       console.log('[HEALTH] coach alerted:', rel.coachName, summary);
     }).catch(function (e) { console.warn('[HEALTH] rel lookup failed', e); });
+  }
+
+  /* Self-notification confirming today's plan was adjusted — visible in
+     the athlete's own Notification Center even without a Personal Coach. */
+  function notifySelf(adj) {
+    if (typeof ZitlasNotify === 'undefined') return;
+    var myUid = uid();
+    if (!myUid) return;
+    var title = adj.safety
+      ? '⚠ Seek medical attention before exercising'
+      : STATUS_LABEL[adj.status] + ' — today’s plan adjusted';
+    var parts = [];
+    if (adj.workout) parts.push('Workout: ' + adj.workout.title);
+    if (adj.diet)    parts.push('Diet: ' + adj.diet.focus);
+    ZitlasNotify.send(myUid, {
+      title: title, message: parts.join(' · '),
+      category: 'health', type: 'health_status_' + adj.status,
+      action: 'dashboard', priority: adj.safety ? 'critical' : 'medium',
+    });
   }
 
   /* ══════════════════════════════════════════════
@@ -486,6 +513,7 @@
     } else {
       saveToday(adj);
       alertCoach(adj);
+      notifySelf(adj);
       toast(adj.safety
         ? '⚠ Plan paused — please consider medical attention.'
         : '✅ Today’s plan adjusted. Your coach has been notified if you have one.');

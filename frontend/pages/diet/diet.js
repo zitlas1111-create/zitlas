@@ -1698,6 +1698,15 @@
         });
       })
       .then(function () {
+        if (typeof ZitlasNotify !== 'undefined') {
+          ZitlasNotify.send(_pcRel.coachId, {
+            title: '🍽 ' + athleteName + ' requested alternatives',
+            message: c.day + ' ' + c.mealName, category: 'expert',
+            type: 'meal_request', action: 'expert_dashboard',
+          });
+        }
+      })
+      .then(function () {
         _pcCloseSheet();
         showToast('📨 Request sent — your coach will reply with new options.');
       })
@@ -1781,6 +1790,15 @@
             text: '🍽 ' + _pcAthleteName() + ' has a question about ' + day + ' ' + (mealName || 'a meal') + '.',
             type: 'meal_question', createdAt: new Date().toISOString(), read: false,
           });
+        })
+        .then(function () {
+          if (typeof ZitlasNotify !== 'undefined') {
+            ZitlasNotify.send(_pcRel.coachId, {
+              title: '💬 ' + _pcAthleteName() + ' has a question',
+              message: day + ' ' + (mealName || 'a meal') + ': ' + q,
+              category: 'expert', type: 'meal_question', action: 'expert_dashboard',
+            });
+          }
         })
         .then(function () {
           _pcCloseSheet();
@@ -1960,6 +1978,14 @@
           text: '📸 ' + athleteName + ' submitted ' + doc.mealName + ' for review.',
           type: 'meal_checkin', createdAt: new Date().toISOString(), read: false,
         });
+      }).then(function () {
+        if (typeof ZitlasNotify !== 'undefined') {
+          ZitlasNotify.send(_pcRel.coachId, {
+            title: '📷 ' + athleteName + ' submitted a meal',
+            message: doc.mealName + ' — ' + doc.day, category: 'meal_snap',
+            type: 'meal_checkin', action: 'expert_dashboard',
+          });
+        }
       });
     }).then(function () {
       URL.revokeObjectURL(previewUrl);

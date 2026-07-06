@@ -156,16 +156,10 @@
      NOTIFICATION BELL
   ══════════════════════════════════════════ */
   function initNotifBell() {
-    const btn = document.getElementById('notifBtn');
-    const dot = document.getElementById('notifDot');
-    if (!btn) return;
-    btn.addEventListener('click', () => {
-      if (dot) {
-        dot.style.transform = 'scale(1.7)';
-        setTimeout(() => { dot.style.transform = ''; }, 500);
-      }
-      showToast('No new notifications');
-    });
+    if (typeof ZitlasNotify === 'undefined') return;
+    ZitlasNotify.wireBell('notifBtn', 'notifDot', '../notifications/notifications.html');
+    var uid = ZitlasNotify.myUid();
+    if (uid) ZitlasNotify.maybeSendDailyMotivation(uid);
   }
 
   /* ══════════════════════════════════════════
@@ -430,6 +424,15 @@
 
     if (confirmBtn) {
       confirmBtn.addEventListener('click', () => {
+        if (typeof ZitlasNotify !== 'undefined') {
+          const gUid = ZitlasNotify.myUid();
+          if (gUid) {
+            ZitlasNotify.send(gUid, {
+              title: '🎯 Goal reset', message: 'Your goal and roadmap were reset — generate a new AI plan to continue.',
+              category: 'goal', type: 'goal_reset', action: 'dashboard',
+            });
+          }
+        }
         clearAllSurveyData();
         closeResetGoalModal();
         window.location.href = './ai-coach/ai-coach.html';

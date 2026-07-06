@@ -16,6 +16,7 @@
   <link rel="stylesheet" href="../../assets/css/coaching-workspace.css?v=20260705b" />
   <link rel="stylesheet" href="../../assets/css/certificates.css?v=20260706" />
   <script src="../../assets/js/firebase-config.js"></script>
+  <script src="../../assets/js/notification-center.js?v=20260706"></script>
   <script src="../../assets/js/webrtc-call.js"></script>
   <script src="../../assets/js/call-ui.js"></script>
   <script src="../../assets/js/chat-attachments.js"></script>
@@ -36,6 +37,13 @@
     <div class="ed-header-right">
       <span class="ed-online-dot"></span>
       <span class="ed-online-label">Online</span>
+      <button class="ed-logout-btn" id="edNotifBtn" aria-label="Notifications" title="Notifications" style="position:relative">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+          <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+        </svg>
+        <span id="edNotifDot" style="display:none;position:absolute;top:-2px;right:-2px;background:#E5484D;border-radius:9px;border:2px solid var(--bg-primary,#fff);"></span>
+      </button>
       <button class="ed-logout-btn" id="edLogoutBtn" aria-label="Logout" title="Logout">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>

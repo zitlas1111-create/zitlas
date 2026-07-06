@@ -517,9 +517,19 @@
       var flagKey = 'zitlas_zino_celebrated_streak_' + streak;
       if (localStorage.getItem(flagKey)) return;
       localStorage.setItem(flagKey, new Date().toISOString());
-      showCelebration(streak === 30
+      var msg = streak === 30
         ? '🔥 30-day streak! You are absolutely unstoppable — incredible consistency!'
-        : '🎉 7-day streak! One week strong — keep this momentum going!');
+        : '🎉 7-day streak! One week strong — keep this momentum going!';
+      showCelebration(msg);
+      if (typeof ZitlasNotify !== 'undefined') {
+        var selfUid = myUid();
+        if (selfUid) {
+          ZitlasNotify.send(selfUid, {
+            title: streak + '-Day Streak! 🔥', message: msg,
+            category: 'achievement', type: 'streak_milestone', action: 'dashboard',
+          });
+        }
+      }
     }
     function showCelebration(msg) {
       var el = $('znCelebrate');

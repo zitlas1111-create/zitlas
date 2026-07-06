@@ -366,9 +366,13 @@ coachesList.addEventListener('keydown', e => {
   }
 });
 
-document.getElementById('notifBtn').addEventListener('click', () => {
-  showToast('🔔 No new notifications');
-});
+if (typeof ZitlasNotify !== 'undefined') {
+  ZitlasNotify.wireBell('notifBtn', 'notifDot', '../notifications/notifications.html');
+} else {
+  document.getElementById('notifBtn').addEventListener('click', () => {
+    showToast('🔔 No new notifications');
+  });
+}
 
 // ─── TOAST ─────────────────────────────────────────────────────────────────
 

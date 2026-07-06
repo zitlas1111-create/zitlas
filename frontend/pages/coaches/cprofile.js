@@ -2949,6 +2949,26 @@
                 var wasCompleted = prevRaw === 'completed' || prevRaw === 'review_completed';
                 var isCompleted  = newRaw  === 'completed' || newRaw  === 'review_completed';
                 var justCompleted = !wasCompleted && isCompleted;
+                var isInProgress  = newRaw  === 'in_progress' || newRaw  === 'expert_reviewing';
+                var justAccepted  = prevRaw === 'pending' && isInProgress;
+
+                if (typeof ZitlasNotify !== 'undefined' && prevRaw) {
+                  if (justAccepted) {
+                    ZitlasNotify.send(_reviewUid, {
+                      title: '👨‍⚕️ ' + (data.expertName || 'Expert') + ' accepted your review request',
+                      message: 'They’re now reviewing your ' + (data.reviewType || 'plan') + '.',
+                      category: 'review', type: 'review_accepted',
+                      action: 'expert_profile', actionId: data.expertId,
+                    });
+                  } else if (justCompleted) {
+                    ZitlasNotify.send(_reviewUid, {
+                      title: '⭐ ' + (data.expertName || 'Expert') + ' completed your review',
+                      message: 'Open their profile to see the changes.',
+                      category: 'review', type: 'review_completed',
+                      action: 'expert_profile', actionId: data.expertId, priority: 'high',
+                    });
+                  }
+                }
 
                 console.log('[REVIEW] athlete listener', data.id, 'prev:', prevRaw, '→ new:', newRaw);
                 console.log('status', newRaw);
@@ -3722,6 +3742,16 @@
         }, { merge: true }).catch(function(e) { console.warn('[COACHING] context publish failed', e); });
       }).then(function() {
         showToast('🎉 ' + req.expertName + ' is now your personal coach!');
+        if (typeof ZitlasNotify !== 'undefined') {
+          ZitlasNotify.send(uid, {
+            title: '🎉 Coaching started!', message: req.expertName + ' is now your Personal Coach.',
+            category: 'payment', type: 'coaching_started', action: 'expert_profile', actionId: req.expertId,
+          });
+          ZitlasNotify.send(req.expertId, {
+            title: '🎉 New coaching client', message: (payload.athleteName || 'An athlete') + ' just started coaching with you.',
+            category: 'payment', type: 'coaching_started', action: 'expert_dashboard',
+          });
+        }
       }).catch(function(err) {
         console.error('[COACHING] activation failed:', err && err.message);
         showToast(err && err.message === 'other_coach_active'
@@ -3773,6 +3803,13 @@
           }
           closeEndCoachingModal();
           showToast('Personal coaching ended. Your existing plans remain unchanged.');
+          if (typeof ZitlasNotify !== 'undefined' && _myCoaching.coachId) {
+            ZitlasNotify.send(_myCoaching.coachId, {
+              title: 'Coaching partnership ended',
+              message: (_myCoaching.athleteName || 'An athlete') + ' ended their coaching with you.',
+              category: 'expert', type: 'coaching_ended', action: 'expert_dashboard', priority: 'high',
+            });
+          }
         }).catch(function(err) {
           console.error('[COACHING] end coaching failed', err);
           showToast('Could not end coaching — please try again.');
@@ -3814,8 +3851,23 @@
               if (prev && prev !== r.status) {
                 if (r.status === 'declined') {
                   showToast('Your coaching request was declined.');
+                  if (typeof ZitlasNotify !== 'undefined') {
+                    ZitlasNotify.send(uid, {
+                      title: 'Coaching request declined',
+                      message: (r.expertName || 'The expert') + ' declined your ' + (r.planLabel || 'coaching') + ' request.',
+                      category: 'expert', type: 'coaching_declined', action: 'coaches',
+                    });
+                  }
                 } else if (r.status === 'accepted') {
                   showToast('✅ ' + (r.expertName || 'The expert') + ' accepted your coaching request! Tap Personal Coach to complete payment.');
+                  if (typeof ZitlasNotify !== 'undefined') {
+                    ZitlasNotify.send(uid, {
+                      title: '🎉 ' + (r.expertName || 'The expert') + ' accepted your request',
+                      message: 'Complete payment to start your ' + (r.planLabel || 'coaching') + ' plan.',
+                      category: 'expert', type: 'coaching_accepted', action: 'expert_profile', actionId: r.expertId,
+                      priority: 'high',
+                    });
+                  }
                 }
               }
               _prevReqStatuses[r.requestId] = r.status;

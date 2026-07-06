@@ -4866,6 +4866,10 @@ function renderAll(baseExpert) {
   initEditProfile();
   initCertificateUpload(expert);
   listenForMyCertificates(expert);
+  if (typeof ZitlasNotify !== 'undefined' && !renderAll._bellWired) {
+    renderAll._bellWired = true;
+    ZitlasNotify.wireBell('edNotifBtn', 'edNotifDot', '../notifications/notifications.html');
+  }
   initDeleteAccount();
   initExpertChatOverlay();
   initReviewTools(expert);
