@@ -101,6 +101,12 @@ class NutritionWeeklyPlanRequest(BaseModel):
     lifestyle_data: dict | None = Field(default=None)
     rejected_foods: list[str] = Field(default_factory=list)
 
+class ZinoChatRequest(BaseModel):
+    message: str = Field(..., min_length=1, max_length=1000)
+    context: dict = Field(default_factory=dict, description="Athlete snapshot: goal, calculations, swot, diet/workout summaries, coaching status, medical conditions, health status, streak, meal scores")
+    history: list[dict] = Field(default_factory=list, description="[{role:'user'|'zino', text}] recent turns for continuity")
+
+
 class SwapMealRequest(BaseModel):
     meal_name: str
     meal_time: str = Field(default="")
@@ -182,6 +188,49 @@ async def chat(body: ChatRequest):
         tokens_used=result["tokens_used"],
         sources=sources or None,
     )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# POST /api/ai/zino-chat  — the permanent floating Zino companion
+# ══════════════════════════════════════════════════════════════════════════════
+
+@router.post("/zino-chat")
+async def zino_chat(body: ZinoChatRequest) -> dict[str, Any]:
+    """
+    Conversational endpoint for the always-available Zino floating assistant
+    (frontend/assets/js/zino.js). Distinct from /chat: dedicated companion
+    persona + tone (groq_service.ZINO_COMPANION_SYSTEM), full athlete context
+    injection, and short conversation history for continuity.
+    """
+    history_lines = []
+    for h in body.history[-8:]:
+        role = 'Athlete' if h.get('role') == 'user' else 'Zino'
+        text = str(h.get('text', ''))[:400]
+        if text:
+            history_lines.append(f"{role}: {text}")
+    history_block = ("RECENT CONVERSATION:\n" + "\n".join(history_lines) + "\n\n") if history_lines else ""
+
+    ctx_str = json.dumps(body.context, indent=2, default=str) if body.context else "No profile data synced yet."
+    user_message = (
+        f"ATHLETE CONTEXT:\n{ctx_str}\n\n"
+        f"{history_block}"
+        f"Athlete says: {body.message}"
+    )
+
+    print(f"[ZINO CHAT] message={body.message[:120]!r}  context_keys={list(body.context.keys())}")
+    try:
+        result = await groq_service.chat(
+            user_message=user_message,
+            system_override=groq_service.ZINO_COMPANION_SYSTEM,
+            temperature=0.8,
+            max_tokens=400,
+        )
+    except EnvironmentError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Zino is having trouble connecting: {str(e)}")
+
+    return {"reply": result["reply"], "model": result["model"], "tokens_used": result["tokens_used"]}
 
 
 # ══════════════════════════════════════════════════════════════════════════════
