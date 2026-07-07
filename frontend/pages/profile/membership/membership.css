@@ -323,7 +323,8 @@ button:focus-visible { outline: 2px solid #FF8C00; outline-offset: 2px; }
 /* ── Description ── */
 .mb-plan-desc {
   font-size: 13px;
-  color: #9CA3AF;
+  color: #374151;
+  opacity: 1;
   line-height: 1.5;
   margin-bottom: 16px;
 }
@@ -342,7 +343,8 @@ button:focus-visible { outline: 2px solid #FF8C00; outline-offset: 2px; }
   align-items: center;
   gap: 8px;
   font-size: 13.5px;
-  color: #e5e7eb;
+  color: #374151;
+  opacity: 1;
   line-height: 1.4;
 }
 
@@ -353,8 +355,9 @@ button:focus-visible { outline: 2px solid #FF8C00; outline-offset: 2px; }
   text-align: center;
 }
 
-.mb-feat-neg { color: #9CA3AF; }
-.mb-feat-pro { color: #22C55E; }
+/* Disabled/unavailable feature (e.g. "Ads included") — medium gray, still legible, not near-white. */
+.mb-feat-neg { color: #6B7280; opacity: 1; }
+.mb-feat-pro { color: #22C55E; opacity: 1; }
 
 /* ── Action buttons ── */
 .mb-action-btn {
@@ -426,7 +429,7 @@ button:focus-visible { outline: 2px solid #FF8C00; outline-offset: 2px; }
   padding: 11px 14px;
   font-size: 12px;
   font-weight: 700;
-  color: #9CA3AF;
+  color: #1F2937;
   text-align: center;
   background: var(--bg-card);
   border-bottom: 1px solid #222;
@@ -444,7 +447,8 @@ button:focus-visible { outline: 2px solid #FF8C00; outline-offset: 2px; }
 .mb-td {
   padding: 11px 14px;
   font-size: 13.5px;
-  color: #9CA3AF;
+  color: #374151;
+  opacity: 1;
   text-align: center;
   border-bottom: 1px solid #1a1a1a;
   background: var(--bg-card);
@@ -453,7 +457,8 @@ button:focus-visible { outline: 2px solid #FF8C00; outline-offset: 2px; }
 
 .mb-td--feat {
   text-align: left;
-  color: #e5e7eb;
+  color: #374151;
+  opacity: 1;
   font-weight: 500;
 }
 
