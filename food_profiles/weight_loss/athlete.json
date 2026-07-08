@@ -1,0 +1,45 @@
+{
+  "profileName": "Athlete — Weight Loss",
+  "goal": "Weight Loss",
+  "subGoals": [
+    "Fat Loss",
+    "Six Pack",
+    "Wedding Transformation",
+    "Post Pregnancy",
+    "Obesity",
+    "Beginner Weight Loss"
+  ],
+  "preferredCategories": [
+    "Healthy Recipes",
+    "Weight Loss Foods",
+    "Vegetables",
+    "Fruits",
+    "Salads and Soups",
+    "Vegetarian Protein Sources",
+    "Sports Nutrition Foods",
+    "Protein Supplements",
+    "Chicken Dishes",
+    "Eggs",
+    "Fish & Seafood"
+  ],
+  "avoidCategories": [
+    "Desserts & Sweets",
+    "Fast Foods"
+  ],
+  "preferredMealTypes": [
+    "Breakfast",
+    "Lunch",
+    "Dinner",
+    "Snack",
+    "Pre Workout",
+    "Post Workout"
+  ],
+  "budget": "High",
+  "difficulty": "Medium",
+  "maxCaloriesBreakfast": 438,
+  "maxCaloriesLunch": 625,
+  "maxCaloriesDinner": 562,
+  "proteinPriority": "High",
+  "hostelFriendly": false,
+  "easyAvailability": true
+}

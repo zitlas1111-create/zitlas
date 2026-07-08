@@ -1,0 +1,39 @@
+{
+  "profileName": "Hostel Student — General Fitness",
+  "goal": "General Fitness",
+  "subGoals": [
+    "Healthy Lifestyle",
+    "Office Fitness",
+    "College Fitness",
+    "Daily Wellness"
+  ],
+  "preferredCategories": [
+    "Healthy Recipes",
+    "Indian Breakfast",
+    "Indian Lunch",
+    "Indian Dinner",
+    "Fruits",
+    "Vegetables",
+    "Salads and Soups",
+    "Hostel Foods"
+  ],
+  "avoidCategories": [
+    "Fast Foods",
+    "Restaurant Foods",
+    "International Foods"
+  ],
+  "preferredMealTypes": [
+    "Breakfast",
+    "Lunch",
+    "Dinner",
+    "Snack"
+  ],
+  "budget": "Low",
+  "difficulty": "Easy",
+  "maxCaloriesBreakfast": 380,
+  "maxCaloriesLunch": 522,
+  "maxCaloriesDinner": 475,
+  "proteinPriority": "Medium",
+  "hostelFriendly": true,
+  "easyAvailability": true
+}

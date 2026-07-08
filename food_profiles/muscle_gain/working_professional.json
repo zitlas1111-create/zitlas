@@ -1,0 +1,43 @@
+{
+  "profileName": "Working Professional — Muscle Gain",
+  "goal": "Muscle Gain",
+  "subGoals": [
+    "Lean Bulk",
+    "Strength",
+    "Bodybuilding",
+    "Athletic Muscle",
+    "Beginner Muscle Gain"
+  ],
+  "preferredCategories": [
+    "Vegetarian Protein Sources",
+    "Eggs",
+    "Chicken Dishes",
+    "Protein Supplements",
+    "Weight Gain Foods",
+    "Fish & Seafood",
+    "Mutton & Meat",
+    "Restaurant Foods",
+    "Salads and Soups",
+    "Healthy Recipes"
+  ],
+  "avoidCategories": [
+    "Fast Foods",
+    "Street Foods"
+  ],
+  "preferredMealTypes": [
+    "Breakfast",
+    "Lunch",
+    "Dinner",
+    "Snack",
+    "Pre Workout",
+    "Post Workout"
+  ],
+  "budget": "High",
+  "difficulty": "Easy",
+  "maxCaloriesBreakfast": 500,
+  "maxCaloriesLunch": 700,
+  "maxCaloriesDinner": 650,
+  "proteinPriority": "High",
+  "hostelFriendly": false,
+  "easyAvailability": true
+}

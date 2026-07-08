@@ -1,0 +1,49 @@
+{
+  "profileName": "Hostel Student — Athletic Performance",
+  "goal": "Athletic Performance",
+  "subGoals": [
+    "Cricket",
+    "Football",
+    "Running",
+    "Cycling",
+    "Swimming",
+    "Police",
+    "Army",
+    "Agniveer",
+    "Marathon",
+    "Sports Performance"
+  ],
+  "preferredCategories": [
+    "Sports Nutrition Foods",
+    "Protein Supplements",
+    "Vegetarian Protein Sources",
+    "Chicken Dishes",
+    "Eggs",
+    "Fruits",
+    "Beverages",
+    "Hostel Foods",
+    "Healthy Recipes"
+  ],
+  "avoidCategories": [
+    "Fast Foods",
+    "Desserts & Sweets",
+    "Restaurant Foods",
+    "International Foods"
+  ],
+  "preferredMealTypes": [
+    "Breakfast",
+    "Lunch",
+    "Dinner",
+    "Snack",
+    "Pre Workout",
+    "Post Workout"
+  ],
+  "budget": "Low",
+  "difficulty": "Easy",
+  "maxCaloriesBreakfast": 475,
+  "maxCaloriesLunch": 665,
+  "maxCaloriesDinner": 570,
+  "proteinPriority": "High",
+  "hostelFriendly": true,
+  "easyAvailability": true
+}

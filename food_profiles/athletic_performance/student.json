@@ -1,0 +1,47 @@
+{
+  "profileName": "Student — Athletic Performance",
+  "goal": "Athletic Performance",
+  "subGoals": [
+    "Cricket",
+    "Football",
+    "Running",
+    "Cycling",
+    "Swimming",
+    "Police",
+    "Army",
+    "Agniveer",
+    "Marathon",
+    "Sports Performance"
+  ],
+  "preferredCategories": [
+    "Sports Nutrition Foods",
+    "Protein Supplements",
+    "Vegetarian Protein Sources",
+    "Chicken Dishes",
+    "Eggs",
+    "Fruits",
+    "Beverages",
+    "Indian Breakfast",
+    "Snacks"
+  ],
+  "avoidCategories": [
+    "Fast Foods",
+    "Desserts & Sweets"
+  ],
+  "preferredMealTypes": [
+    "Breakfast",
+    "Lunch",
+    "Dinner",
+    "Snack",
+    "Pre Workout",
+    "Post Workout"
+  ],
+  "budget": "Medium",
+  "difficulty": "Easy",
+  "maxCaloriesBreakfast": 500,
+  "maxCaloriesLunch": 700,
+  "maxCaloriesDinner": 600,
+  "proteinPriority": "High",
+  "hostelFriendly": false,
+  "easyAvailability": true
+}

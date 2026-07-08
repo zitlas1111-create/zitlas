@@ -1,0 +1,52 @@
+{
+  "profileName": "Homemaker — Athletic Performance",
+  "goal": "Athletic Performance",
+  "subGoals": [
+    "Cricket",
+    "Football",
+    "Running",
+    "Cycling",
+    "Swimming",
+    "Police",
+    "Army",
+    "Agniveer",
+    "Marathon",
+    "Sports Performance"
+  ],
+  "preferredCategories": [
+    "Sports Nutrition Foods",
+    "Protein Supplements",
+    "Vegetarian Protein Sources",
+    "Chicken Dishes",
+    "Eggs",
+    "Fruits",
+    "Beverages",
+    "North Indian Foods",
+    "South Indian Foods",
+    "Gujarati Foods",
+    "Punjabi Foods",
+    "Maharashtrian Foods",
+    "Vegetables"
+  ],
+  "avoidCategories": [
+    "Fast Foods",
+    "Desserts & Sweets",
+    "Restaurant Foods"
+  ],
+  "preferredMealTypes": [
+    "Breakfast",
+    "Lunch",
+    "Dinner",
+    "Snack",
+    "Pre Workout",
+    "Post Workout"
+  ],
+  "budget": "Medium",
+  "difficulty": "Medium",
+  "maxCaloriesBreakfast": 500,
+  "maxCaloriesLunch": 700,
+  "maxCaloriesDinner": 600,
+  "proteinPriority": "High",
+  "hostelFriendly": false,
+  "easyAvailability": true
+}

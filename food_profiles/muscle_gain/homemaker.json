@@ -1,0 +1,46 @@
+{
+  "profileName": "Homemaker — Muscle Gain",
+  "goal": "Muscle Gain",
+  "subGoals": [
+    "Lean Bulk",
+    "Strength",
+    "Bodybuilding",
+    "Athletic Muscle",
+    "Beginner Muscle Gain"
+  ],
+  "preferredCategories": [
+    "Vegetarian Protein Sources",
+    "Eggs",
+    "Chicken Dishes",
+    "Protein Supplements",
+    "Weight Gain Foods",
+    "Fish & Seafood",
+    "Mutton & Meat",
+    "North Indian Foods",
+    "South Indian Foods",
+    "Gujarati Foods",
+    "Punjabi Foods",
+    "Maharashtrian Foods",
+    "Vegetables"
+  ],
+  "avoidCategories": [
+    "Fast Foods",
+    "Restaurant Foods"
+  ],
+  "preferredMealTypes": [
+    "Breakfast",
+    "Lunch",
+    "Dinner",
+    "Snack",
+    "Pre Workout",
+    "Post Workout"
+  ],
+  "budget": "Medium",
+  "difficulty": "Medium",
+  "maxCaloriesBreakfast": 500,
+  "maxCaloriesLunch": 700,
+  "maxCaloriesDinner": 650,
+  "proteinPriority": "High",
+  "hostelFriendly": false,
+  "easyAvailability": true
+}

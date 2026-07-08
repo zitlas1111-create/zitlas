@@ -1,0 +1,44 @@
+{
+  "profileName": "Athlete — General Fitness",
+  "goal": "General Fitness",
+  "subGoals": [
+    "Healthy Lifestyle",
+    "Office Fitness",
+    "College Fitness",
+    "Daily Wellness"
+  ],
+  "preferredCategories": [
+    "Healthy Recipes",
+    "Indian Breakfast",
+    "Indian Lunch",
+    "Indian Dinner",
+    "Fruits",
+    "Vegetables",
+    "Salads and Soups",
+    "Sports Nutrition Foods",
+    "Protein Supplements",
+    "Chicken Dishes",
+    "Eggs",
+    "Fish & Seafood"
+  ],
+  "avoidCategories": [
+    "Fast Foods",
+    "Desserts & Sweets"
+  ],
+  "preferredMealTypes": [
+    "Breakfast",
+    "Lunch",
+    "Dinner",
+    "Snack",
+    "Pre Workout",
+    "Post Workout"
+  ],
+  "budget": "High",
+  "difficulty": "Medium",
+  "maxCaloriesBreakfast": 500,
+  "maxCaloriesLunch": 688,
+  "maxCaloriesDinner": 625,
+  "proteinPriority": "Medium",
+  "hostelFriendly": false,
+  "easyAvailability": true
+}

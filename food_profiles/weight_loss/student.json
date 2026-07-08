@@ -1,0 +1,41 @@
+{
+  "profileName": "Student — Weight Loss",
+  "goal": "Weight Loss",
+  "subGoals": [
+    "Fat Loss",
+    "Six Pack",
+    "Wedding Transformation",
+    "Post Pregnancy",
+    "Obesity",
+    "Beginner Weight Loss"
+  ],
+  "preferredCategories": [
+    "Healthy Recipes",
+    "Weight Loss Foods",
+    "Vegetables",
+    "Fruits",
+    "Salads and Soups",
+    "Vegetarian Protein Sources",
+    "Indian Breakfast",
+    "Snacks",
+    "Beverages"
+  ],
+  "avoidCategories": [
+    "Desserts & Sweets",
+    "Fast Foods"
+  ],
+  "preferredMealTypes": [
+    "Breakfast",
+    "Lunch",
+    "Dinner",
+    "Snack"
+  ],
+  "budget": "Medium",
+  "difficulty": "Easy",
+  "maxCaloriesBreakfast": 350,
+  "maxCaloriesLunch": 500,
+  "maxCaloriesDinner": 450,
+  "proteinPriority": "High",
+  "hostelFriendly": false,
+  "easyAvailability": true
+}

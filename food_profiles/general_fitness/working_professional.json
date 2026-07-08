@@ -1,0 +1,38 @@
+{
+  "profileName": "Working Professional — General Fitness",
+  "goal": "General Fitness",
+  "subGoals": [
+    "Healthy Lifestyle",
+    "Office Fitness",
+    "College Fitness",
+    "Daily Wellness"
+  ],
+  "preferredCategories": [
+    "Healthy Recipes",
+    "Indian Breakfast",
+    "Indian Lunch",
+    "Indian Dinner",
+    "Fruits",
+    "Vegetables",
+    "Salads and Soups",
+    "Restaurant Foods"
+  ],
+  "avoidCategories": [
+    "Fast Foods",
+    "Street Foods"
+  ],
+  "preferredMealTypes": [
+    "Breakfast",
+    "Lunch",
+    "Dinner",
+    "Snack"
+  ],
+  "budget": "High",
+  "difficulty": "Easy",
+  "maxCaloriesBreakfast": 400,
+  "maxCaloriesLunch": 550,
+  "maxCaloriesDinner": 500,
+  "proteinPriority": "Medium",
+  "hostelFriendly": false,
+  "easyAvailability": true
+}

@@ -1,0 +1,40 @@
+{
+  "profileName": "Working Professional — Weight Loss",
+  "goal": "Weight Loss",
+  "subGoals": [
+    "Fat Loss",
+    "Six Pack",
+    "Wedding Transformation",
+    "Post Pregnancy",
+    "Obesity",
+    "Beginner Weight Loss"
+  ],
+  "preferredCategories": [
+    "Healthy Recipes",
+    "Weight Loss Foods",
+    "Vegetables",
+    "Fruits",
+    "Salads and Soups",
+    "Vegetarian Protein Sources",
+    "Restaurant Foods"
+  ],
+  "avoidCategories": [
+    "Desserts & Sweets",
+    "Fast Foods",
+    "Street Foods"
+  ],
+  "preferredMealTypes": [
+    "Breakfast",
+    "Lunch",
+    "Dinner",
+    "Snack"
+  ],
+  "budget": "High",
+  "difficulty": "Easy",
+  "maxCaloriesBreakfast": 350,
+  "maxCaloriesLunch": 500,
+  "maxCaloriesDinner": 450,
+  "proteinPriority": "High",
+  "hostelFriendly": false,
+  "easyAvailability": true
+}

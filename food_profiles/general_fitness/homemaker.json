@@ -1,0 +1,42 @@
+{
+  "profileName": "Homemaker — General Fitness",
+  "goal": "General Fitness",
+  "subGoals": [
+    "Healthy Lifestyle",
+    "Office Fitness",
+    "College Fitness",
+    "Daily Wellness"
+  ],
+  "preferredCategories": [
+    "Healthy Recipes",
+    "Indian Breakfast",
+    "Indian Lunch",
+    "Indian Dinner",
+    "Fruits",
+    "Vegetables",
+    "Salads and Soups",
+    "North Indian Foods",
+    "South Indian Foods",
+    "Gujarati Foods",
+    "Punjabi Foods",
+    "Maharashtrian Foods"
+  ],
+  "avoidCategories": [
+    "Fast Foods",
+    "Restaurant Foods"
+  ],
+  "preferredMealTypes": [
+    "Breakfast",
+    "Lunch",
+    "Dinner",
+    "Snack"
+  ],
+  "budget": "Medium",
+  "difficulty": "Medium",
+  "maxCaloriesBreakfast": 400,
+  "maxCaloriesLunch": 550,
+  "maxCaloriesDinner": 500,
+  "proteinPriority": "Medium",
+  "hostelFriendly": false,
+  "easyAvailability": true
+}

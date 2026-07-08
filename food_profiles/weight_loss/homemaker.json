@@ -1,0 +1,44 @@
+{
+  "profileName": "Homemaker — Weight Loss",
+  "goal": "Weight Loss",
+  "subGoals": [
+    "Fat Loss",
+    "Six Pack",
+    "Wedding Transformation",
+    "Post Pregnancy",
+    "Obesity",
+    "Beginner Weight Loss"
+  ],
+  "preferredCategories": [
+    "Healthy Recipes",
+    "Weight Loss Foods",
+    "Vegetables",
+    "Fruits",
+    "Salads and Soups",
+    "Vegetarian Protein Sources",
+    "North Indian Foods",
+    "South Indian Foods",
+    "Gujarati Foods",
+    "Punjabi Foods",
+    "Maharashtrian Foods"
+  ],
+  "avoidCategories": [
+    "Desserts & Sweets",
+    "Fast Foods",
+    "Restaurant Foods"
+  ],
+  "preferredMealTypes": [
+    "Breakfast",
+    "Lunch",
+    "Dinner",
+    "Snack"
+  ],
+  "budget": "Medium",
+  "difficulty": "Medium",
+  "maxCaloriesBreakfast": 350,
+  "maxCaloriesLunch": 500,
+  "maxCaloriesDinner": 450,
+  "proteinPriority": "High",
+  "hostelFriendly": false,
+  "easyAvailability": true
+}

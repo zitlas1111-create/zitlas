@@ -1,0 +1,43 @@
+{
+  "profileName": "Hostel Student — Muscle Gain",
+  "goal": "Muscle Gain",
+  "subGoals": [
+    "Lean Bulk",
+    "Strength",
+    "Bodybuilding",
+    "Athletic Muscle",
+    "Beginner Muscle Gain"
+  ],
+  "preferredCategories": [
+    "Vegetarian Protein Sources",
+    "Eggs",
+    "Chicken Dishes",
+    "Protein Supplements",
+    "Weight Gain Foods",
+    "Fish & Seafood",
+    "Mutton & Meat",
+    "Hostel Foods",
+    "Healthy Recipes"
+  ],
+  "avoidCategories": [
+    "Fast Foods",
+    "Restaurant Foods",
+    "International Foods"
+  ],
+  "preferredMealTypes": [
+    "Breakfast",
+    "Lunch",
+    "Dinner",
+    "Snack",
+    "Pre Workout",
+    "Post Workout"
+  ],
+  "budget": "Low",
+  "difficulty": "Easy",
+  "maxCaloriesBreakfast": 475,
+  "maxCaloriesLunch": 665,
+  "maxCaloriesDinner": 618,
+  "proteinPriority": "High",
+  "hostelFriendly": true,
+  "easyAvailability": true
+}

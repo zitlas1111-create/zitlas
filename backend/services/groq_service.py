@@ -1426,6 +1426,8 @@ Use simple words. Avoid medical or science terms.
 def _engine_query_context(player_profile: dict, lifestyle_data: dict | None) -> dict[str, Any]:
     ld = lifestyle_data or {}
     medical_raw = player_profile.get("medical_conditions") or player_profile.get("medical_condition") or ""
+    profile_rules = food_engine.load_profile_for_user(player_profile, ld)
+    print(f"[FOOD ENGINE] Occupation profile: {profile_rules.get('profileName')}")
     return {
         "goal_tags":     food_engine.goal_tags_from_profile(player_profile),
         "diet_tags":     food_engine.diet_tags_from_lifestyle(ld.get("diet_type", "")),
@@ -1435,6 +1437,9 @@ def _engine_query_context(player_profile: dict, lifestyle_data: dict | None) -> 
         "allergens":     food_engine.FoodRecommendationEngine.resolve_allergens(ld.get("allergies", [])),
         "favorite_foods": ld.get("favorite_foods", []) or [],
         "disliked_foods": ld.get("disliked_foods", []) or [],
+        "profile":       profile_rules,
+        "subgoal_tag":   food_engine.resolve_subgoal(player_profile),
+        "season_tag":    food_engine.current_season(),
     }
 
 
@@ -1636,6 +1641,7 @@ This list is non-negotiable. The player has already refused these foods.
         budget_tier=ctx["budget_tier"], disease_tags=ctx["disease_tags"], allergens=ctx["allergens"],
         favorite_foods=ctx["favorite_foods"], disliked_foods=ctx["disliked_foods"],
         daily_calorie_target=calorie_target,
+        profile=ctx["profile"], subgoal_tag=ctx["subgoal_tag"], season_tag=ctx["season_tag"],
     )
     print(f"[nutrition-weekly-plan] Engine selected foods for 7 days "
           f"(goal={ctx['goal_tags']} diet={ctx['diet_tags']} living={ctx['living_tag']} "
@@ -1957,6 +1963,7 @@ You MUST generate a COMPLETELY DIFFERENT meal with different ingredients.
         living_situation=swap_ctx["living_tag"], budget_tier=swap_ctx["budget_tier"],
         disease_tags=swap_ctx["disease_tags"], allergens=swap_ctx["allergens"],
         exclude_names=exclude_names, top_n=4,
+        profile=swap_ctx["profile"], subgoal_tag=swap_ctx["subgoal_tag"], season_tag=swap_ctx["season_tag"],
     )
     print(f"[SWAP ENGINE] {len(swap_candidates)} candidate(s): {[c['name'] for c in swap_candidates]}")
 
