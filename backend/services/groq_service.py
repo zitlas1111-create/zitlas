@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from groq import AsyncGroq
-from services import gemini_service, openrouter_service
+from services import gemini_service, openrouter_service, food_engine
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 DATA_DIR = Path(__file__).parent.parent / "data"
@@ -311,84 +311,6 @@ def _get_weight_loss_foods_context(
             f"Budget:{f.get('budget','').replace('_','-')}{hostel_tag}"
         )
     return "\n".join(rows)
-
-
-def _get_swap_alternatives(
-    meal_name:     str,
-    budget_num:    int,
-    is_hostel:     bool,
-    is_veg:        bool,
-    rejected:      set[str],
-    current_foods: list[str],
-    fitness_goal:  str = "general_fitness",
-) -> str:
-    foods = load_nutri_foods()
-    if not foods:
-        return ""
-
-    name_lc    = meal_name.lower()
-    current_lc = {f.lower() for f in current_foods}
-    excluded   = rejected | current_lc
-    is_main    = any(k in name_lc for k in ("breakfast", "lunch", "dinner"))
-
-    candidates: list[tuple[dict, bool]] = []
-    for f in foods:
-        if is_veg and not f.get("veg"):
-            continue
-        if is_hostel and not f.get("hostel"):
-            continue
-        bgt = f.get("budget", "low")
-        if budget_num <= 50 and bgt not in ("low",):
-            continue
-        if budget_num <= 150 and bgt not in ("low", "low_med"):
-            continue
-        if f.get("name", "").lower() in excluded:
-            continue
-        if is_main and f.get("macros", {}).get("cal", 0) < 100:
-            continue
-
-        timing    = [t.lower() for t in f.get("timing", [])]
-        timing_ok = (
-            (any(k in name_lc for k in ("breakfast", "morning")) and
-             any(t in ("breakfast", "mid-morning") for t in timing))
-            or ("lunch"   in name_lc and "lunch"         in timing)
-            or ("pre"     in name_lc and "pre-training"  in timing)
-            or ("post"    in name_lc and "post-training" in timing)
-            or ("dinner"  in name_lc and "dinner"        in timing)
-            or ("evening" in name_lc and "evening snack" in timing)
-        )
-        candidates.append((f, timing_ok))
-
-    if not candidates:
-        return ""
-
-    def protein_per_cal(f: dict) -> float:
-        macros = f.get("macros", {})
-        cal    = macros.get("cal", 0) or 1
-        return (macros.get("protein", 0) or 0) / cal
-
-    candidates.sort(key=lambda x: (x[1], protein_per_cal(x[0]), x[0].get("cpfi", 0)), reverse=True)
-
-    _goal_label = {
-        "weight_loss":     "weight-loss optimised — high protein, lower calorie",
-        "muscle_gain":     "muscle-gain optimised — high protein, adequate calorie",
-        "general_fitness": "balanced nutrition — high protein, quality nutrients",
-    }
-    top  = [f for f, _ in candidates[:10]]
-    rows = [f"ALTERNATIVES for {meal_name} ({_goal_label.get(fitness_goal, 'balanced nutrition')}):"]
-    for f in top:
-        macros = f.get("macros", {})
-        tags   = []
-        if f.get("hostel"):
-            tags.append("Hostel-OK")
-        tags.append(f"Budget:{f.get('budget','').replace('_','-')}")
-        rows.append(
-            f"  * {f['name']} — Cal:{macros.get('cal','?')} | "
-            f"Protein:{macros.get('protein','?')}g | "
-            + " | ".join(tags)
-        )
-    return "\n".join(rows)
-
 
 
 # ── Client factory ────────────────────────────────────────────────────────────
@@ -1489,68 +1411,138 @@ Use simple words. Avoid medical or science terms.
 
 # ══════════════════════════════════════════════════════════════════════════════
 # MODULE: NUTRITION BRAIN — 7-DAY WEEKLY MEAL PLAN
+#
+# FOOD SELECTION IS NEVER DONE BY THE LLM. services/food_engine.py filters
+# and ranks the ZITLAS 4,500-food dataset for this user's goal/diet/budget/
+# living-situation/medical conditions and hands the LLM a fixed shortlist per
+# meal slot. The LLM's only job is to arrange that shortlist into a readable
+# plan (names, tips, day themes). _apply_engine_foods() below then rewrites
+# every meal's `foods`/`calories`/`protein_g` from the engine's picks
+# regardless of what the LLM wrote — so even a malformed or creative LLM
+# response can never put a food in front of a user that isn't in our
+# database, or that violates a medical/allergy restriction.
 # ══════════════════════════════════════════════════════════════════════════════
+
+def _engine_query_context(player_profile: dict, lifestyle_data: dict | None) -> dict[str, Any]:
+    ld = lifestyle_data or {}
+    medical_raw = player_profile.get("medical_conditions") or player_profile.get("medical_condition") or ""
+    return {
+        "goal_tags":     food_engine.goal_tags_from_profile(player_profile),
+        "diet_tags":     food_engine.diet_tags_from_lifestyle(ld.get("diet_type", "")),
+        "living_tag":    food_engine.living_tag_from_lifestyle(ld.get("living_situation", "")),
+        "budget_tier":   food_engine.budget_tier_from_lifestyle(ld.get("daily_budget", "")),
+        "disease_tags":  food_engine.FoodRecommendationEngine.resolve_disease_tags(medical_raw),
+        "allergens":     food_engine.FoodRecommendationEngine.resolve_allergens(ld.get("allergies", [])),
+        "favorite_foods": ld.get("favorite_foods", []) or [],
+        "disliked_foods": ld.get("disliked_foods", []) or [],
+    }
+
+
+def _format_week_candidates_for_prompt(week_plan: dict) -> str:
+    lines = []
+    for day in week_plan["days"]:
+        lines.append(f"{day['day']}:")
+        for slot, slot_data in day["meals"].items():
+            items = ", ".join(
+                f"{p['name']} ({p['serving_size']}, {p['calories']} kcal, {p['protein']}g protein)"
+                for p in slot_data["primary"]
+            )
+            lines.append(f"  {slot}: {items}")
+    return "\n".join(lines)
+
+
+def _apply_engine_foods(parsed: dict | None, week_plan: dict) -> dict[str, Any]:
+    """Rebuild `days` from the engine's picks. LLM-authored `name`/`tip` text
+    is kept when present; every food/calorie/protein value is the engine's,
+    always — this is the hallucination firewall."""
+    parsed = parsed or {}
+    llm_days = parsed.get("days") if isinstance(parsed.get("days"), list) else []
+    days_out = []
+
+    for i, eng_day in enumerate(week_plan["days"]):
+        llm_day = llm_days[i] if i < len(llm_days) and isinstance(llm_days[i], dict) else {}
+        llm_meals = llm_day.get("meals") if isinstance(llm_day.get("meals"), dict) else {}
+        meals_out = {}
+        total_cal, total_protein = 0, 0.0
+
+        for slot, slot_data in eng_day["meals"].items():
+            combo = slot_data["primary"]  # list of 1-3 real dataset foods
+            combo_cal = sum(f["calories"] for f in combo)
+            combo_protein = sum(f["protein"] for f in combo)
+            llm_meal = llm_meals.get(slot) if isinstance(llm_meals.get(slot), dict) else {}
+            name = (llm_meal.get("name") or "").strip() or " + ".join(f["name"] for f in combo)
+            tip = (llm_meal.get("tip") or "").strip() or f"{combo[0]['name']} — {combo[0]['description']}"
+            meals_out[slot] = {
+                "name": name,
+                "foods": [food_engine.format_food_line(f) for f in combo],
+                "calories": round(combo_cal),
+                "protein_g": round(combo_protein, 1),
+                "tip": tip,
+                "food_ids": [f["id"] for f in combo],
+                "alternatives": [
+                    {
+                        "food_id": a["id"], "name": a["name"],
+                        "foods": [food_engine.format_food_line(a)],
+                        "calories": a["calories"], "protein_g": a["protein"],
+                    }
+                    for a in slot_data["alternatives"]
+                ],
+            }
+            total_cal += combo_cal
+            total_protein += combo_protein
+
+        days_out.append({
+            "day": eng_day["day"],
+            "total_calories": round(total_cal),
+            "total_protein_g": round(total_protein, 1),
+            "meals": meals_out,
+            "water_target_litres": llm_day.get("water_target_litres") or 2.5,
+            "daily_tip": (llm_day.get("daily_tip") or "").strip() or "Stay consistent — small daily choices add up.",
+        })
+
+    return {
+        "plan_name": parsed.get("plan_name") or "7-Day Personalised Meal Plan",
+        "days": days_out,
+        "weekly_calorie_avg": round(sum(d["total_calories"] for d in days_out) / len(days_out)) if days_out else 0,
+        "weekly_protein_avg_g": round(sum(d["total_protein_g"] for d in days_out) / len(days_out), 1) if days_out else 0,
+        "plan_notes": (parsed.get("plan_notes") or "").strip() or (
+            "Every meal below comes from the ZITLAS verified food database, matched to your "
+            "goal, budget, living situation, and any medical conditions you've shared."
+        ),
+    }
+
 
 NUTRITION_WEEKLY_PLAN_SYSTEM = ZITLAS_SYSTEM_PROMPT + """
 
-You are creating a 7-day weight-loss meal plan. Include specific calorie counts for every meal.
+You are arranging a 7-day meal plan. The foods for every single meal have ALREADY been
+chosen for you from ZITLAS's verified food database — you will be given the exact food,
+serving size, calories, and protein for each meal slot. You do not choose foods and you
+must NEVER introduce, substitute, or invent a food that is not in the list you're given.
 
-CRITICAL RULES:
-- Every meal must include calorie counts.
-- Total daily calories must match the user's calorie target for weight loss.
-- Prioritise high-protein, high-fibre foods — they reduce hunger.
-- Include only foods realistic for the user's situation (hostel/home).
-- Match the user's diet type exactly (veg/non-veg/mixed).
-- Use common Indian foods: dal, rice, roti, sabzi, curd, eggs, chicken, etc.
-- Keep variety — don't repeat the same meal more than 3 times in a week.
-- Include approximate portion sizes (cups/bowls/pieces, not grams).
+YOUR JOB (presentation only):
+- Give each meal a short appetising name (e.g. "Protein-Packed Breakfast Bowl").
+- Write one practical, encouraging tip per meal.
+- Write a short theme/daily_tip per day and an overall plan_notes summary.
+- Restate the given food exactly as provided in the `foods` field — do not add extra items.
+- Restate the given calories/protein exactly as provided — do not recalculate them.
 
 Respond with ONLY this JSON (no markdown):
 {
+  "plan_name": "short plan title",
   "days": [
     {
       "day": "Monday",
       "total_calories": 1600,
       "total_protein_g": 90,
       "meals": {
-        "breakfast": {
-          "name": "Meal name",
-          "foods": ["Food 1 (1 bowl)", "Food 2 (2 pieces)"],
-          "calories": 350,
-          "protein_g": 20,
-          "tip": "one practical tip"
-        },
-        "mid_morning": {
-          "name": "Snack name",
-          "foods": ["Food 1 (1 cup)"],
-          "calories": 100,
-          "protein_g": 5,
-          "tip": "tip"
-        },
-        "lunch": {
-          "name": "Meal name",
-          "foods": ["Food 1", "Food 2"],
-          "calories": 450,
-          "protein_g": 25,
-          "tip": "tip"
-        },
-        "evening_snack": {
-          "name": "Snack name",
-          "foods": ["Food 1"],
-          "calories": 100,
-          "protein_g": 8,
-          "tip": "tip"
-        },
-        "dinner": {
-          "name": "Meal name",
-          "foods": ["Food 1", "Food 2"],
-          "calories": 400,
-          "protein_g": 25,
-          "tip": "tip"
-        }
+        "breakfast": { "name": "Meal name", "foods": ["Food (portion)"], "calories": 350, "protein_g": 20, "tip": "one practical tip" },
+        "mid_morning": { "name": "Snack name", "foods": ["Food (portion)"], "calories": 100, "protein_g": 5, "tip": "tip" },
+        "lunch": { "name": "Meal name", "foods": ["Food (portion)"], "calories": 450, "protein_g": 25, "tip": "tip" },
+        "evening_snack": { "name": "Snack name", "foods": ["Food (portion)"], "calories": 100, "protein_g": 8, "tip": "tip" },
+        "dinner": { "name": "Meal name", "foods": ["Food (portion)"], "calories": 400, "protein_g": 25, "tip": "tip" }
       },
       "water_target_litres": 2.5,
-      "daily_tip": "one weight-loss tip for today"
+      "daily_tip": "one tip for today"
     }
   ],
   "weekly_calorie_avg": 1600,
@@ -1629,21 +1621,34 @@ This list is non-negotiable. The player has already refused these foods.
         rejected_foods=rejected_foods,
     )
 
+    # ── FOOD SELECTION happens here, deterministically, from the real
+    #    dataset — BEFORE the LLM is ever called. See module docstring above.
+    engine = food_engine.get_engine()
+    ctx = _engine_query_context(player_profile, ld)
+    if rejected_foods:
+        ctx["disliked_foods"] = list(ctx["disliked_foods"]) + list(rejected_foods)
+    try:
+        calorie_target = int(float(player_profile.get("daily_calorie_target") or 1600))
+    except (TypeError, ValueError):
+        calorie_target = 1600
+    week_plan = engine.build_week_plan(
+        goal_tags=ctx["goal_tags"], diet_tags=ctx["diet_tags"], living_situation=ctx["living_tag"],
+        budget_tier=ctx["budget_tier"], disease_tags=ctx["disease_tags"], allergens=ctx["allergens"],
+        favorite_foods=ctx["favorite_foods"], disliked_foods=ctx["disliked_foods"],
+        daily_calorie_target=calorie_target,
+    )
+    print(f"[nutrition-weekly-plan] Engine selected foods for 7 days "
+          f"(goal={ctx['goal_tags']} diet={ctx['diet_tags']} living={ctx['living_tag']} "
+          f"budget={ctx['budget_tier']} disease={ctx['disease_tags']} allergens={ctx['allergens']})")
+
     prompt = f"""
-Generate a fully personalised 7-day WEIGHT-LOSS meal plan for this user.
-Use EVERY data point to make this plan unique to them — their goal weight, age, activity level, bottleneck, AND living situation.
-The plan MUST be realistic for the user's actual life — where they live, what they can access, and their budget.
+Arrange a fully personalised 7-day meal plan presentation for this user, using ONLY the
+pre-selected foods below — do not add, remove, or substitute any food.
 
-CRITICAL: A hostel student with no kitchen gets COMPLETELY DIFFERENT meals than someone at home with a full kitchen.
+PRE-SELECTED FOODS (from the ZITLAS verified database — use exactly these, in this order):
+{_format_week_candidates_for_prompt(week_plan)}
 
-DO NOT DEFAULT TO GENERIC FOODS:
-- Use the user's FAVOURITE FOODS and vary meals day-to-day — Monday breakfast must differ from Tuesday's.
-- Hostel users: ONLY mess-available food + things easily bought from canteen or nearby shop.
-- Budget under Rs100/day: free mess food only — NO buying from outside unless it's chai or a banana.
-- Each meal MUST include specific calorie counts. Total daily calories must be at the calorie target.
-- Include high-protein foods at EVERY meal to preserve muscle during weight loss.
-
-ZITLAS NUTRITION KNOWLEDGE BASE (India-appropriate weight-loss foods):
+ZITLAS NUTRITION KNOWLEDGE BASE (context for your tips — not a food source):
 {nutri_context}
 
 USER PROFILE:
@@ -1651,12 +1656,9 @@ USER PROFILE:
 {nutrition_context}
 {lifestyle_context}
 {rejected_context}
-Include calorie counts and protein grams for every meal.
-Frame everything around sustainable fat loss — eating the right foods, not starving.
-Use simple language — this user wants practical everyday advice.
+Give each meal an appetising name and a short practical tip. Write a daily_tip per day and an
+overall plan_notes summary. Use simple, warm, everyday language.
 """
-    # 8000 tokens: a 7-day x 6-meal plan with full purpose text runs 4500-7000 tokens.
-    # 4000 was too low -- the response was truncated mid-JSON causing structured=None.
     result = await chat(
         user_message=prompt,
         system_override=NUTRITION_WEEKLY_PLAN_SYSTEM,
@@ -1670,73 +1672,24 @@ Use simple language — this user wants practical everyday advice.
     # ── Debug logging ──────────────────────────────────────────────────────────
     raw: str = result.get("reply") or ""
     raw_len = len(raw)
-    ends_with_brace = raw.rstrip().endswith("}")
     print(f"\n[nutrition-weekly-plan] Raw response — {raw_len} chars")
-    print(f"[nutrition-weekly-plan] First 500 chars: {raw[:500]}")
-    print(f"[nutrition-weekly-plan] Last 500 chars:  {raw[-500:]}")
-    print(f"[nutrition-weekly-plan] Ends with '}}'  : {ends_with_brace}")
+    print(f"[nutrition-weekly-plan] First 300 chars: {raw[:300]}")
 
-    # ── Parse — try strict JSON first, then fence-aware extractor ─────────────
+    # ── Parse — try strict JSON first, then fence-aware extractor. A parse
+    #    failure here only costs us the LLM's cosmetic names/tips; the actual
+    #    foods are unaffected since _apply_engine_foods() supplies its own
+    #    defaults for any day/meal the LLM didn't return usable text for. ──
     parsed: dict | None = None
     try:
         parsed = json.loads(raw)
-        days_count = len((parsed or {}).get("days", []))
-        print(f"[nutrition-weekly-plan] json.loads() OK — days: {days_count}")
-        if days_count != 7:
-            print(f"[nutrition-weekly-plan] WARNING — expected 7 days, got {days_count}")
+        print(f"[nutrition-weekly-plan] json.loads() OK — days: {len((parsed or {}).get('days', []))}")
     except json.JSONDecodeError as _e:
-        print(f"[nutrition-weekly-plan] json.loads() FAILED: {type(_e).__name__}: {_e}")
+        print(f"[nutrition-weekly-plan] json.loads() FAILED: {type(_e).__name__}: {_e} — trying _extract_json()")
         parsed = _extract_json(raw)
-        if parsed:
-            print("[nutrition-weekly-plan] _extract_json() recovered object "
-                  f"— days: {len((parsed or {}).get('days', []))}")
-        else:
-            print("[nutrition-weekly-plan] _extract_json() also failed — structured=None")
 
-    result["structured"] = parsed
-
-    if parsed:
-        report = _check_food_diversity(parsed)
-        result["diversity_report"] = report
-        _log_diversity_report(report, label="WEEKLY PLAN")
-        if not report["validation_passed"] and report["repeated_foods_found"]:
-            violations_text = "\n".join(
-                f"  - {v}" for v in report["repeated_foods_found"][:10]
-            )
-            reroll_prompt = prompt + f"""
-
-⚠️ DIVERSITY VIOLATION — REGENERATE WITH FIX:
-Your previous response had these food repetition problems:
-{violations_text}
-
-Fix EVERY violation above. Replace repeated foods with different options.
-Keep the same 7-day structure and meal timing but use more varied ingredients.
-Respond with the corrected JSON only.
-"""
-            reroll = await chat(
-                user_message=reroll_prompt,
-                system_override=NUTRITION_WEEKLY_PLAN_SYSTEM,
-                temperature=0.7,
-                max_tokens=8000,
-                json_mode=True,
-                groq_key_env="GROQ_API_KEY_DIET",
-                provider="groq",
-            )
-            reroll_raw: str = reroll.get("reply") or ""
-            print(f"[nutrition-weekly-plan] Re-roll raw length: {len(reroll_raw)} chars")
-            rerolled: dict | None = None
-            try:
-                rerolled = json.loads(reroll_raw)
-            except json.JSONDecodeError as _e2:
-                print(f"[nutrition-weekly-plan] Re-roll json.loads() FAILED: {_e2}")
-                rerolled = _extract_json(reroll_raw)
-            if rerolled:
-                reroll_report = _check_food_diversity(rerolled)
-                _log_diversity_report(reroll_report, label="WEEKLY PLAN RE-ROLL")
-                result["structured"] = rerolled
-                result["diversity_report"] = reroll_report
-                result["rerolled"] = True
-
+    # Variety is guaranteed by build_week_plan()'s usage-count penalty, not by
+    # inspecting the LLM's output — no diversity check/reroll needed here.
+    result["structured"] = _apply_engine_foods(parsed, week_plan)
     return result
 
 
@@ -1853,6 +1806,65 @@ def _build_meal_swap_system(fitness_goal: str) -> str:
     return ZITLAS_SYSTEM_PROMPT + "\n\n" + rules + _MEAL_SWAP_JSON_SCHEMA
 
 
+def _meal_slot_from_name(meal_name: str, meal_time: str = "") -> str:
+    name_lc = f"{meal_name} {meal_time}".lower()
+    if "breakfast" in name_lc:
+        return "breakfast"
+    if "lunch" in name_lc:
+        return "lunch"
+    if "dinner" in name_lc:
+        return "dinner"
+    if "mid" in name_lc or "morning" in name_lc:
+        return "mid_morning"
+    return "evening_snack"
+
+
+def _apply_engine_swap(structured: dict | None, candidates: list[dict]) -> dict[str, Any]:
+    """Same hallucination firewall as _apply_engine_foods(), for swap-meal:
+    `swap`/`alternative` foods always come from the engine's candidates,
+    never from the LLM. LLM-authored `reason`/`tips` text is kept."""
+    structured = structured or {}
+    if not candidates:
+        # Filters left nothing (extremely restrictive combination of diet +
+        # medical + budget + exclusions) — surface that honestly rather than
+        # fabricate a food.
+        return {
+            "swap": None,
+            "alternative": None,
+            "tips": ["No safe alternative was found in our database for this combination of "
+                     "diet, budget, and medical restrictions — try relaxing one filter."],
+            "calories_saved": 0,
+        }
+
+    def _food_block(food: dict, llm_block: dict) -> dict:
+        return {
+            "name": (llm_block.get("name") or "").strip() or food["name"],
+            "foods": [food_engine.format_food_line(food)],
+            "calories": food["calories"],
+            "protein_g": food["protein"],
+            "reason": (llm_block.get("reason") or "").strip() or f"{food['name']} — {food['description']}",
+            "food_id": food["id"],
+        }
+
+    llm_swap = structured.get("swap") if isinstance(structured.get("swap"), dict) else {}
+    llm_alt = structured.get("alternative") if isinstance(structured.get("alternative"), dict) else {}
+
+    primary = candidates[0]
+    result: dict[str, Any] = {
+        "swap": _food_block(primary, llm_swap),
+        "alternative": _food_block(candidates[1], llm_alt) if len(candidates) > 1 else None,
+        "tips": structured.get("tips") if isinstance(structured.get("tips"), list) else [],
+        "calories_saved": structured.get("calories_saved") if isinstance(structured.get("calories_saved"), (int, float)) else 0,
+    }
+    if len(candidates) > 2:
+        result["more_alternatives"] = [
+            {"food_id": f["id"], "name": f["name"], "foods": [food_engine.format_food_line(f)],
+             "calories": f["calories"], "protein_g": f["protein"]}
+            for f in candidates[2:4]
+        ]
+    return result
+
+
 async def generate_meal_swap(
     meal_name: str,
     meal_time: str,
@@ -1931,17 +1943,22 @@ You MUST generate a COMPLETELY DIFFERENT meal with different ingredients.
 
     reason_context = _build_reason_context(reason, lifestyle_data)
 
-    ld_safe      = lifestyle_data or {}
-    swap_alts    = _get_swap_alternatives(
-        meal_name=meal_name,
-        budget_num=_extract_budget_num(ld_safe.get("daily_budget", "100")),
-        is_hostel=any(k in (ld_safe.get("living_situation", "") or "").lower()
-                      for k in ("hostel", "pg", "academy")),
-        is_veg="non" not in (ld_safe.get("diet_type", "") or "").lower(),
-        rejected={f.lower() for f in (rejected_foods or [])},
-        current_foods=current_foods,
-        fitness_goal=fitness_goal,
+    # ── FOOD SELECTION happens here, deterministically, from the real
+    #    dataset — same hallucination firewall as the weekly plan. Whatever
+    #    the LLM below writes for `swap`/`alternative` foods gets discarded
+    #    and replaced with these candidates in _apply_engine_swap().
+    engine = food_engine.get_engine()
+    swap_ctx = _engine_query_context(player_profile, lifestyle_data)
+    all_previous_foods = [f for opts in (previous_suggestions or []) for f in opts]
+    exclude_names = list(dict.fromkeys(current_foods + (rejected_foods or []) + all_previous_foods))
+    swap_candidates = engine.find_swap_alternatives(
+        meal_slot=_meal_slot_from_name(meal_name, meal_time),
+        goal_tags=swap_ctx["goal_tags"], diet_tags=swap_ctx["diet_tags"],
+        living_situation=swap_ctx["living_tag"], budget_tier=swap_ctx["budget_tier"],
+        disease_tags=swap_ctx["disease_tags"], allergens=swap_ctx["allergens"],
+        exclude_names=exclude_names, top_n=4,
     )
+    print(f"[SWAP ENGINE] {len(swap_candidates)} candidate(s): {[c['name'] for c in swap_candidates]}")
 
     meal_name_lc  = meal_name.lower()
     is_main_meal  = any(k in meal_name_lc for k in ("breakfast", "lunch", "dinner"))
@@ -1977,6 +1994,18 @@ NUTRITION KNOWLEDGE BASE (use this to inform your suggestion):
 ---
 """
 
+    engine_candidates_block = (
+        "PRE-SELECTED REPLACEMENT FOODS (from the ZITLAS verified database — choose your `swap` "
+        "from the first one and your `alternative` from the second; do not invent any other food):\n"
+        + "\n".join(
+            f"  {i+1}. {c['name']} ({c['serving_size']}, {c['calories']} kcal, {c['protein']}g protein)"
+            for i, c in enumerate(swap_candidates)
+        )
+        if swap_candidates else
+        "No safe replacement exists in the database for this combination of diet/budget/medical "
+        "restrictions — say so honestly in `tips` instead of inventing a food."
+    )
+
     prompt = f"""
 Help this user swap one meal in line with their {_goal_label_map.get(fitness_goal, 'fitness')} goal.
 
@@ -1992,13 +2021,11 @@ USER:
 {lifestyle_context}
 {reason_context}
 {rag_block}
-{swap_alts}
+{engine_candidates_block}
 {rejected_context}
 {previous_context}
-Suggest a realistic replacement that is {_goal_action.get(fitness_goal, 'balanced and nutritious')}.
-Prefer foods from the NUTRI DATABASE list above — pre-verified for budget and availability.
-The replacement MUST NOT contain: {', '.join(all_rejected) if all_rejected else 'N/A'}.
-Avoid ALL previously suggested meals listed above. Keep it practical and filling.
+Write a `name` and a `reason` for the swap and the alternative using ONLY the pre-selected foods
+above. Do not restate calories/protein yourself — those are filled in automatically.
 """
     result = await chat(
         user_message=prompt,
@@ -2009,7 +2036,8 @@ Avoid ALL previously suggested meals listed above. Keep it practical and filling
         provider="groq",
     )
 
-    result["structured"] = _extract_json(result["reply"])
+    llm_structured = _extract_json(result["reply"])
+    result["structured"] = _apply_engine_swap(llm_structured, swap_candidates)
     return result
 
 
