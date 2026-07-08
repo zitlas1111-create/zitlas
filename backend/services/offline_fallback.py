@@ -1,8 +1,13 @@
 """
 ZITLAS — Offline Fallback Service
 Returns structured responses when ALL AI providers (Groq, Gemini, OpenRouter) fail.
-Uses local templates so the app never returns a 502 or blank screen.
-Each template set has 7 fully unique days — no repeating meals across the week.
+The day/meal SKELETON below (themes, tips, timing labels, emoji, colors) is
+static presentational content — that's fine to hand-write. The actual
+`foods` in every meal come from services/food_engine.py at call time, same
+single 4,500-food dataset as the AI path, so a provider outage never serves
+a food from anywhere else (nutri_foods.json's dynamic pool and the
+hardcoded _SWAP_POOLS below are kept only as a last-resort default for the
+near-impossible case where the engine itself returns nothing for a slot).
 """
 
 from __future__ import annotations
@@ -10,6 +15,8 @@ import json
 import re
 from pathlib import Path
 from typing import Any
+
+from services import food_engine
 
 _DATA_DIR = Path(__file__).parent.parent / "data"
 
@@ -595,6 +602,43 @@ def _filter_rejected(foods: list[str], rejected: set) -> list[str]:
     return kept or ["Roti", "Dal", "Sabzi"]
 
 
+_OFFLINE_SLOT_MAP = {
+    "breakfast": "breakfast", "mid-morning": "mid_morning", "snack": "evening_snack",
+    "lunch": "lunch", "pre-training": "mid_morning", "recovery": "evening_snack",
+    "dinner": "dinner",
+}
+
+
+def _engine_context(player_profile: dict | None, lifestyle_data: dict | None):
+    ld = lifestyle_data or {}
+    pp = player_profile or {}
+    return {
+        "goal_tags": food_engine.goal_tags_from_profile(pp),
+        "diet_tags": food_engine.diet_tags_from_lifestyle(ld.get("diet_type", "")),
+        "living_tag": food_engine.living_tag_from_lifestyle(ld.get("living_situation", "")),
+        "budget_tier": food_engine.budget_tier_from_lifestyle(ld.get("daily_budget", "")),
+        "disease_tags": food_engine.FoodRecommendationEngine.resolve_disease_tags(
+            pp.get("medical_conditions") or pp.get("medical_condition") or ""),
+        "allergens": food_engine.FoodRecommendationEngine.resolve_allergens(ld.get("allergies", [])),
+    }
+
+
+def _engine_foods_for_slot(engine, meal_name: str, ctx: dict, usage_counts: dict, rejected: set) -> list[str] | None:
+    slot = _OFFLINE_SLOT_MAP.get(meal_name.lower(), "lunch")
+    picks = engine.recommend(
+        meal_slot=slot, goal_tags=ctx["goal_tags"], diet_tags=ctx["diet_tags"],
+        living_situation=ctx["living_tag"], budget_tier=ctx["budget_tier"],
+        disease_tags=ctx["disease_tags"], allergens=ctx["allergens"],
+        disliked_foods=list(rejected), usage_counts=usage_counts,
+        top_n=2 if slot in ("lunch", "dinner") else 1,
+    )
+    if not picks:
+        return None
+    for f in picks:
+        usage_counts[f["id"]] = usage_counts.get(f["id"], 0) + 1
+    return [food_engine.format_food_line(f) for f in picks]
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # PUBLIC API
 # ══════════════════════════════════════════════════════════════════════════════
@@ -604,7 +648,10 @@ def nutrition_weekly_plan(
     lifestyle_data:  dict | None,
     rejected_foods:  list[str] | None = None,
 ) -> dict[str, Any]:
-    """7-day offline meal plan — one unique template per day of the week."""
+    """7-day offline meal plan. Day themes/tips/timing are a static skeleton
+    (fine — that's presentation, not a food claim); every `foods` value comes
+    from FoodRecommendationEngine so an AI-provider outage never serves a
+    food outside the 4,500-item dataset."""
     ld       = lifestyle_data or {}
     living   = ld.get("living_situation", "home")
     diet     = ld.get("diet_type", "mixed")
@@ -613,6 +660,9 @@ def nutrition_weekly_plan(
     rejected = {f.lower() for f in (rejected_foods or [])}
 
     templates = _pick_template_set(living, diet)
+    engine = food_engine.get_engine()
+    ctx = _engine_context(player_profile, ld)
+    usage_counts: dict[int, int] = {}
     days: list[dict] = []
 
     for i, day_name in enumerate(_DAY_NAMES):
@@ -620,7 +670,8 @@ def nutrition_weekly_plan(
         tmpl  = templates[i % len(templates)]
         meals = []
         for m in tmpl["meals"]:
-            foods = _filter_rejected(m["foods"], rejected)
+            engine_foods = _engine_foods_for_slot(engine, m["meal_name"], ctx, usage_counts, rejected)
+            foods = engine_foods if engine_foods else _filter_rejected(m["foods"], rejected)
             meals.append({
                 "meal_name": m["meal_name"],
                 "time":      m["time"],
@@ -639,7 +690,7 @@ def nutrition_weekly_plan(
         })
 
     calorie_note = f" Target: {calorie_target} kcal/day." if calorie_target else ""
-    print(f"[Offline] nutrition_weekly_plan: goal={goal} / {living} / {diet}")
+    print(f"[Offline] nutrition_weekly_plan (engine-sourced): goal={goal} / {living} / {diet}")
     return {
         "plan_name":              "7-Day Weight-Loss Meal Plan",
         "nutrition_focus":         f"Calorie deficit eating to support your goal: {goal}.{calorie_note}",
@@ -662,7 +713,11 @@ def meal_swap(
     previous_suggestions: list[list[str]] | None = None,
     player_profile:       dict | None = None,
 ) -> dict[str, Any]:
-    """Single meal swap — tries nutri_foods.json first, then falls back to static pools."""
+    """Single meal swap — sourced from FoodRecommendationEngine (same dataset
+    as the AI path). nutri_foods.json's dynamic pool and the hardcoded
+    _SWAP_POOLS below only run if the engine itself returns nothing for this
+    slot, which shouldn't happen across a 4,500-food dataset outside a
+    pathological combination of diet+medical+allergy restrictions."""
     ld        = lifestyle_data or {}
     diet      = ld.get("diet_type", "mixed")
     veg       = _is_veg(diet)
@@ -670,31 +725,52 @@ def meal_swap(
     for prev in (previous_suggestions or []):
         rejected.update(f.lower() for f in prev)
 
-    is_hostel = any(k in ld.get("living_situation", "").lower() for k in ("hostel", "pg", "academy"))
+    from services.groq_service import _meal_slot_from_name  # substring-based; robust to arbitrary user-facing meal names
 
-    # ── 1. Try dynamic pool from nutri_foods.json ──────────────────────────────
+    engine = food_engine.get_engine()
+    ctx = _engine_context(player_profile, ld)
+    slot = _meal_slot_from_name(meal_name, meal_time)
+    exclude_names = list(current_foods) + list(rejected)
+    candidates = engine.find_swap_alternatives(
+        meal_slot=slot, goal_tags=ctx["goal_tags"], diet_tags=ctx["diet_tags"],
+        living_situation=ctx["living_tag"], budget_tier=ctx["budget_tier"],
+        disease_tags=ctx["disease_tags"], allergens=ctx["allergens"],
+        exclude_names=exclude_names, top_n=2,
+    )
+
+    if candidates:
+        primary = candidates[0]
+        swap_block = {
+            "name": f"{meal_name} Alternative", "foods": [food_engine.format_food_line(primary)],
+            "calories": primary["calories"], "protein_g": primary["protein"],
+            "reason": f"A practical replacement that fits your situation ({reason}).",
+        }
+        alt_block = None
+        if len(candidates) > 1:
+            alt = candidates[1]
+            alt_block = {
+                "name": f"{meal_name} Alternative 2", "foods": [food_engine.format_food_line(alt)],
+                "calories": alt["calories"], "protein_g": alt["protein"],
+                "reason": f"Another option that fits your situation ({reason}).",
+            }
+        print(f"[Offline] meal_swap (engine-sourced): {meal_name} -> {swap_block['foods']}")
+        return {"swap": swap_block, "alternative": alt_block, "tips": [], "calories_saved": 0}
+
+    # ── Last-resort legacy pools — only reached if the engine returns
+    #    nothing at all for this slot+filters combination. ──────────────────
+    is_hostel = any(k in ld.get("living_situation", "").lower() for k in ("hostel", "pg", "academy"))
     nutri_pool = _nutri_swap_pool(
-        meal_name=meal_name,
-        meal_time=meal_time,
-        budget_str=ld.get("daily_budget", "100"),
-        is_hostel=is_hostel,
-        is_veg=veg,
-        rejected=rejected,
-        current_foods=current_foods,
+        meal_name=meal_name, meal_time=meal_time, budget_str=ld.get("daily_budget", "100"),
+        is_hostel=is_hostel, is_veg=veg, rejected=rejected, current_foods=current_foods,
     )
     chosen = None
-    pool_source = "nutri_db"
     for candidate in nutri_pool:
         if not any(f.lower() in rejected for f in candidate):
             chosen = candidate
             break
-
-    # ── 2. Fall back to hardcoded _SWAP_POOLS ──────────────────────────────────
     if not chosen:
-        pool_source = "static_pool"
         reason_lc = reason.lower()
         name_lc   = meal_name.lower()
-
         if "expensive" in reason_lc or "budget" in reason_lc:
             key = "budget"
         elif "hostel" in reason_lc or "mess" in reason_lc:
@@ -711,28 +787,20 @@ def meal_swap(
             key = "recovery"
         else:
             key = "dinner"
-
         pool = _SWAP_POOLS.get(key, _SWAP_POOLS["dinner"])[veg]
         for candidate in pool:
             if not any(f.lower() in rejected for f in candidate):
                 chosen = candidate
                 break
-
     if not chosen:
         chosen = ["Roti", "Dal", "Sabzi"]
 
-    print(f"[Offline] meal_swap: {meal_name} → {chosen} (source: {pool_source}, reason: {reason})")
+    print(f"[Offline] meal_swap (legacy last-resort): {meal_name} -> {chosen} (reason: {reason})")
     reason_text = f"A practical replacement that fits your situation ({reason})."
     return {
-        "swap": {
-            "name":      f"{meal_name} Alternative",
-            "foods":     chosen,
-            "calories":  0,
-            "protein_g": 0,
-            "reason":    reason_text,
-        },
+        "swap": {"name": f"{meal_name} Alternative", "foods": chosen, "calories": 0, "protein_g": 0, "reason": reason_text},
         "alternative": None,
-        "tips":          [],
+        "tips": [],
         "calories_saved": 0,
     }
 
