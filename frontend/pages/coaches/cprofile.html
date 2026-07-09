@@ -288,6 +288,18 @@
   <div class="cp-services-list" id="servicesList"></div>
 </section>
 
+<!-- ══ 8b. PRICING ═══════════════════════════════════════════════════ -->
+<section class="cp-section">
+  <h2 class="cp-section-title">Pricing</h2>
+  <div class="cp-pricing-list" id="pricingDisplayList">
+    <div class="cp-pricing-row"><span>🥗 Diet Review</span><b id="pdDietReview">₹49</b></div>
+    <div class="cp-pricing-row"><span>💪 Workout Review</span><b id="pdWorkoutReview">₹59</b></div>
+    <div class="cp-pricing-row"><span>🥗💪 Diet + Workout Review</span><b id="pdBothReview">₹99</b></div>
+    <div class="cp-pricing-row"><span>💬 Expert Chat</span><b id="pdChat">₹149</b></div>
+    <div class="cp-pricing-row"><span>👨‍🏫 Personal Coaching</span><b id="pdCoaching">Starting ₹999/mo</b></div>
+  </div>
+</section>
+
 <!-- ══ 9. TRANSFORMATION GALLERY ════════════════════════════════════ -->
 <section class="cp-section cp-gallery-section">
   <div class="cp-section-header-row">
@@ -563,12 +575,42 @@
 <div class="vp-sheet-overlay" id="vpSheet" role="dialog" aria-modal="true" aria-labelledby="vpSheetTitle">
   <div class="vp-sheet-card">
     <div class="vp-sheet-handle"></div>
-    <h3 class="vp-sheet-title" id="vpSheetTitle">What would you like this expert to review?</h3>
-    <div class="vp-sheet-options">
+    <h3 class="vp-sheet-title" id="vpSheetTitle">What would you like from this expert?</h3>
+
+    <p class="vp-group-label">Service</p>
+    <div class="vp-sheet-options" id="vpServiceOptions">
+      <button class="vp-option" id="vpSvcVerify" data-svc="verification">
+        <span class="vp-opt-icon">📋</span>
+        <div class="vp-opt-text">
+          <span class="vp-opt-title">Verification Only</span>
+          <span class="vp-opt-sub" id="vpSvcVerifySub">Expert reviews your plan</span>
+        </div>
+        <span class="vp-opt-check" id="vpCheckSvcVerify"></span>
+      </button>
+      <button class="vp-option" id="vpSvcChat" data-svc="chat">
+        <span class="vp-opt-icon">💬</span>
+        <div class="vp-opt-text">
+          <span class="vp-opt-title">Chat Only</span>
+          <span class="vp-opt-sub" id="vpSvcChatSub">Unlimited chat until the expert closes it</span>
+        </div>
+        <span class="vp-opt-check" id="vpCheckSvcChat"></span>
+      </button>
+      <button class="vp-option" id="vpSvcBoth" data-svc="verification_chat">
+        <span class="vp-opt-icon">📋💬</span>
+        <div class="vp-opt-text">
+          <span class="vp-opt-title">Verification + Chat</span>
+          <span class="vp-opt-sub" id="vpSvcBothSub">Review, then unlimited chat</span>
+        </div>
+        <span class="vp-opt-check" id="vpCheckSvcBoth"></span>
+      </button>
+    </div>
+
+    <p class="vp-group-label" id="vpReviewTypeLabel">What should the expert review?</p>
+    <div class="vp-sheet-options" id="vpReviewTypeOptions">
       <button class="vp-option" id="vpOptDiet" data-type="diet">
         <span class="vp-opt-icon">🥗</span>
         <div class="vp-opt-text">
-          <span class="vp-opt-title">Verify Diet Plan</span>
+          <span class="vp-opt-title">Diet Plan</span>
           <span class="vp-opt-sub">Expert reviews your 7-day meal plan</span>
         </div>
         <span class="vp-opt-check" id="vpCheckDiet"></span>
@@ -576,13 +618,27 @@
       <button class="vp-option" id="vpOptWorkout" data-type="workout">
         <span class="vp-opt-icon">💪</span>
         <div class="vp-opt-text">
-          <span class="vp-opt-title">Verify Workout Plan</span>
+          <span class="vp-opt-title">Workout Plan</span>
           <span class="vp-opt-sub">Expert reviews your 7-day training schedule</span>
         </div>
         <span class="vp-opt-check" id="vpCheckWorkout"></span>
       </button>
+      <button class="vp-option" id="vpOptBoth" data-type="both">
+        <span class="vp-opt-icon">🥗💪</span>
+        <div class="vp-opt-text">
+          <span class="vp-opt-title">Diet + Workout</span>
+          <span class="vp-opt-sub">Expert reviews both plans</span>
+        </div>
+        <span class="vp-opt-check" id="vpCheckBoth"></span>
+      </button>
     </div>
-    <button class="vp-submit-btn" id="vpSubmitBtn" disabled>Send for Review →</button>
+
+    <div class="vp-price-row" id="vpPriceRow">
+      <span>Total Price</span>
+      <span id="vpTotalPrice">₹0</span>
+    </div>
+
+    <button class="vp-submit-btn" id="vpSubmitBtn" disabled>Send Request →</button>
     <button class="vp-cancel-btn" id="vpCancelBtn">Cancel</button>
   </div>
 </div>
@@ -613,6 +669,7 @@
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script src="../../components/wallet.js"></script>
+<script src="../../assets/js/payment-service.js?v=20260709"></script>
   <script src="../../components/navbar.js"></script>
 <script src="../../assets/js/expert-profile.js"></script>
 <script src="../../assets/js/certificate-manager.js?v=20260706"></script>

@@ -943,6 +943,29 @@ a      { text-decoration: none; color: inherit; }
 .epf-fee-label { font-size: 10px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.4px; }
 .epf-fee-val   { font-size: 16px; font-weight: 900; color: var(--accent); }
 
+/* ── Pricing & Services nav card ── */
+.pricing-nav-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  background: rgba(var(--white-rgb),0.03);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  margin-top: 14px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.18s, transform 0.18s;
+}
+.pricing-nav-card:hover  { background: rgba(var(--white-rgb),0.06); }
+.pricing-nav-card:active { transform: scale(0.98); }
+.pricing-nav-icon { font-size: 24px; flex-shrink: 0; }
+.pricing-nav-text { flex: 1; min-width: 0; }
+.pricing-nav-title { display: block; font-size: 14.5px; font-weight: 800; color: var(--text-primary); }
+.pricing-nav-sub   { display: block; font-size: 11.5px; color: var(--text-muted); margin-top: 2px; }
+.pricing-nav-chevron { flex-shrink: 0; color: var(--text-muted); }
+
 .ed-logout-full-btn {
   display: flex;
   align-items: center;

@@ -2776,6 +2776,12 @@ function initEditProfile() {
   if (_epEditListenersAdded) return;
   _epEditListenersAdded = true;
 
+  /* Pricing & Services */
+  const pricingNav = document.getElementById('pricingNavCard');
+  if (pricingNav) pricingNav.addEventListener('click', function () {
+    window.location.href = 'pricing.html';
+  });
+
   /* Open modal */
   const editBtn = document.getElementById('epEditProfileBtn');
   if (editBtn) editBtn.addEventListener('click', openEditModal);
@@ -4553,22 +4559,31 @@ function _prBuildInboxCard(review, expert) {
   card.className = 'pr-inbox-card';
 
   var rtype     = review.reviewType || review.planReviewType || 'diet';
-  var typeLabel = rtype === 'workout' ? '💪 Workout Plan Review' : '🥗 Diet Plan Review';
+  var isChatOnly = rtype === 'chat_only';
+  var typeLabel = rtype === 'workout' ? '💪 Workout Plan Review' : isChatOnly ? '💬 Chat Consultation' : '🥗 Diet Plan Review';
   var nameInit  = ((review.athleteName || review.userName || 'A').split(' ')
                     .map(function(w) { return w[0] || ''; }).join('').slice(0, 2) || 'A').toUpperCase();
   var displayName = review.athleteName || review.userName || 'Athlete';
   var timeAgo     = review.createdAt ? _prTimeAgo(review.createdAt) : '';
+  var priceTag    = (review.totalPrice !== undefined && review.totalPrice !== null) ? '₹' + review.totalPrice : '';
 
   var actionsHtml = '';
   var st = review.status || 'pending';
 
-  if (st === 'pending') {
+  if (st === 'pending' && review.bundleRole === 'secondary') {
+    /* "Both" requests are two linked docs — only the primary (diet) takes
+       the Accept/Reject action and the one-time charge; this card mirrors
+       to in_progress/paid automatically once the primary is accepted. */
+    actionsHtml = '<span class="pr-inbox-stamp">🔗 Bundled with Diet Review — accept that to start both</span>';
+  } else if (st === 'pending') {
     actionsHtml =
-      '<button class="pr-inbox-btn pr-inbox-btn--accept" data-pr-accept="' + esc(review.id) + '">✅ Accept Review</button>' +
+      '<button class="pr-inbox-btn pr-inbox-btn--accept" data-pr-accept="' + esc(review.id) + '">✅ Accept' + (priceTag ? ' (' + priceTag + ')' : '') + '</button>' +
       '<button class="pr-inbox-btn pr-inbox-btn--reject" data-pr-reject="' + esc(review.id) + '">✕ Reject</button>';
+  } else if (st === 'accepted' && review.paymentStatus === 'awaiting_payment') {
+    actionsHtml = '<span class="pr-inbox-stamp">⏳ Awaiting Payment</span>';
   } else if (st === 'accepted' || st === 'in_progress') {
     actionsHtml =
-      '<button class="pr-inbox-btn pr-inbox-btn--accept" data-pr-editplan="' + esc(review.id) + '">✏️ Edit Plan</button>' +
+      (isChatOnly ? '' : '<button class="pr-inbox-btn pr-inbox-btn--accept" data-pr-editplan="' + esc(review.id) + '">✏️ Edit Plan</button>') +
       '<button class="pr-inbox-btn pr-inbox-btn--chat" data-pr-openchat="' + esc(review.id) + '">💬 Chat</button>';
   } else if (st === 'completed' || st === 'review_completed') {
     actionsHtml = '<span class="pr-inbox-stamp pr-inbox-stamp--done">✅ Review Sent to Athlete</span>';
@@ -4615,32 +4630,105 @@ function _prBuildInboxCard(review, expert) {
 }
 
 function _prAcceptReview(reviewId, review, expert) {
-  var rtype  = review.reviewType || review.planReviewType || 'diet';
-  var convId = expert.id;
-  var _now   = new Date().toISOString();
+  var rtype      = review.reviewType || review.planReviewType || 'diet';
+  var isChatOnly = rtype === 'chat_only';
+  var convId     = expert.id;
+  var _now       = new Date().toISOString();
 
-  savePlanReviewStatus(reviewId, 'in_progress', {
-    acceptedAt: _now,
-    expertId:   expert.id,
-    chatId:     convId,
-  });
+  /* Requests created before per-service pricing existed have no totalPrice/
+     serviceType at all — behave exactly as before for them (full price =
+     expert.fee, chat always included), so old in-flight reviews are
+     unaffected by this feature shipping. */
+  var hasPricingFields = review.totalPrice !== undefined && review.totalPrice !== null;
+  var amount        = hasPricingFields ? Number(review.totalPrice) : Number(expert.fee || 0);
+  var chatIncluded  = review.serviceType
+    ? (review.serviceType === 'chat' || review.serviceType === 'verification_chat')
+    : true;
 
-  /* Write to Firestore so athlete's listener sees in_progress immediately */
-  if (typeof ZitlasDB !== 'undefined') {
-    ZitlasDB.collection('review_requests').doc(reviewId)
-      .update({ status: 'in_progress', acceptedAt: _now, expertId: expert.id })
-      .catch(function(e) { console.warn('[REVIEW] in_progress Firestore write failed:', e); });
+  function _finishAccept() {
+    savePlanReviewStatus(reviewId, 'in_progress', { acceptedAt: _now, expertId: expert.id, chatId: convId });
+    console.log('[REVIEW] accepted + paid', reviewId, '→ in_progress');
+    try { sessionStorage.setItem('zitlas_modify_expert', JSON.stringify(expert)); } catch (_) {}
+    if (isChatOnly) {
+      edShowToast('✅ Payment received — chat unlocked.');
+      renderInbox(expert);
+      return;
+    }
+    window.location.href = rtype === 'workout'
+      ? 'modify-workout.html?reviewId=' + encodeURIComponent(reviewId)
+      : 'modify-diet.html?reviewId='    + encodeURIComponent(reviewId);
   }
 
-  console.log('[REVIEW] accepted', reviewId, '→ in_progress');
+  if (typeof ZitlasPayment === 'undefined' || typeof ZitlasDB === 'undefined') {
+    /* Payment engine unavailable (e.g. dev environment without the script) —
+       fall back to the original no-payment behavior rather than blocking
+       the whole review flow. */
+    if (typeof ZitlasDB !== 'undefined') {
+      ZitlasDB.collection('review_requests').doc(reviewId)
+        .update({ status: 'in_progress', acceptedAt: _now, expertId: expert.id })
+        .catch(function(e) { console.warn('[REVIEW] in_progress Firestore write failed:', e); });
+    }
+    _finishAccept();
+    return;
+  }
 
-  /* Persist expert object so modify page can read it without re-importing EXPERT_DB */
-  try { sessionStorage.setItem('zitlas_modify_expert', JSON.stringify(expert)); } catch (_) {}
+  edShowToast('Checking athlete wallet…');
+  var serviceLabel = isChatOnly ? 'Expert Chat' : (rtype === 'workout' ? 'Workout Review' : 'Diet Review');
 
-  /* Navigate straight to the modify page */
-  window.location.href = rtype === 'workout'
-    ? 'modify-workout.html?reviewId=' + encodeURIComponent(reviewId)
-    : 'modify-diet.html?reviewId='    + encodeURIComponent(reviewId);
+  /* Record the expert's decision immediately and separately from the
+     payment outcome — a 'pending' request that fails the wallet check must
+     land on 'accepted' (Awaiting Payment), never fall back to 'pending'
+     (which would wrongly re-show the Accept/Reject buttons). */
+  ZitlasDB.collection('review_requests').doc(reviewId)
+    .update({ status: 'accepted', acceptedAt: _now, expertId: expert.id })
+    .catch(function (e) { console.warn('[REVIEW] accepted-status write failed:', e); });
+
+  ZitlasPayment.attemptCharge({
+    userId: review.userId, expertId: expert.id, amount: amount,
+    serviceType: isChatOnly ? 'chat' : 'review', serviceLabel: serviceLabel, expertName: expert.name,
+    requestCollection: 'review_requests', requestId: reviewId,
+    onSuccessUpdate: { status: 'in_progress', acceptedAt: _now, expertId: expert.id, chatId: convId, chatUnlocked: chatIncluded },
+    notifyUser: {
+      title: 'Expert accepted your request',
+      message: (expert.name || 'Your expert') + ' accepted your request. ₹' + amount +
+        ' has been deducted from your wallet. Your ' + serviceLabel.toLowerCase() + ' has started.',
+    },
+    notifyExpert: {
+      title: 'Payment received',
+      message: 'Payment received for ' + (review.athleteName || review.userName || 'an athlete') + "'s " +
+        serviceLabel.toLowerCase() + '. You may now begin.',
+    },
+  }).then(function (result) {
+    if (result.success) {
+      /* "Both" bundle: mirror the paid/in_progress outcome onto the linked
+         workout doc — the bundle is charged once (on this, the primary,
+         doc) and the sibling never runs its own attemptCharge at all. */
+      if (review.siblingId && typeof ZitlasDB !== 'undefined') {
+        ZitlasDB.collection('review_requests').doc(review.siblingId).update({
+          status: 'in_progress', paymentStatus: 'paid',
+          walletTransactionId: result.transactionId || null,
+          chatUnlocked: chatIncluded, acceptedAt: _now, expertId: expert.id,
+        }).catch(function (e) { console.warn('[REVIEW] sibling mirror failed', e); });
+      }
+      _finishAccept();
+      return;
+    }
+    if (result.error === 'insufficient_balance') {
+      edShowToast('⏳ Awaiting athlete payment — ₹' + result.shortfall + ' short. They have been notified.');
+      if (typeof ZitlasNotify !== 'undefined') {
+        ZitlasNotify.send(review.userId, {
+          title: 'Insufficient wallet balance', category: 'payment', type: 'awaiting_payment',
+          message: 'You need ₹' + result.shortfall + ' more to start your ' + serviceLabel.toLowerCase() +
+            ' with ' + (expert.name || 'your expert') + '. Recharge your wallet to continue — the expert has already accepted.',
+          action: 'expert_profile', actionId: expert.id, priority: 'high',
+        });
+      }
+      renderInbox(expert);
+      return;
+    }
+    console.error('[REVIEW] accept payment failed', result);
+    edShowToast('Could not process payment — please try again.');
+  });
 }
 
 function _prRejectReview(reviewId, review, expert) {
@@ -4650,6 +4738,15 @@ function _prRejectReview(reviewId, review, expert) {
     ZitlasDB.collection('review_requests').doc(reviewId)
       .update({ status: 'rejected', rejectedAt: new Date().toISOString() })
       .catch(function(e) { console.warn('[REVIEW] rejected Firestore write failed:', e); });
+
+    /* "Both" bundle: rejecting the primary also rejects the linked workout
+       doc — no payment was ever taken for either half, so there's nothing
+       to refund, just a status to keep in sync. */
+    if (review.siblingId) {
+      ZitlasDB.collection('review_requests').doc(review.siblingId)
+        .update({ status: 'rejected', rejectedAt: new Date().toISOString() })
+        .catch(function(e) { console.warn('[REVIEW] sibling reject mirror failed:', e); });
+    }
   }
 
   console.log('[REVIEW] rejected', reviewId);

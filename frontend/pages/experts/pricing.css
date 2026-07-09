@@ -1,0 +1,154 @@
+/* =============================================
+   ZITLAS Pricing & Services — pricing.css
+   ============================================= */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { font-size: 16px; -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding-bottom: 40px;
+  -webkit-font-smoothing: antialiased;
+}
+
+button { font-family: inherit; cursor: pointer; border: none; background: none; outline: none; -webkit-tap-highlight-color: transparent; }
+button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+/* ── Header ── */
+.pr-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 13px 16px;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+}
+
+.pr-back-btn {
+  width: 38px; height: 38px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  background: var(--bg-card-light);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  transition: background 0.18s, transform 0.18s;
+}
+.pr-back-btn:hover  { background: var(--bg-card-light); }
+.pr-back-btn:active { transform: scale(0.94); }
+
+.pr-header-title { font-size: 16px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.2px; }
+.pr-header-spacer { width: 38px; }
+
+/* ── Main ── */
+.pr-main { max-width: 600px; margin: 0 auto; padding: 20px 16px 0; }
+
+.pr-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.pr-card-head { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 16px; }
+.pr-card-icon { font-size: 26px; line-height: 1; flex-shrink: 0; }
+.pr-card-title { font-size: 16px; font-weight: 800; color: var(--text-primary); margin-bottom: 4px; }
+.pr-card-hint { font-size: 12.5px; color: var(--text-secondary); line-height: 1.5; }
+
+.pr-field { margin-bottom: 14px; }
+.pr-field:last-child { margin-bottom: 0; }
+
+.pr-label { display: block; font-size: 13.5px; font-weight: 600; color: var(--text-primary); margin-bottom: 6px; }
+
+.pr-input-wrap {
+  display: flex;
+  align-items: center;
+  background: var(--bg-card-light);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0 12px;
+  transition: border-color 0.18s;
+}
+.pr-input-wrap:focus-within { border-color: var(--primary); }
+
+.pr-rupee { font-size: 15px; font-weight: 700; color: var(--text-secondary); margin-right: 4px; }
+
+.pr-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  padding: 12px 0;
+  min-width: 0;
+  font-family: inherit;
+}
+.pr-input::placeholder { color: var(--text-muted); font-weight: 500; }
+
+.pr-field-error {
+  font-size: 12px;
+  font-weight: 600;
+  color: #E11D48;
+  margin-top: 8px;
+}
+
+.pr-save-btn {
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 800;
+  color: #000;
+  background: linear-gradient(90deg, #FF8C00 0%, #FFA726 100%);
+  box-shadow: 0 4px 20px rgba(255,140,0,0.35);
+  transition: opacity 0.18s, transform 0.18s;
+  margin-bottom: 12px;
+}
+.pr-save-btn:hover  { opacity: 0.92; }
+.pr-save-btn:active { transform: scale(0.98); }
+.pr-save-btn:disabled { opacity: 0.6; cursor: default; }
+
+.pr-footnote {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  text-align: center;
+  line-height: 1.6;
+  padding: 0 8px 8px;
+}
+
+/* ── Toast ── */
+.pr-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--bg-card-light);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 40px;
+  padding: 10px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.28s, transform 0.28s;
+  pointer-events: none;
+  z-index: 9999;
+  max-width: calc(100vw - 32px);
+  text-align: center;
+}
+.pr-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+@media (min-width: 480px) {
+  .pr-main { padding: 24px 20px 0; }
+}

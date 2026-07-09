@@ -340,6 +340,15 @@
     setText('reviewTotalCount', String(coach.reviewCount));
     setText('aboutText',    coach.about);
 
+    /* Pricing display — from this expert's Pricing & Services page, or
+       today's platform defaults if they haven't set custom prices yet. */
+    var _pd = _getPricing(coach);
+    setText('pdDietReview',    '₹' + _pd.dietReviewPrice);
+    setText('pdWorkoutReview', '₹' + _pd.workoutReviewPrice);
+    setText('pdBothReview',    '₹' + _pd.bothReviewPrice);
+    setText('pdChat',          '₹' + _pd.chatPrice);
+    setText('pdCoaching',      'Starting ₹' + Math.min(_pd.coachingDietPrice, _pd.coachingTrainingPrice, _pd.coachingCompletePrice) + '/mo');
+
     /* Stars */
     var fullStar = Math.round(parseFloat(coach.rating));
     setText('coachStars', '★'.repeat(fullStar) + '☆'.repeat(5 - fullStar));
@@ -2347,6 +2356,51 @@
     }) || null;
   }
 
+  /* Retry entry point for a review the expert already accepted but whose
+     wallet check failed at that moment — same shared, idempotent
+     ZitlasPayment.attemptCharge() transaction as the expert's own
+     auto-attempt, just re-run from the athlete's own session after they've
+     recharged. */
+  function _retryReviewPayment(review, coach) {
+    if (typeof ZitlasPayment === 'undefined') {
+      showToast('Unable to process payment — please try again.');
+      return;
+    }
+    var uid       = _getMyUserId();
+    var amount    = Number(review.totalPrice) || 0;
+    var isChatOnly = review.reviewType === 'chat_only';
+    var chatIncluded = review.serviceType
+      ? (review.serviceType === 'chat' || review.serviceType === 'verification_chat')
+      : true;
+    var serviceLabel = isChatOnly ? 'Expert Chat' : (review.reviewType === 'workout' ? 'Workout Review' : 'Diet Review');
+
+    showToast('Processing payment…');
+    ZitlasPayment.attemptCharge({
+      userId: uid, expertId: review.expertId, amount: amount,
+      serviceType: isChatOnly ? 'chat' : 'review', serviceLabel: serviceLabel, expertName: review.expertName,
+      requestCollection: 'review_requests', requestId: review.id,
+      onSuccessUpdate: { status: 'in_progress', chatUnlocked: chatIncluded },
+      notifyUser: { title: 'Payment successful', message: 'Your ' + serviceLabel.toLowerCase() + ' has started.' },
+      notifyExpert: { title: 'Payment received', message: (review.userName || 'An athlete') + "'s payment succeeded — you may begin." },
+    }).then(function (result) {
+      if (result.success) {
+        showToast('✅ Payment successful!');
+        if (review.siblingId && typeof ZitlasDB !== 'undefined') {
+          ZitlasDB.collection('review_requests').doc(review.siblingId).update({
+            status: 'in_progress', paymentStatus: 'paid',
+            walletTransactionId: result.transactionId || null, chatUnlocked: chatIncluded,
+          }).catch(function (e) { console.warn('[REVIEW] sibling mirror failed', e); });
+        }
+        updateVerifyBtnState(coach);
+      } else if (result.error === 'insufficient_balance') {
+        ZitlasPayment.showLowBalancePopup({ balance: result.balance, required: result.required });
+      } else {
+        console.error('[REVIEW] retry payment failed', result);
+        showToast('Could not process payment — please try again.');
+      }
+    });
+  }
+
   function updateVerifyBtnState(coach) {
     var btn          = document.getElementById('verifyPlanBtn');
     var againWrap    = document.getElementById('verifyAgainWrap');
@@ -2382,10 +2436,25 @@
       /* Pending is the ONLY state that offers withdrawal (explicit 'block' —
          the stylesheet class is display:none) */
       if (withdrawWrap) withdrawWrap.style.display = 'block';
-    } else if (st === 'accepted') {
-      /* backward-compat: existing production reviews may have status='accepted' */
+    } else if (st === 'accepted' && review.paymentStatus === 'awaiting_payment') {
+      /* Expert already accepted, but the wallet check failed at that
+         moment — same recovery pattern as Personal Coaching: a visible
+         "Complete Payment" action the athlete can retry after recharging. */
       btn.className = 'cp-cta cp-cta--verify cp-cta--vp-accepted';
-      btn.innerHTML = VP_SVG.chat + ' Chat with Expert';
+      btn.innerHTML = VP_SVG.check + ' Complete Payment ₹' + (review.totalPrice || 0);
+    } else if (st === 'accepted') {
+      /* backward-compat: reviews created before per-service pricing have no
+         chatUnlocked field at all — treat that as chat-allowed (unchanged
+         behavior). Only an explicit false (verification-only purchase)
+         blocks chat. */
+      var _chatOk = review.chatUnlocked !== false;
+      btn.className = 'cp-cta cp-cta--verify cp-cta--vp-accepted';
+      if (_chatOk) {
+        btn.innerHTML = VP_SVG.chat + ' Chat with Expert';
+      } else {
+        btn.disabled  = true;
+        btn.innerHTML = VP_SVG.check + ' Accepted — Review in Progress';
+      }
     } else if (st === 'in_progress' || st === 'expert_reviewing') {
       btn.disabled  = true;
       btn.className = 'cp-cta cp-cta--verify cp-cta--vp-pending';
@@ -2502,9 +2571,21 @@
     var submitBtn    = document.getElementById('vpSubmitBtn');
     var optDiet      = document.getElementById('vpOptDiet');
     var optWorkout   = document.getElementById('vpOptWorkout');
+    var optBoth      = document.getElementById('vpOptBoth');
+    var svcVerify    = document.getElementById('vpSvcVerify');
+    var svcChat      = document.getElementById('vpSvcChat');
+    var svcBoth      = document.getElementById('vpSvcBoth');
+    var reviewTypeWrap  = document.getElementById('vpReviewTypeOptions');
+    var reviewTypeLabel = document.getElementById('vpReviewTypeLabel');
+    var priceRow     = document.getElementById('vpPriceRow');
+    var totalPriceEl = document.getElementById('vpTotalPrice');
     if (!sheet || !openBtn) return;
 
-    var _selectedType = null;
+    var reviewTypeBtns = [optDiet, optWorkout, optBoth];
+    var svcBtns = [svcVerify, svcChat, svcBoth];
+
+    var _selectedType    = null;  // 'diet' | 'workout' | 'both'
+    var _selectedService = null;  // 'verification' | 'chat' | 'verification_chat'
 
     function _hasDietPlan() {
       return !!(
@@ -2515,10 +2596,48 @@
       );
     }
 
+    function _needsReviewType() {
+      return _selectedService === 'verification' || _selectedService === 'verification_chat';
+    }
+
+    function _computeTotalPrice() {
+      var pricing = _getPricing(coach);
+      var total = 0;
+      if (_needsReviewType()) {
+        if (_selectedType === 'diet')    total += pricing.dietReviewPrice;
+        else if (_selectedType === 'workout') total += pricing.workoutReviewPrice;
+        else if (_selectedType === 'both')    total += pricing.bothReviewPrice;
+      }
+      if (_selectedService === 'chat' || _selectedService === 'verification_chat') {
+        total += pricing.chatPrice;
+      }
+      return total;
+    }
+
+    function _refreshSubmitState() {
+      var ready = !!_selectedService && (!_needsReviewType() || !!_selectedType);
+      if (submitBtn) submitBtn.disabled = !ready;
+      if (totalPriceEl) totalPriceEl.textContent = '₹' + (ready ? _computeTotalPrice() : 0);
+    }
+
     function openSheet() {
-      _selectedType = null;
-      [optDiet, optWorkout].forEach(function(b) { if (b) b.classList.remove('selected'); });
-      if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Send for Review →'; }
+      var pricing = _getPricing(coach);
+      _selectedType    = null;
+      _selectedService = null;
+      reviewTypeBtns.forEach(function(b) { if (b) b.classList.remove('selected'); });
+      svcBtns.forEach(function(b) { if (b) b.classList.remove('selected'); });
+      if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Send Request →'; }
+      if (reviewTypeWrap)  reviewTypeWrap.style.display  = 'none';
+      if (reviewTypeLabel) reviewTypeLabel.style.display = 'none';
+      if (priceRow) priceRow.style.display = 'none';
+
+      /* Price sub-labels reflect this expert's actual pricing */
+      var subVerify = document.getElementById('vpSvcVerifySub');
+      var subChat   = document.getElementById('vpSvcChatSub');
+      var subBoth   = document.getElementById('vpSvcBothSub');
+      if (subVerify) subVerify.textContent = 'Expert reviews your plan · from ₹' + Math.min(pricing.dietReviewPrice, pricing.workoutReviewPrice);
+      if (subChat)   subChat.textContent   = 'Unlimited chat until the expert closes it · ₹' + pricing.chatPrice;
+      if (subBoth)   subBoth.textContent   = 'Review, then unlimited chat';
 
       /* Disable diet option and show message when no plan exists */
       if (optDiet) {
@@ -2622,6 +2741,13 @@
           });
         }).then(function() {
           console.log('[WITHDRAW] success —', review.id, 'is now withdrawn');
+          /* "Both" bundle: withdrawing the primary also withdraws the linked
+             workout doc — nothing was ever charged for either half. */
+          if (review.siblingId) {
+            ZitlasDB.collection('review_requests').doc(review.siblingId)
+              .update({ status: 'withdrawn', withdrawnAt: new Date().toISOString() })
+              .catch(function(e) { console.warn('[WITHDRAW] sibling mirror failed', e); });
+          }
           /* Update local cache so the button flips immediately (the
              Firestore listener will confirm moments later) */
           try {
@@ -2660,7 +2786,14 @@
       console.log('Expert Review button clicked — state:', openBtn.dataset.vpStatus || '(new)');
       var st = openBtn.dataset.vpStatus || '';
       if (st === 'accepted') {
-        openChatOverlay('', buildContextPackage(), 'chat', coach);
+        var _rev = _getMyLatestPlanReview(coach);
+        if (_rev && _rev.paymentStatus === 'awaiting_payment') {
+          _retryReviewPayment(_rev, coach);
+          return;
+        }
+        if (_rev && _rev.chatUnlocked !== false) {
+          openChatOverlay('', buildContextPackage(), 'chat', coach);
+        }
         return;
       }
       if (!openBtn.disabled) openSheet();
@@ -2669,25 +2802,43 @@
     if (cancelBtn) cancelBtn.addEventListener('click', closeSheet);
     sheet.addEventListener('click', function(e) { if (e.target === sheet) closeSheet(); });
 
-    [optDiet, optWorkout].forEach(function(btn) {
+    svcBtns.forEach(function(btn) {
       if (!btn) return;
       btn.addEventListener('click', function() {
-        if (btn === optDiet && !_hasDietPlan()) {
+        _selectedService = btn.dataset.svc;
+        svcBtns.forEach(function(b) { if (b) b.classList.remove('selected'); });
+        btn.classList.add('selected');
+
+        var showReviewType = _needsReviewType();
+        if (reviewTypeWrap)  reviewTypeWrap.style.display  = showReviewType ? '' : 'none';
+        if (reviewTypeLabel) reviewTypeLabel.style.display = showReviewType ? '' : 'none';
+        if (priceRow) priceRow.style.display = '';
+        if (!showReviewType) {
+          _selectedType = null;
+          reviewTypeBtns.forEach(function(b) { if (b) b.classList.remove('selected'); });
+        }
+        _refreshSubmitState();
+      });
+    });
+
+    reviewTypeBtns.forEach(function(btn) {
+      if (!btn) return;
+      btn.addEventListener('click', function() {
+        if ((btn === optDiet || btn === optBoth) && !_hasDietPlan()) {
           showToast('No diet plan found. Generate your AI diet plan first.');
           return;
         }
         _selectedType = btn.dataset.type;
-        [optDiet, optWorkout].forEach(function(b) { if (b) b.classList.remove('selected'); });
+        reviewTypeBtns.forEach(function(b) { if (b) b.classList.remove('selected'); });
         btn.classList.add('selected');
-        if (submitBtn) submitBtn.disabled = false;
+        _refreshSubmitState();
       });
     });
 
     if (submitBtn) {
       submitBtn.addEventListener('click', function() {
-        console.log('[VERIFY] button clicked');
-        console.log('[VERIFY] selected expert', { id: coach.id, name: coach.name });
-        if (!_selectedType) return;
+        console.log('[VERIFY] button clicked', { service: _selectedService, type: _selectedType });
+        if (!_selectedService || (_needsReviewType() && !_selectedType)) return;
 
         /* ── Lifecycle guard: only ONE active review per athlete↔expert ──
            Rules: pending → block; in_progress/expert_reviewing/accepted →
@@ -2700,98 +2851,139 @@
           console.error('[VERIFY] blocked — active review already exists:',
             _latestForCoach.id, 'status:', _latestForCoach.status);
           showToast(_latestForCoach.status === 'pending'
-            ? 'Your previous review request is still pending.'
-            : 'Your plan is currently being reviewed by the expert.');
+            ? 'Your previous request is still pending.'
+            : 'The expert is already handling an active request from you.');
           closeSheet();
           updateVerifyBtnState(coach);
           return;
         }
 
-        var ctx = buildContextPackage();
-        var planData;
-        if (_selectedType === 'diet') {
-          planData = ctx.diet_plan;
-          if (!planData) {
-            var _raw = localStorage.getItem('zitlas_current_diet') ||
-                       localStorage.getItem('zitlas_generated_diet') ||
-                       localStorage.getItem('zitlas_meal_plan');
-            try { planData = _raw ? JSON.parse(_raw) : null; } catch (_) { planData = null; }
+        var ctx        = buildContextPackage();
+        var userId     = _getMyUserId();
+        var totalPrice = _computeTotalPrice();
+        var a          = ctx.assessment || ctx.survey || {};
+        var isChatOnly = _selectedService === 'chat';
+
+        /* Build the 1 or 2 request docs this submission needs. "Both" is
+           two ordinary, linked review_requests docs (bundleId/siblingId) —
+           NOT a new combined schema — so the existing per-type rendering,
+           editing, and completion flows on the expert's side (modify-diet.
+           html / modify-workout.html) need no changes at all. The bundle's
+           full price lives on the primary doc only; the secondary carries
+           ₹0 and mirrors status once the primary is paid (see
+           expert-dashboard.js _prAcceptReview). */
+        var specs = [];
+        if (isChatOnly) {
+          specs.push({ reviewType: 'chat_only', planData: null, price: totalPrice });
+        } else if (_selectedType === 'both') {
+          var dietPlan = ctx.diet_plan;
+          if (!dietPlan) {
+            var _rawD = localStorage.getItem('zitlas_current_diet') ||
+                        localStorage.getItem('zitlas_generated_diet') ||
+                        localStorage.getItem('zitlas_meal_plan');
+            try { dietPlan = _rawD ? JSON.parse(_rawD) : null; } catch (_) { dietPlan = null; }
           }
+          var workoutPlan = ctx.workout_plan;
+          if (!dietPlan)    { showToast('No diet plan found. Generate your plan first.'); return; }
+          if (!workoutPlan) { showToast('No workout plan found. Generate your plan first.'); return; }
+          var bundleId = 'BND_' + Date.now();
+          specs.push({ reviewType: 'diet',    planData: dietPlan,    price: totalPrice, bundleId: bundleId, bundleRole: 'primary' });
+          specs.push({ reviewType: 'workout', planData: workoutPlan, price: 0,          bundleId: bundleId, bundleRole: 'secondary' });
         } else {
-          planData = ctx.workout_plan;
+          var planData;
+          if (_selectedType === 'diet') {
+            planData = ctx.diet_plan;
+            if (!planData) {
+              var _raw = localStorage.getItem('zitlas_current_diet') ||
+                         localStorage.getItem('zitlas_generated_diet') ||
+                         localStorage.getItem('zitlas_meal_plan');
+              try { planData = _raw ? JSON.parse(_raw) : null; } catch (_) { planData = null; }
+            }
+          } else {
+            planData = ctx.workout_plan;
+          }
+          if (!planData) {
+            showToast('No ' + (_selectedType === 'diet' ? 'diet' : 'workout') + ' plan found. Generate your plan first.');
+            return;
+          }
+          specs.push({ reviewType: _selectedType, planData: planData, price: totalPrice });
         }
-        var planLabel = _selectedType === 'diet' ? 'diet' : 'workout';
 
-        if (!planData) {
-          showToast('No ' + planLabel + ' plan found. Generate your plan first.');
-          return;
+        specs.forEach(function(s, i) { s.id = 'PR_' + Date.now() + '_' + i + '_' + Math.random().toString(36).slice(2, 6); });
+        if (specs.length === 2) {
+          specs[0].siblingId = specs[1].id;
+          specs[1].siblingId = specs[0].id;
         }
 
-        var a      = ctx.assessment || ctx.survey || {};
-        var userId = _getMyUserId();
-
-        /* Calculate version number for this user+expert+type combination
-           Normalise planReviewType (old field) vs reviewType (new field) */
-        var allForType = _getAllMyPlanReviews(coach).filter(function(r) {
-          return (r.reviewType || r.planReviewType) === _selectedType;
-        });
-        var maxVersion = allForType.reduce(function(max, r) {
-          return Math.max(max, r.version || 0);
-        }, 0);
-
-        var review = {
-          id:         'PR_' + Date.now(),
-          userId:     userId,
-          expertId:   coach.id,
-          expertName: coach.name,
-          expertRole: coach.role,
-          reviewType: _selectedType,
-          version:    maxVersion + 1,
-          planData:   planData,
-          assessmentData: {
-            assessment:   ctx.assessment   || null,
-            calculations: ctx.calculations || null,
-            swot:         ctx.swot         || null,
-          },
-          profileBasics: {
-            age:                  a.age                  || null,
-            gender:               a.gender               || null,
-            weight_kg:            a.weight_kg            || null,
-            height_cm:            a.height_cm            || null,
-            goal_weight_kg:       a.goal_weight_kg       || null,
-            activity_level:       a.activity_level       || null,
-            diet_preference:      a.diet_preference      || null,
-            workout_preference:   a.workout_preference   || null,
-            fitness_goal:         a.fitness_goal         || null,
-            transformation_goal:  a.transformation_goal  || null,
-            goal_duration_months: a.goal_duration_months || null,
-            fitness_level:        a.fitness_level        || null,
-            stress_level:         a.stress_level         || null,
-            available_time:       a.available_time       || null,
-            target_body_fat_pct:  a.target_body_fat_pct  || null,
-            biggest_struggle:     a.biggest_struggle     || a.struggle || null,
-          },
-          status:      'pending',
-          createdAt:   new Date().toISOString(),
-          submittedAt: new Date().toISOString(),
-          completedAt: null,
+        var now = new Date().toISOString();
+        var profileBasics = {
+          age:                  a.age                  || null,
+          gender:               a.gender               || null,
+          weight_kg:            a.weight_kg            || null,
+          height_cm:            a.height_cm            || null,
+          goal_weight_kg:       a.goal_weight_kg       || null,
+          activity_level:       a.activity_level       || null,
+          diet_preference:      a.diet_preference      || null,
+          workout_preference:   a.workout_preference   || null,
+          fitness_goal:         a.fitness_goal         || null,
+          transformation_goal:  a.transformation_goal  || null,
+          goal_duration_months: a.goal_duration_months || null,
+          fitness_level:        a.fitness_level        || null,
+          stress_level:         a.stress_level         || null,
+          available_time:       a.available_time       || null,
+          target_body_fat_pct:  a.target_body_fat_pct  || null,
+          biggest_struggle:     a.biggest_struggle     || a.struggle || null,
         };
 
-        console.log('[VERIFY] payload', review);
+        var reviewDocs = specs.map(function(s) {
+          var allForType = _getAllMyPlanReviews(coach).filter(function(r) {
+            return (r.reviewType || r.planReviewType) === s.reviewType;
+          });
+          var maxVersion = allForType.reduce(function(max, r) { return Math.max(max, r.version || 0); }, 0);
+          return {
+            id:         s.id,
+            userId:     userId,
+            expertId:   coach.id,
+            expertName: coach.name,
+            expertRole: coach.role,
+            reviewType: s.reviewType,
+            version:    maxVersion + 1,
+            planData:   s.planData,
+            assessmentData: {
+              assessment:   ctx.assessment   || null,
+              calculations: ctx.calculations || null,
+              swot:         ctx.swot         || null,
+            },
+            profileBasics:  profileBasics,
+            serviceType:    _selectedService,
+            totalPrice:     s.price,
+            paymentStatus:  'unpaid',
+            bundleId:       s.bundleId   || null,
+            bundleRole:     s.bundleRole || null,
+            siblingId:      s.siblingId  || null,
+            status:      'pending',
+            createdAt:   now,
+            submittedAt: now,
+            completedAt: null,
+          };
+        });
+
+        console.log('[VERIFY] payload', reviewDocs);
 
         /* Only remove currently-pending requests to avoid duplicates.
            Completed/rejected reviews are kept as permanent history. */
         var existing = [];
         try { existing = JSON.parse(localStorage.getItem('expert_plan_reviews') || '[]'); } catch (_) {}
         var _staleIds = [];
+        var newTypes  = reviewDocs.map(function(r) { return r.reviewType; });
         existing = existing.filter(function(r) {
           var isStalePending = r.userId === userId && r.expertId === coach.id &&
-                   (r.reviewType || r.planReviewType) === _selectedType &&
+                   newTypes.indexOf(r.reviewType || r.planReviewType) !== -1 &&
                    r.status === 'pending';
           if (isStalePending && r.id) _staleIds.push(r.id);
           return !isStalePending;
         });
-        existing.unshift(review);
+        reviewDocs.forEach(function(r) { existing.unshift(r); });
         try { localStorage.setItem('expert_plan_reviews', JSON.stringify(existing)); } catch (_) {}
 
         /* Supersede the same stale pendings IN FIRESTORE too. Previously
@@ -2801,27 +2993,31 @@
            history is preserved and every transition is auditable. */
         if (typeof ZitlasDB !== 'undefined' && _staleIds.length) {
           _staleIds.forEach(function(staleId) {
-            console.log('[VERIFY] superseding stale pending review', staleId, '→ replaced by', review.id);
+            console.log('[VERIFY] superseding stale pending review', staleId, '→ replaced by', reviewDocs[0].id);
             ZitlasDB.collection('review_requests').doc(staleId)
-              .update({ status: 'superseded', supersededBy: review.id, supersededAt: new Date().toISOString() })
+              .update({ status: 'superseded', supersededBy: reviewDocs[0].id, supersededAt: new Date().toISOString() })
               .catch(function(e) { console.error('[VERIFY] supersede failed for', staleId, e && e.code); });
           });
         }
 
-        /* Write to Firestore so the expert's dashboard inbox receives it */
+        /* Write to Firestore so the expert's dashboard inbox receives it.
+           Money is NEVER touched here — only on the expert's Accept. */
         if (typeof ZitlasDB !== 'undefined') {
-          var firestoreReview = Object.assign({}, review, {
-            serverTimestamp: firebase.firestore.FieldValue.serverTimestamp(),
+          var writes = reviewDocs.map(function(r) {
+            var firestoreReview = Object.assign({}, r, {
+              serverTimestamp: firebase.firestore.FieldValue.serverTimestamp(),
+            });
+            console.log('[FIRESTORE] Writing review_requests/' + r.id);
+            return ZitlasDB.collection('review_requests').doc(r.id).set(firestoreReview);
           });
-          console.log('[FIRESTORE] Writing review_requests/' + review.id);
-          ZitlasDB.collection('review_requests').doc(review.id).set(firestoreReview)
-            .then(function() { console.log('[VERIFY] review document created', review.id); })
+          Promise.all(writes)
+            .then(function() { console.log('[VERIFY] review document(s) created', reviewDocs.map(function(r) { return r.id; })); })
             .catch(function(e) {
               console.error('[FIRESTORE] review_requests write FAILED', e);
-              showToast('Could not send review request — please check your connection and try again.');
+              showToast('Could not send request — please check your connection and try again.');
             });
         } else {
-          console.warn('[FIRESTORE] ZitlasDB not available — review saved to localStorage only');
+          console.warn('[FIRESTORE] ZitlasDB not available — request saved to localStorage only');
         }
 
         submitBtn.textContent = 'Sent ✓';
@@ -2829,7 +3025,9 @@
 
         setTimeout(function() {
           closeSheet();
-          showToast('Your plan has been sent for review.');
+          showToast(totalPrice > 0
+            ? 'Request sent — ₹' + totalPrice + ' will be deducted from your wallet once the expert accepts.'
+            : 'Your request has been sent.');
           updateVerifyBtnState(coach);
         }, 700);
       });
@@ -3513,12 +3711,6 @@
      a transaction guards against replacing a different coach's active
      subscription. Ended/expired relationships flip status, never delete.
   ══════════════════════════════════════════ */
-  var COACHING_PLANS = {
-    diet:     { label: 'Diet Coaching',           icon: '🥗', price: 499 },
-    training: { label: 'Training Coaching',       icon: '💪', price: 699 },
-    complete: { label: 'Complete Transformation', icon: '🏆', price: 999 },
-  };
-
   function _coachingIsActive(rel) {
     return !!(rel && rel.status === 'active' &&
       (!rel.endDate || new Date(rel.endDate) > new Date()));
@@ -3543,6 +3735,16 @@
     var endBackdrop    = document.getElementById('endCoachingBackdrop');
     var endCancelBtn   = document.getElementById('endCoachingCancelBtn');
     var endConfirmBtn  = document.getElementById('endCoachingConfirmBtn');
+
+    /* Prices come from the expert's own Pricing & Services page (unlimited
+       — spec's "No pricing limit, expert decides"); experts who haven't set
+       custom pricing yet see today's defaults (499/699/999), unchanged. */
+    var _pricing = _getPricing(coach);
+    var COACHING_PLANS = {
+      diet:     { label: 'Diet Coaching',           icon: '🥗', price: _pricing.coachingDietPrice },
+      training: { label: 'Training Coaching',       icon: '💪', price: _pricing.coachingTrainingPrice },
+      complete: { label: 'Complete Transformation', icon: '🏆', price: _pricing.coachingCompletePrice },
+    };
 
     var _myCoaching   = null;  /* personal_coaching/{uid} doc */
     var _myRequests   = [];    /* all my personal_coach_requests */
@@ -3583,6 +3785,12 @@
       if (!backdrop) return;
       _selectedPlan = null;
       showStep('plans');
+      /* Plan cards ship with static ₹499/699/999 markup — overwrite with
+         this expert's actual pricing every time the sheet opens. */
+      Object.keys(COACHING_PLANS).forEach(function(key) {
+        var priceEl = backdrop.querySelector('.cp-plan-card[data-plan="' + key + '"] .cp-plan-price');
+        if (priceEl) priceEl.innerHTML = '₹' + COACHING_PLANS[key].price + '<em>/mo</em>';
+      });
       backdrop.style.display = 'flex';
       requestAnimationFrame(function() {
         requestAnimationFrame(function() { backdrop.classList.add('open'); });
@@ -3685,78 +3893,90 @@
       });
     }
 
-    /* Payment → activation. Runs only AFTER the expert accepted. */
+    /* Payment → activation. Runs only AFTER the expert accepted. Wallet
+       deduction happens here, inside ZitlasPayment.attemptCharge's Firestore
+       transaction (re-checks paymentStatus fresh, so a double-click or a
+       second tab can never charge twice) — never a fake success. */
     function _payAndActivate(req) {
-      /* ─── RAZORPAY SEAM ────────────────────────────────────────────
-         Real payment goes HERE:
-         1. POST /api/coaching/create-order (backend, key_secret) → order_id
-         2. new Razorpay({key, order_id, handler}).open()
-         3. handler: verify signature server-side, then run the code below
-            with the real paymentId. Until merchant keys exist, activation
-            records 'payment_pending_razorpay' — never a fake success. */
-      var uid     = _getMyUserId();
+      var uid = _getMyUserId();
+      if (!uid || typeof ZitlasPayment === 'undefined' || typeof ZitlasDB === 'undefined') {
+        showToast('Unable to process payment — please try again.');
+        return;
+      }
       var now     = new Date();
       var endDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
       var docRef  = ZitlasDB.collection('personal_coaching').doc(uid);
-      var payload = {
-        coachId:        req.expertId,
-        coachName:      req.expertName,
-        athleteId:      uid,
-        athleteName:    req.athleteName || getAthleteName(),
-        planType:       req.planType,
-        planLabel:      req.planLabel,
-        startDate:      now.toISOString(),
-        endDate:        endDate.toISOString(),
-        status:         'active',
-        subscriptionId: 'sub_' + Date.now(),
-        paymentId:      'payment_pending_razorpay',
-        fee:            req.price,
-        requestId:      req.requestId,
-      };
-      console.log('[COACHING] activating — personal_coaching/' + uid, payload);
+      var amount  = Number(req.price) || 0;
 
-      ZitlasDB.runTransaction(function(tx) {
-        return tx.get(docRef).then(function(snap) {
-          var rel = snap.exists ? snap.data() : null;
-          if (_coachingIsActive(rel) && rel.coachId !== req.expertId) throw new Error('other_coach_active');
-          tx.set(docRef, payload);
-        });
-      }).then(function() {
-        /* Mark the request active so the expert's Coaching tab moves it */
-        return ZitlasDB.collection('personal_coach_requests').doc(req.requestId)
-          .update({ status: 'active', activatedAt: new Date().toISOString() })
-          .catch(function(e) { console.warn('[COACHING] request status update failed', e); });
-      }).then(function() {
-        /* Publish this athlete's AI context to the coaching workspace right
-           away so the coach sees profile/metrics/SWOT without waiting for the
-           athlete to open the workspace first. */
-        var ctx = buildContextPackage();
-        try { ctx.goal = JSON.parse(localStorage.getItem('zitlas_goal') || 'null'); } catch(_) {}
-        try { ctx.precautions = JSON.parse(localStorage.getItem('zitlas_precautions') || 'null'); } catch(_) {}
-        return ZitlasDB.collection('coaching_plans').doc(uid).set({
-          athleteId: uid, athleteName: payload.athleteName,
-          coachId: payload.coachId, coachName: payload.coachName,
-          planType: payload.planType,
-          athleteContext: ctx,
-          athleteContextUpdatedAt: new Date().toISOString(),
-        }, { merge: true }).catch(function(e) { console.warn('[COACHING] context publish failed', e); });
-      }).then(function() {
-        showToast('🎉 ' + req.expertName + ' is now your personal coach!');
-        if (typeof ZitlasNotify !== 'undefined') {
-          ZitlasNotify.send(uid, {
-            title: '🎉 Coaching started!', message: req.expertName + ' is now your Personal Coach.',
-            category: 'payment', type: 'coaching_started', action: 'expert_profile', actionId: req.expertId,
-          });
-          ZitlasNotify.send(req.expertId, {
-            title: '🎉 New coaching client', message: (payload.athleteName || 'An athlete') + ' just started coaching with you.',
-            category: 'payment', type: 'coaching_started', action: 'expert_dashboard',
-          });
+      ZitlasPayment.attemptCharge({
+        userId: uid, expertId: req.expertId, amount: amount,
+        serviceType: 'coaching', serviceLabel: req.planLabel || 'Personal Coaching', expertName: req.expertName,
+        requestCollection: 'personal_coach_requests', requestId: req.requestId,
+        onSuccessUpdate: { status: 'active', activatedAt: now.toISOString() },
+        notifyUser: {
+          title: '🎉 Coaching started!',
+          message: (req.expertName || 'Your coach') + ' is now your Personal Coach. ₹' + amount + ' has been deducted from your wallet.',
+        },
+        notifyExpert: {
+          title: '🎉 Payment received',
+          message: (req.athleteName || getAthleteName() || 'An athlete') + ' just started coaching with you.',
+        },
+      }).then(function (result) {
+        if (!result.success) {
+          if (result.error === 'insufficient_balance') {
+            ZitlasPayment.showLowBalancePopup({ balance: result.balance, required: result.required });
+          } else {
+            console.error('[COACHING] payment failed', result);
+            showToast('Could not process payment — please try again.');
+          }
+          return;
         }
-      }).catch(function(err) {
-        console.error('[COACHING] activation failed:', err && err.message);
-        showToast(err && err.message === 'other_coach_active'
-          ? 'You already have an active coach. One coach at a time.'
-          : 'Could not activate coaching — please try again.');
+
+        var payload = {
+          coachId:        req.expertId,
+          coachName:      req.expertName,
+          athleteId:      uid,
+          athleteName:    req.athleteName || getAthleteName(),
+          planType:       req.planType,
+          planLabel:      req.planLabel,
+          startDate:      now.toISOString(),
+          endDate:        endDate.toISOString(),
+          status:         'active',
+          subscriptionId: 'sub_' + Date.now(),
+          paymentId:      result.transactionId || 'wallet',
+          fee:            amount,
+          requestId:      req.requestId,
+        };
+        console.log('[COACHING] activating — personal_coaching/' + uid, payload);
+
+        ZitlasDB.runTransaction(function(tx) {
+          return tx.get(docRef).then(function(snap) {
+            var rel = snap.exists ? snap.data() : null;
+            if (_coachingIsActive(rel) && rel.coachId !== req.expertId) throw new Error('other_coach_active');
+            tx.set(docRef, payload);
+          });
+        }).then(function() {
+          /* Publish this athlete's AI context to the coaching workspace right
+             away so the coach sees profile/metrics/SWOT without waiting for
+             the athlete to open the workspace first. */
+          var ctx = buildContextPackage();
+          try { ctx.goal = JSON.parse(localStorage.getItem('zitlas_goal') || 'null'); } catch(_) {}
+          try { ctx.precautions = JSON.parse(localStorage.getItem('zitlas_precautions') || 'null'); } catch(_) {}
+          return ZitlasDB.collection('coaching_plans').doc(uid).set({
+            athleteId: uid, athleteName: payload.athleteName,
+            coachId: payload.coachId, coachName: payload.coachName,
+            planType: payload.planType,
+            athleteContext: ctx,
+            athleteContextUpdatedAt: new Date().toISOString(),
+          }, { merge: true }).catch(function(e) { console.warn('[COACHING] context publish failed', e); });
+        }).then(function() {
+          showToast('🎉 ' + req.expertName + ' is now your personal coach!');
+        }).catch(function(err) {
+          console.error('[COACHING] activation failed:', err && err.message);
+          showToast(err && err.message === 'other_coach_active'
+            ? 'You already have an active coach. One coach at a time.'
+            : 'Payment succeeded but activation failed — please contact support.');
+        });
       });
     }
 
@@ -4012,7 +4232,20 @@
       reviews:      Array.isArray(d.clientReviews) ? d.clientReviews : [],
       gallery:      Array.isArray(d.gallery) ? d.gallery : [],
       verified:     d.verified === true,
+      pricing:      d.pricing || null,
     };
+  }
+
+  /* Every screen that shows or charges a price reads through this one
+     function — experts who haven't opened Pricing & Services yet still work
+     exactly as before (today's fixed defaults), and any expert who HAS set
+     custom pricing has it respected everywhere consistently. */
+  var PRICING_DEFAULTS = {
+    dietReviewPrice: 49, workoutReviewPrice: 59, bothReviewPrice: 99, chatPrice: 149,
+    coachingDietPrice: 499, coachingTrainingPrice: 699, coachingCompletePrice: 999,
+  };
+  function _getPricing(coach) {
+    return Object.assign({}, PRICING_DEFAULTS, (coach && coach.pricing) || {});
   }
 
   function _findLocalExpert(expertId) {

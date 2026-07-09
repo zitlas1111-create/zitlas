@@ -444,6 +444,17 @@ img { display: block; max-width: 100%; }
   margin: 0 0 18px; text-align: center; line-height: 1.4;
 }
 .vp-sheet-options { display: flex; flex-direction: column; gap: 10px; margin-bottom: 18px; }
+.vp-group-label {
+  font-size: .74rem; font-weight: 700; color: var(--text-sec);
+  text-transform: uppercase; letter-spacing: .4px; margin: 0 0 8px;
+}
+.vp-price-row {
+  display: flex; justify-content: space-between; align-items: center;
+  background: var(--accent-dim); border-radius: var(--radius-sm);
+  padding: 12px 14px; margin-bottom: 14px;
+  font-size: .88rem; font-weight: 700; color: var(--text);
+}
+.vp-price-row span:last-child { font-size: 1.05rem; color: var(--accent); }
 .vp-option {
   display: flex; align-items: center; gap: 14px;
   background: var(--bg); border: 2px solid var(--border);
@@ -698,6 +709,18 @@ img { display: block; max-width: 100%; }
   gap: 10px;
   margin-bottom: 8px;
 }
+
+/* ══════════════════════════════════════════════════
+   8b. PRICING DISPLAY
+══════════════════════════════════════════════════ */
+.cp-pricing-list { display: flex; flex-direction: column; gap: 8px; }
+.cp-pricing-row {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 12px 16px;
+  font-size: .88rem; color: var(--text);
+}
+.cp-pricing-row b { font-size: .95rem; font-weight: 800; color: var(--accent); }
 .cp-service-card {
   display: flex;
   align-items: center;

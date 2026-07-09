@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>ZITLAS — Pricing &amp; Services</title>
+  <link rel="stylesheet" href="pricing.css" />
+  <link rel="stylesheet" href="../../assets/css/theme.css" />
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <script src="../../assets/js/firebase-config.js"></script>
+</head>
+<body>
+
+  <header class="pr-header">
+    <button class="pr-back-btn" id="prBackBtn" aria-label="Go back">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
+    <span class="pr-header-title">Pricing &amp; Services</span>
+    <span class="pr-header-spacer"></span>
+  </header>
+
+  <main class="pr-main">
+
+    <section class="pr-card">
+      <div class="pr-card-head">
+        <span class="pr-card-icon">📋</span>
+        <div>
+          <h2 class="pr-card-title">Review Verification</h2>
+          <p class="pr-card-hint">Set a separate price for each review type. Maximum ₹100 per service.</p>
+        </div>
+      </div>
+
+      <div class="pr-field">
+        <label class="pr-label" for="prDietPrice">🥗 Diet Review</label>
+        <div class="pr-input-wrap">
+          <span class="pr-rupee">₹</span>
+          <input class="pr-input" type="number" id="prDietPrice" min="0" max="100" step="1" placeholder="49" />
+        </div>
+      </div>
+      <div class="pr-field">
+        <label class="pr-label" for="prWorkoutPrice">💪 Workout Review</label>
+        <div class="pr-input-wrap">
+          <span class="pr-rupee">₹</span>
+          <input class="pr-input" type="number" id="prWorkoutPrice" min="0" max="100" step="1" placeholder="59" />
+        </div>
+      </div>
+      <div class="pr-field">
+        <label class="pr-label" for="prBothPrice">🥗💪 Diet + Workout Review</label>
+        <div class="pr-input-wrap">
+          <span class="pr-rupee">₹</span>
+          <input class="pr-input" type="number" id="prBothPrice" min="0" max="100" step="1" placeholder="99" />
+        </div>
+      </div>
+      <p class="pr-field-error" id="prReviewError" style="display:none">Review prices must be between ₹0 and ₹100.</p>
+    </section>
+
+    <section class="pr-card">
+      <div class="pr-card-head">
+        <span class="pr-card-icon">💬</span>
+        <div>
+          <h2 class="pr-card-title">Expert Chat</h2>
+          <p class="pr-card-hint">One-time consultation fee. The athlete gets unlimited chat until you close it. Maximum ₹200.</p>
+        </div>
+      </div>
+      <div class="pr-field">
+        <label class="pr-label" for="prChatPrice">💬 Chat Price</label>
+        <div class="pr-input-wrap">
+          <span class="pr-rupee">₹</span>
+          <input class="pr-input" type="number" id="prChatPrice" min="0" max="200" step="1" placeholder="149" />
+        </div>
+      </div>
+      <p class="pr-field-error" id="prChatError" style="display:none">Chat price must be between ₹0 and ₹200.</p>
+    </section>
+
+    <section class="pr-card">
+      <div class="pr-card-head">
+        <span class="pr-card-icon">👨‍🏫</span>
+        <div>
+          <h2 class="pr-card-title">Personal Coaching</h2>
+          <p class="pr-card-hint">No pricing limit — you decide. Shown to athletes as monthly plans.</p>
+        </div>
+      </div>
+      <div class="pr-field">
+        <label class="pr-label" for="prCoachDiet">🥗 Diet Coaching (₹ / month)</label>
+        <div class="pr-input-wrap">
+          <span class="pr-rupee">₹</span>
+          <input class="pr-input" type="number" id="prCoachDiet" min="0" step="1" placeholder="499" />
+        </div>
+      </div>
+      <div class="pr-field">
+        <label class="pr-label" for="prCoachTraining">💪 Training Coaching (₹ / month)</label>
+        <div class="pr-input-wrap">
+          <span class="pr-rupee">₹</span>
+          <input class="pr-input" type="number" id="prCoachTraining" min="0" step="1" placeholder="699" />
+        </div>
+      </div>
+      <div class="pr-field">
+        <label class="pr-label" for="prCoachComplete">🏆 Complete Transformation (₹ / month)</label>
+        <div class="pr-input-wrap">
+          <span class="pr-rupee">₹</span>
+          <input class="pr-input" type="number" id="prCoachComplete" min="0" step="1" placeholder="999" />
+        </div>
+      </div>
+    </section>
+
+    <button class="pr-save-btn" id="prSaveBtn" type="button">Save Pricing</button>
+    <p class="pr-footnote">Prices you save here apply to <strong>future requests only</strong>. Any review, chat, or coaching relationship that's already active keeps the price it was charged when it started.</p>
+
+  </main>
+
+  <div class="pr-toast" id="prToast"></div>
+
+  <script src="pricing.js"></script>
+</body>
+</html>

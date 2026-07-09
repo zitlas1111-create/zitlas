@@ -791,6 +791,7 @@
       saveWallet(w); syncBtnLabel(w.balance); showDot();
     },
     openPanel:  openPanel,
+    openAddFunds: function()           { openPanel(); showView('addFunds'); },
     refresh:    function()             { syncBtnLabel(getWallet().balance); },
   };
 
