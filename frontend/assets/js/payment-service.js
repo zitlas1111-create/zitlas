@@ -94,9 +94,14 @@
             balance: balance, required: amount, shortfall: amount - balance,
           };
           // Deliberately does NOT apply onSuccessUpdate — payment failed, so
-          // the request must stay exactly where it was (just flagged as
-          // awaiting payment), never advance to an active/serving state.
+          // the request must not advance to an active/serving state. `status`
+          // is fixed at 'accepted' here (not caller-controlled) so the
+          // expert's decision is recorded in the SAME transaction as the
+          // failed charge — no separate out-of-transaction write is needed,
+          // which would otherwise race against this one and risk landing
+          // out of order.
           tx.update(requestRef, {
+            status: 'accepted',
             paymentStatus: 'awaiting_payment',
             paymentAttemptedAt: new Date().toISOString(),
           });

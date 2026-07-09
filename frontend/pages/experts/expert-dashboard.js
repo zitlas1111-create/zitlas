@@ -4675,14 +4675,11 @@ function _prAcceptReview(reviewId, review, expert) {
   edShowToast('Checking athlete wallet…');
   var serviceLabel = isChatOnly ? 'Expert Chat' : (rtype === 'workout' ? 'Workout Review' : 'Diet Review');
 
-  /* Record the expert's decision immediately and separately from the
-     payment outcome — a 'pending' request that fails the wallet check must
-     land on 'accepted' (Awaiting Payment), never fall back to 'pending'
-     (which would wrongly re-show the Accept/Reject buttons). */
-  ZitlasDB.collection('review_requests').doc(reviewId)
-    .update({ status: 'accepted', acceptedAt: _now, expertId: expert.id })
-    .catch(function (e) { console.warn('[REVIEW] accepted-status write failed:', e); });
-
+  /* The expert's decision (status: 'accepted') is written INSIDE
+     attemptCharge's own transaction — both the insufficient-balance branch
+     and the success branch (via onSuccessUpdate below) set it, so there is
+     no separate out-of-transaction write that could race against the
+     transaction's own write and land out of order. */
   ZitlasPayment.attemptCharge({
     userId: review.userId, expertId: expert.id, amount: amount,
     serviceType: isChatOnly ? 'chat' : 'review', serviceLabel: serviceLabel, expertName: expert.name,
