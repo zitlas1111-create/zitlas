@@ -225,6 +225,40 @@
     clearAllGoalData();
   }
 
+  /* A Goal Reset must end the previous transformation completely — including
+     any Personal Coaching relationship, so the new AI plan renders as pure
+     AI, never the old coach's plan. The bug this fixes: diet.js/weekly-
+     plan.js's _pcShowsCoachPlan() treats personal_coaching/{uid}.status of
+     BOTH 'active' AND 'ended' as "still show the coach's last plan" (that's
+     intentional for the normal End-Coaching flow, which should keep the
+     plan) — but clearAllGoalData() only ever touched localStorage, so that
+     Firestore doc silently outlived the reset and kept overriding the fresh
+     AI diet/workout with the old coach's plan and banner.
+     Never DELETES the doc — past coaching history, ratings, chat, wallet,
+     and transactions must survive a reset — it only retires this specific
+     relationship by moving it to a status neither diet.js nor weekly-plan.js
+     recognizes as show-worthy, so a brand-new transformation starts on pure
+     AI plans exactly like a first-time user. */
+  function clearCoachingArtifactsOnReset() {
+    if (typeof ZitlasDB === 'undefined') return Promise.resolve();
+    var uid = (typeof ZitlasAuth !== 'undefined' && ZitlasAuth.currentUser) ? ZitlasAuth.currentUser.uid : null;
+    if (!uid) return Promise.resolve();
+
+    var relRef = ZitlasDB.collection('personal_coaching').doc(uid);
+    return relRef.get().then(function (snap) {
+      if (!snap.exists) return;
+      var prior = snap.data() || {};
+      if (prior.status === 'reset') return; // already retired — nothing to do
+      return relRef.update({
+        status:      'reset',
+        resetAt:     new Date().toISOString(),
+        priorStatus: prior.status || null,
+      });
+    }).catch(function (e) {
+      console.warn('[GOAL RESET] coaching artifact cleanup failed (non-blocking):', e);
+    });
+  }
+
   function calcDaysLeft(endDateStr) {
     if (!endDateStr) return null;
     const end  = new Date(endDateStr);
@@ -436,7 +470,10 @@
         }
         clearAllSurveyData();
         closeResetGoalModal();
-        window.location.href = './ai-coach/ai-coach.html';
+        confirmBtn.disabled = true;
+        clearCoachingArtifactsOnReset().then(() => {
+          window.location.href = './ai-coach/ai-coach.html';
+        });
       });
     }
   }
