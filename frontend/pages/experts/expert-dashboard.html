@@ -241,15 +241,25 @@
           </div>
         </div>
 
-        <!-- ── Pricing & Services ── -->
-        <button class="pricing-nav-card" id="pricingNavCard" type="button">
-          <span class="pricing-nav-icon">💰</span>
-          <span class="pricing-nav-text">
-            <span class="pricing-nav-title">Pricing &amp; Services</span>
-            <span class="pricing-nav-sub">Set your review, chat &amp; coaching prices</span>
-          </span>
-          <svg class="pricing-nav-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-        </button>
+        <!-- ── Pricing & Services (premium card — opens pricing.html) ── -->
+        <div class="pricing-premium-card" id="pricingNavCard" role="button" tabindex="0" aria-label="Open Pricing & Services">
+          <div class="pricing-premium-head">
+            <span class="pricing-premium-icon">💰</span>
+            <div class="pricing-premium-headtext">
+              <span class="pricing-premium-title">Pricing &amp; Services</span>
+              <span class="pricing-premium-sub">Configure how much you charge for your services.</span>
+            </div>
+          </div>
+          <ul class="pricing-premium-checklist">
+            <li><span class="pricing-premium-tick">✔</span> Review Verification</li>
+            <li><span class="pricing-premium-tick">✔</span> Expert Chat</li>
+            <li><span class="pricing-premium-tick">✔</span> Personal Coaching</li>
+          </ul>
+          <button class="pricing-premium-cta" id="pricingNavCta" type="button">
+            Set Pricing
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          </button>
+        </div>
 
         <!-- ── Professional Certification (Expert Verification System) ── -->
         <div class="cert-section-label">Professional Certification</div>
