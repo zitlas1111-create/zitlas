@@ -842,66 +842,82 @@
     const _MALFORMED = ['is forbidden', 'previously suggested', 'using'];
 
     const MAX_RETRIES = 2;
+    let lastError = null;
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      const resp = await fetch('/api/ai/swap-meal', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          meal_name:            _swapMealName,
-          meal_time:            _swapMealTime,
-          current_foods:        _swapMealFoods,
-          reason:               reason,
-          user_profile:         athleteProfile,
-          lifestyle_data:       lifestyleData,
-          rejected_foods:       effectiveRejected,
-          previous_suggestions: _swapHistory,
-          fitness_goal:         fitnessGoal,
-        }),
-      });
+      /* Network/response-shape problems (a slow or momentarily-flaky LLM
+         round-trip, a dropped connection, a malformed one-off JSON body)
+         are transient the same way a malformed-food or rejected-food
+         retry is — they must consume a retry attempt, not escape the loop
+         and fail the whole swap on the very first hiccup. Previously a
+         bare `throw` here skipped the rest of this for-loop entirely, so
+         a single flaky attempt (even though the backend's own provider
+         chain — Groq → Gemini → OpenRouter → offline — usually succeeds
+         moments later) showed the fallback toast despite the API being
+         perfectly healthy. */
+      try {
+        const resp = await fetch('/api/ai/swap-meal', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({
+            meal_name:            _swapMealName,
+            meal_time:            _swapMealTime,
+            current_foods:        _swapMealFoods,
+            reason:               reason,
+            user_profile:         athleteProfile,
+            lifestyle_data:       lifestyleData,
+            rejected_foods:       effectiveRejected,
+            previous_suggestions: _swapHistory,
+            fitness_goal:         fitnessGoal,
+          }),
+        });
 
-      if (!resp.ok) throw new Error('API error ' + resp.status);
-      const data = await resp.json();
-      console.log('[SWAP API]', data);
+        if (!resp.ok) throw new Error('API error ' + resp.status);
+        const data = await resp.json();
+        console.log('[SWAP API]', data);
 
-      /* Accept both {structured:{swap:…}} and direct {swap:…} response shapes */
-      const meal = data.structured || (data.swap ? data : null);
-      if (!meal) throw new Error('No result');
-      console.log('[SWAP PARSED]', meal);
+        /* Accept both {structured:{swap:…}} and direct {swap:…} response shapes */
+        const meal = data.structured || (data.swap ? data : null);
+        if (!meal) throw new Error('No result');
+        console.log('[SWAP PARSED]', meal);
 
-      if (!meal.swap) throw new Error('No swap in result');
+        if (!meal.swap) throw new Error('No swap in result');
 
-      /* Remove food strings where the LLM leaked forbidden-food instructions into the name */
-      const rawFoods   = meal.swap.foods || [];
-      const cleanFoods = rawFoods.filter(f => !_MALFORMED.some(p => f.toLowerCase().includes(p)));
+        /* Remove food strings where the LLM leaked forbidden-food instructions into the name */
+        const rawFoods   = meal.swap.foods || [];
+        const cleanFoods = rawFoods.filter(f => !_MALFORMED.some(p => f.toLowerCase().includes(p)));
 
-      if (cleanFoods.length === 0 && rawFoods.length > 0) {
-        /* Every food item was malformed — force a retry without counting as a valid suggestion */
-        console.warn('[SWAP] All foods malformed (attempt ' + (attempt + 1) + '/' + (MAX_RETRIES + 1) + ') — retrying');
-        _swapHistory.push(rawFoods);
-        continue;
+        if (cleanFoods.length === 0 && rawFoods.length > 0) {
+          /* Every food item was malformed — force a retry without counting as a valid suggestion */
+          console.warn('[SWAP] All foods malformed (attempt ' + (attempt + 1) + '/' + (MAX_RETRIES + 1) + ') — retrying');
+          _swapHistory.push(rawFoods);
+          continue;
+        }
+
+        meal.swap.foods = cleanFoods;
+
+        const swapFoods      = cleanFoods;
+        const mealFoodsLower = swapFoods.map(f => f.toLowerCase());
+        const rejectedLower  = effectiveRejected.map(f => f.toLowerCase());
+
+        const violation = mealFoodsLower.find(f =>
+          rejectedLower.some(r => f.includes(r) || r.includes(f))
+        );
+
+        if (!violation) {
+          console.log('[SWAP] Replacement Generated:', swapFoods);
+          console.log('[SWAP] Validation Passed');
+          return meal;
+        }
+
+        console.warn(`[SWAP] Validation Failed (attempt ${attempt + 1}/${MAX_RETRIES + 1}) — "${violation}" is a rejected food. Retrying...`);
+        _swapHistory.push(swapFoods);
+      } catch (_networkErr) {
+        lastError = _networkErr;
+        console.warn(`[SWAP] Attempt ${attempt + 1}/${MAX_RETRIES + 1} failed (${_networkErr.message}) — retrying...`);
       }
-
-      meal.swap.foods = cleanFoods;
-
-      const swapFoods      = cleanFoods;
-      const mealFoodsLower = swapFoods.map(f => f.toLowerCase());
-      const rejectedLower  = effectiveRejected.map(f => f.toLowerCase());
-
-      const violation = mealFoodsLower.find(f =>
-        rejectedLower.some(r => f.includes(r) || r.includes(f))
-      );
-
-      if (!violation) {
-        console.log('[SWAP] Replacement Generated:', swapFoods);
-        console.log('[SWAP] Validation Passed');
-        return meal;
-      }
-
-      console.warn(`[SWAP] Validation Failed (attempt ${attempt + 1}/${MAX_RETRIES + 1}) — "${violation}" is a rejected food. Retrying...`);
-      _swapHistory.push(swapFoods);
     }
 
-    throw new Error('Could not generate a valid swap after retries');
+    throw lastError || new Error('Could not generate a valid swap after retries');
   }
 
   function renderSwapResult(meal) {
