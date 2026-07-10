@@ -807,6 +807,14 @@
     const athleteProfile = safeJSON('athlete_profile', {});
     const lifestyleData  = safeJSON('lifestyle_data', {});
 
+    /* Supplement preference lives on the assessment (new flow) — merge it in
+       so swap suggestions also respect "no supplements" (backend reads
+       user_profile.uses_supplements; absent = old behavior). */
+    const _assess = safeJSON('zitlas_assessment', {});
+    if (_assess && _assess.uses_supplements && !athleteProfile.uses_supplements) {
+      athleteProfile.uses_supplements = _assess.uses_supplements;
+    }
+
     /* rejected_foods = ONLY the current meal's foods + this specific meal's prior swap
        suggestions (max 15). Never includes foods from other meals, other days, or the
        full weekly plan — that's what was causing the list to grow until nothing was valid. */

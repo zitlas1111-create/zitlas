@@ -23,6 +23,30 @@
   /* ══════════════════════════════════════════
      ASSESSMENT QUESTIONS  (maps to AssessmentInput)
   ══════════════════════════════════════════ */
+
+  /* Shared across all three assessment flows. One multiselect yields both
+     backend fields: picking "I don't use supplements" → uses_supplements
+     'no' (diet will NEVER suggest whey/creatine/etc.); picking products →
+     'yes' + supplement_types. Derived in buildAssessmentPayload(). */
+  var SUPPLEMENT_QUESTION = {
+    field: 'supplements_used',
+    prompt: 'Do you use any supplements?',
+    hint: 'If you don’t, we’ll build your protein targets from whole foods only',
+    type: 'multiselect',
+    opts: [
+      { label: '❌ I don’t use supplements', value: 'none' },
+      { label: 'Whey Protein',  value: 'Whey Protein' },
+      { label: 'Creatine',      value: 'Creatine' },
+      { label: 'Multivitamin',  value: 'Multivitamin' },
+      { label: 'Fish Oil',      value: 'Fish Oil' },
+      { label: 'Vitamin D',     value: 'Vitamin D' },
+      { label: 'BCAA',          value: 'BCAA' },
+      { label: 'Mass Gainer',   value: 'Mass Gainer' },
+      { label: 'Electrolytes',  value: 'Electrolytes' },
+      { label: 'Other',         value: 'Other' },
+    ],
+  };
+
   var QUESTIONS = [
     {
       field: 'age',
@@ -166,8 +190,8 @@
     },
     {
       field: 'available_time',
-      prompt: 'How many minutes per day can you dedicate to exercise?',
-      hint: 'Be realistic — 20 minutes is great!',
+      prompt: 'How much time can you realistically dedicate each day?',
+      hint: 'Be honest — a 10-minute workout you actually do beats a 60-minute one you skip. We will never give you a longer workout than this.',
       type: 'text',
       placeholder: 'e.g. 30',
       validate: function (v) {
@@ -179,7 +203,8 @@
     },
     {
       field: 'budget',
-      prompt: 'What is your daily food budget?',
+      prompt: 'How much do you usually spend on food each day?',
+      hint: 'Your meal plan will be built to genuinely fit this — no fancy ingredients you can’t afford',
       type: 'options',
       opts: [
         { icon: '💰', label: '₹0–50 (hostel mess)',  value: '₹50/day' },
@@ -188,6 +213,7 @@
         { icon: '💰', label: '₹200+',                value: '₹250/day' },
       ],
     },
+    SUPPLEMENT_QUESTION,
     {
       field: 'medical_conditions',
       prompt: 'Do you have any medical conditions?',
@@ -310,7 +336,10 @@
     },
     // STEP 6: Available Time
     {
-      field: 'available_time', prompt: 'How much time can you dedicate per day?', type: 'options',
+      field: 'available_time',
+      prompt: 'How much time can you realistically dedicate each day?',
+      hint: 'Your workouts will never run longer than this',
+      type: 'options',
       opts: [
         { icon: '⚡', label: '10 min', value: '10' },
         { icon: '🕐', label: '20 min', value: '20' },
@@ -332,6 +361,8 @@
       hint: '1 = very calm, 10 = very stressed',
       type: 'slider', min: 1, max: 10, defaultVal: 5,
     },
+    // STEP 9: Supplements
+    SUPPLEMENT_QUESTION,
   ];
 
   /* ══════════════════════════════════════════
@@ -466,7 +497,8 @@
     },
     {
       field: 'budget',
-      prompt: 'What is your daily food budget?',
+      prompt: 'How much do you usually spend on food each day?',
+      hint: 'Your transformation diet will be built to genuinely fit this',
       type: 'options',
       opts: [
         { icon: '💰', label: '₹0–50 (hostel mess)',  value: '₹50/day' },
@@ -475,6 +507,7 @@
         { icon: '💰', label: '₹200+',                value: '₹250/day' },
       ],
     },
+    SUPPLEMENT_QUESTION,
     {
       field: 'medical_conditions',
       prompt: 'Do you have any medical conditions?',
@@ -1261,7 +1294,29 @@
       // Transformation specific fields
       goal_duration_months: parseInt(a.goal_duration_months, 10) || null,
       transformation_goal:  a.transformation_goal || null,
+      // Supplement preference — one multiselect answer becomes both fields.
+      // Empty/unanswered → '' (backend treats as "not asked", old behavior).
+      uses_supplements:  _supplementsUsed(a).uses,
+      supplement_types:  _supplementsUsed(a).types,
+      // Preference memory (#13): exercises/foods the user repeatedly skips.
+      // Nothing writes these keys yet — the backend excludes them when present.
+      disliked_exercises: _prefList('zitlas_skipped_exercises'),
+      disliked_foods:     _prefList('zitlas_disliked_foods'),
     };
+  }
+
+  function _supplementsUsed(a) {
+    var sel = Array.isArray(a.supplements_used) ? a.supplements_used : [];
+    if (!sel.length) return { uses: '', types: [] };
+    if (sel.indexOf('none') !== -1) return { uses: 'no', types: [] };
+    return { uses: 'yes', types: sel };
+  }
+
+  function _prefList(key) {
+    try {
+      var v = JSON.parse(localStorage.getItem(key) || '[]');
+      return Array.isArray(v) ? v.slice(0, 30) : [];
+    } catch (_) { return []; }
   }
 
   /* ══════════════════════════════════════════

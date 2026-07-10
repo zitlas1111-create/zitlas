@@ -689,6 +689,40 @@ async def _generate_diet_plan(
     med_directives = medcon.build_condition_directives(data.medical_conditions)
     med_diet_block = medcon.format_prompt_block(med_directives, "diet")
 
+    # Supplement preference (#2): a hard rule, not a suggestion. "" (not
+    # asked — older clients) renders nothing, leaving the prompt unchanged.
+    uses_supp = (getattr(data, "uses_supplements", "") or "").lower()
+    if uses_supp == "no":
+        supplement_rule = (
+            "\nSUPPLEMENT RULE — HARD CONSTRAINT: The user does NOT use supplements. "
+            "NEVER recommend whey protein, protein powder, creatine, mass gainer, BCAA, "
+            "pre-workout, or any supplement product. Meet protein targets with whole foods "
+            "only: eggs, dal, paneer, curd, milk, soya chunks, sprouts, chana, chicken/fish (if non-veg)."
+        )
+    elif uses_supp == "yes":
+        supp_list = ", ".join(getattr(data, "supplement_types", []) or []) or "general supplements"
+        supplement_rule = (
+            f"\nSUPPLEMENT NOTE: The user already uses: {supp_list}. You may include these "
+            "where genuinely relevant (e.g. whey post-workout) — never push new supplements they didn't list."
+        )
+    else:
+        supplement_rule = ""
+
+    # Budget realism (#4): a low daily budget makes expensive foods a hard
+    # exclusion, with the affordable staples spelled out explicitly.
+    _budget_nums = re.findall(r"\d+", str(data.budget or ""))
+    _budget_val = int(_budget_nums[0]) if _budget_nums else None
+    if _budget_val is not None and _budget_val <= 150:
+        budget_rule = (
+            f"\nBUDGET RULE — HARD CONSTRAINT: The user's food budget is ~₹{_budget_val}/day. "
+            "NEVER recommend salmon, avocado, blueberries, quinoa, kale, imported fruits, "
+            "almond butter, or expensive nuts. Build every meal from affordable Indian staples: "
+            "dal, rice, roti, eggs, banana, milk, curd, peanuts, sprouts, chana, poha, upma, "
+            "seasonal local vegetables. The full day's food must realistically cost under the budget."
+        )
+    else:
+        budget_rule = ""
+
     prompt = f"""RESEARCH CONTEXT ({goal_label} nutrition knowledge base):
 {rag_context if rag_context else "No specific research retrieved — use general evidence-based principles."}
 
@@ -698,7 +732,7 @@ async def _generate_diet_plan(
 
 DIET RULE: {veg_rule}
 LIVING SITUATION NOTE: {'Hostel/canteen foods — keep suggestions mess-friendly.' if data.living_situation.lower() == 'hostel' else 'Home cooking available.'}
-{med_diet_block}
+{med_diet_block}{supplement_rule}{budget_rule}
 
 Generate a complete 7-day {goal_label} diet plan. Hit {calc['weight_loss_calories_kcal']} kcal and {calc['protein_target_g']}g protein EVERY day.
 Output valid JSON only — no extra text."""
@@ -765,16 +799,6 @@ Output valid JSON only — no extra text."""
         parsed["days"] = sorted(days, key=lambda d: day_order.get(d.get("day", ""), 99))
         print(f"[DIET AI] Final day count: {len(parsed['days'])}")
     return parsed, result
-
-
-_TIME_TO_EXERCISE_COUNT = [(15, 2), (20, 3), (30, 4), (45, 5), (60, 6), (999, 7)]
-
-
-def _exercises_per_workout(available_time: int) -> int:
-    for cutoff, count in _TIME_TO_EXERCISE_COUNT:
-        if available_time <= cutoff:
-            return count
-    return 4
 
 
 async def _generate_workout_plan(
@@ -987,7 +1011,9 @@ CRITICAL — FOLLOW THESE RULES OR THE PLAN WILL BE REJECTED:
     week_plan = engine.build_week_plan(
         fitness_goal=fitness_goal, difficulty_levels=difficulty_levels, equipment_tags=equipment_tags,
         condition_names=condition_names, lifestyle_name=lifestyle_name, high_stress=high_stress,
-        exercises_per_workout=_exercises_per_workout(data.available_time),
+        available_time=data.available_time,
+        disliked_exercises=getattr(data, "disliked_exercises", []) or [],
+        equipment_label=data.workout_preference, level_label=kb_fitness_level,
     )
     print(f"[WORKOUT ENGINE] goal={fitness_goal} level={kb_fitness_level} equipment={equipment_tags} "
           f"conditions={condition_names} lifestyle={lifestyle_name} stress_high={high_stress}")

@@ -1423,10 +1423,28 @@ Use simple words. Avoid medical or science terms.
 # database, or that violates a medical/allergy restriction.
 # ══════════════════════════════════════════════════════════════════════════════
 
+# Supplement preference (#2): when the user says NO to supplements, these
+# ride the two existing HARD exclusion mechanisms — category exclusion via
+# the profile's avoidCategories, and name exclusion via disliked_foods'
+# substring filter (catches "Soy Milk Protein Shake", "Protein Bar", "Mass
+# Gainer Shake" etc. living outside the Protein Supplements category).
+_SUPPLEMENT_NAME_KEYWORDS = [
+    "whey", "creatine", "bcaa", "mass gainer", "protein powder",
+    "protein shake", "protein bar", "casein", "pre-workout", "supplement",
+]
+
+
 def _engine_query_context(player_profile: dict, lifestyle_data: dict | None) -> dict[str, Any]:
     ld = lifestyle_data or {}
     medical_raw = player_profile.get("medical_conditions") or player_profile.get("medical_condition") or ""
     profile_rules = food_engine.load_profile_for_user(player_profile, ld)
+    uses_supp = str(player_profile.get("uses_supplements") or ld.get("uses_supplements") or "").lower()
+    disliked = list(ld.get("disliked_foods", []) or [])
+    if uses_supp == "no":
+        profile_rules = dict(profile_rules)
+        profile_rules["avoidCategories"] = list(profile_rules.get("avoidCategories") or []) + ["Protein Supplements"]
+        disliked += _SUPPLEMENT_NAME_KEYWORDS
+        print("[FOOD ENGINE] Supplements excluded (user preference: no supplements)")
     print(f"[FOOD ENGINE] Occupation profile: {profile_rules.get('profileName')}")
     return {
         "goal_tags":     food_engine.goal_tags_from_profile(player_profile),
@@ -1436,7 +1454,7 @@ def _engine_query_context(player_profile: dict, lifestyle_data: dict | None) -> 
         "disease_tags":  food_engine.FoodRecommendationEngine.resolve_disease_tags(medical_raw),
         "allergens":     food_engine.FoodRecommendationEngine.resolve_allergens(ld.get("allergies", [])),
         "favorite_foods": ld.get("favorite_foods", []) or [],
-        "disliked_foods": ld.get("disliked_foods", []) or [],
+        "disliked_foods": disliked,
         "profile":       profile_rules,
         "subgoal_tag":   food_engine.resolve_subgoal(player_profile),
         "season_tag":    food_engine.current_season(),
@@ -1456,7 +1474,29 @@ def _format_week_candidates_for_prompt(week_plan: dict) -> str:
     return "\n".join(lines)
 
 
-def _apply_engine_foods(parsed: dict | None, week_plan: dict) -> dict[str, Any]:
+def _meal_personalization_note(ctx: dict | None) -> str | None:
+    """#10 Explanations — one deterministic sentence naming every constraint
+    the engine's picks already satisfy. Built from the same ctx that drove
+    filtering, so it can never claim a constraint that wasn't applied."""
+    if not ctx:
+        return None
+    parts = []
+    if ctx.get("goal_tags"):
+        parts.append(ctx["goal_tags"][0] + " goal")
+    if ctx.get("diet_tags") and len(ctx["diet_tags"]) == 1:
+        parts.append(ctx["diet_tags"][0].lower() + " preference")
+    if ctx.get("living_tag"):
+        parts.append(ctx["living_tag"].lower() + " lifestyle")
+    if ctx.get("budget_tier"):
+        parts.append(ctx["budget_tier"].lower() + " budget")
+    if ctx.get("disease_tags"):
+        parts.append("safe for " + ", ".join(ctx["disease_tags"]))
+    if not parts:
+        return None
+    return "These meals match your " + ", ".join(parts) + "."
+
+
+def _apply_engine_foods(parsed: dict | None, week_plan: dict, ctx: dict | None = None) -> dict[str, Any]:
     """Rebuild `days` from the engine's picks. LLM-authored `name`/`tip` text
     is kept when present; every food/calorie/protein value is the engine's,
     always — this is the hallucination firewall."""
@@ -1514,6 +1554,7 @@ def _apply_engine_foods(parsed: dict | None, week_plan: dict) -> dict[str, Any]:
             "Every meal below comes from the ZITLAS verified food database, matched to your "
             "goal, budget, living situation, and any medical conditions you've shared."
         ),
+        "personalization_note": _meal_personalization_note(ctx),
     }
 
 
@@ -1695,7 +1736,7 @@ overall plan_notes summary. Use simple, warm, everyday language.
 
     # Variety is guaranteed by build_week_plan()'s usage-count penalty, not by
     # inspecting the LLM's output — no diversity check/reroll needed here.
-    result["structured"] = _apply_engine_foods(parsed, week_plan)
+    result["structured"] = _apply_engine_foods(parsed, week_plan, ctx)
     return result
 
 

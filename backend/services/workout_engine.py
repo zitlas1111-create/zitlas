@@ -219,6 +219,54 @@ _DIFFICULTY_BY_LEVEL: dict[str, list[str]] = {
     "advanced": ["Beginner", "Intermediate", "Advanced"],
 }
 
+# ── TIME BUDGET ─────────────────────────────────────────────────────────────
+# The user's available_time is a HARD constraint: sections are allocated
+# minutes FIRST, then exercises are retrieved to fill exactly the main-work
+# remainder — never the other way around (the old code computed duration
+# FROM the exercise count, which is how a 10-minute user got 40+ minute
+# days). Tiers keyed by session length; a section allocated 0 minutes is
+# simply not rendered that day.
+#                      warmup mobility stretch breathe cooldown mind_reset
+_TIME_TIERS: list[tuple[int, dict[str, int]]] = [
+    (12, {"warmup": 1, "mobility": 1, "stretch": 1, "breathing": 1, "cooldown": 0, "mind_reset": 0}),
+    (17, {"warmup": 2, "mobility": 1, "stretch": 2, "breathing": 1, "cooldown": 0, "mind_reset": 0}),
+    (25, {"warmup": 3, "mobility": 2, "stretch": 2, "breathing": 1, "cooldown": 1, "mind_reset": 0}),
+    (35, {"warmup": 4, "mobility": 2, "stretch": 3, "breathing": 2, "cooldown": 2, "mind_reset": 2}),
+    (50, {"warmup": 5, "mobility": 3, "stretch": 4, "breathing": 2, "cooldown": 3, "mind_reset": 3}),
+    (70, {"warmup": 6, "mobility": 4, "stretch": 5, "breathing": 3, "cooldown": 4, "mind_reset": 3}),
+    (999, {"warmup": 8, "mobility": 5, "stretch": 6, "breathing": 4, "cooldown": 5, "mind_reset": 4}),
+]
+_MINUTES_PER_STRENGTH_EXERCISE = 4   # ~3 sets x (45s work + 45s rest)
+_MINUTES_PER_CARDIO_BLOCK = 7        # cardio picks are longer continuous blocks
+
+
+def allocate_time(total_min: int, high_stress: bool = False) -> dict[str, int]:
+    """Split the user's total minutes across workout sections. Returns a
+    dict with every section's minutes plus 'main' (the remainder for the
+    actual workout). Sum of all values == total_min, always."""
+    total_min = max(8, min(int(total_min or 30), 180))
+    for cutoff, tier in _TIME_TIERS:
+        if total_min <= cutoff:
+            alloc = dict(tier)
+            break
+    if high_stress:
+        # Spec: high stress always includes breathing + meditation — steal
+        # the minutes from main work, never exceed the total.
+        alloc["breathing"] = max(alloc["breathing"], 2)
+        alloc["mind_reset"] = max(alloc["mind_reset"], 2)
+    alloc["main"] = max(2, total_min - sum(alloc.values()))
+    # If the stress top-up overflowed the total, trim overhead back down.
+    overflow = sum(alloc.values()) - total_min
+    if overflow > 0:
+        for k in ("cooldown", "mobility", "stretch", "warmup"):
+            take = min(overflow, alloc[k])
+            alloc[k] -= take
+            overflow -= take
+            if overflow <= 0:
+                break
+    alloc["total"] = total_min
+    return alloc
+
 # avoid_ex fields in chronic_condition/recovery_condition/profile_disability/
 # profile_senior records are mostly PROSE ("Heavy near-maximal lifting...",
 # "High-impact plyometrics (box jumps, jump squats)..."), not exact exercise
@@ -304,6 +352,19 @@ class WorkoutRecommendationEngine:
                 self._idx_tag[t].add(eid)
             self._idx_difficulty[e.get("difficulty") or "Beginner"].add(eid)
             self._name_to_id[_norm(e.get("name", ""))] = eid
+
+        # Gym-only exercises by EQUIPMENT STRING (#3). A few KB records are
+        # tagged 'home' but their equipment field names a rack/machine
+        # ("Barbell in a rack, Smith machine, or TRX") — contradictory data.
+        # Trust the stricter signal: anything whose equipment string names
+        # gym hardware is hard-excluded for non-gym users, even if tagged home.
+        _GYM_KW = ("machine", "smith", "cable", "rack", "barbell", "ez bar",
+                   "preacher", "ghd", "leg press", "pulldown", "treadmill",
+                   "elliptical", "rower", "dip station")
+        self._gym_only_ids: set[str] = {
+            e["id"] for e in self.exercises
+            if e.get("id") and any(kw in _norm(e.get("equipment") or "") for kw in _GYM_KW)
+        }
 
         # Guidance records keyed by normalized name for fast lookup.
         self._chronic: dict[str, dict] = {_norm(r["name"]): r for r in self.by_type["chronic_condition"]}
@@ -485,11 +546,16 @@ class WorkoutRecommendationEngine:
                 base &= goal_ids
 
         if equipment_tags:
+            # HARD constraint — a home/no-equipment user must never see a
+            # bench press. Unconditional intersect; the relaxation ladder in
+            # recommend_exercises() relaxes goal/difficulty/category instead,
+            # and its last resort is the bodyweight pool, never "any equipment".
             equip_ids: set[str] = set()
             for t in equipment_tags:
                 equip_ids |= self._idx_tag.get(t, set())
-            if base & equip_ids:
-                base &= equip_ids
+            base &= equip_ids
+            if "gym" not in equipment_tags and "machine" not in equipment_tags:
+                base -= self._gym_only_ids
 
         diff_ids: set[str] = set()
         for d in difficulty_levels:
@@ -521,14 +587,19 @@ class WorkoutRecommendationEngine:
     ) -> list[dict]:
         ids = self._candidate_ids(categories, kb_goals, equipment_tags, difficulty_levels, unsafe_ids, cardio_only)
         if not ids:
-            # Relax equipment first, then difficulty, then goal — category and
-            # medical safety (unsafe_ids) are never relaxed.
-            ids = self._candidate_ids(categories, kb_goals, set(), difficulty_levels, unsafe_ids, cardio_only)
+            # Relaxation ladder: goal → difficulty → category. Equipment and
+            # medical safety are NEVER relaxed — a filter combination that
+            # can't be satisfied within the user's equipment falls through to
+            # the always-available bodyweight pool instead.
+            ids = self._candidate_ids(categories, [], equipment_tags, difficulty_levels, unsafe_ids, cardio_only)
         if not ids:
-            ids = self._candidate_ids(categories, [], set(), list(_DIFFICULTY_BY_LEVEL["advanced"]), unsafe_ids, cardio_only)
+            ids = self._candidate_ids(categories, [], equipment_tags, list(_DIFFICULTY_BY_LEVEL["advanced"]), unsafe_ids, cardio_only)
         if not ids and categories:
-            # Last resort: drop the category constraint too rather than return nothing.
-            ids = self._candidate_ids([], kb_goals, set(), list(_DIFFICULTY_BY_LEVEL["advanced"]), unsafe_ids, cardio_only)
+            ids = self._candidate_ids([], kb_goals, equipment_tags, list(_DIFFICULTY_BY_LEVEL["advanced"]), unsafe_ids, cardio_only)
+        if not ids:
+            # Bodyweight fallback — safe under every equipment preference.
+            bodyweight = self._idx_tag.get("bodyweight", set()) | self._idx_tag.get("no-equipment", set())
+            ids = bodyweight - unsafe_ids - self._gym_only_ids
 
         # Most candidates tie on _score() (few exercises are ever explicitly
         # "preferred" by name — most guidance is prose, not a list of exact
@@ -566,13 +637,22 @@ class WorkoutRecommendationEngine:
         condition_names: list[str],
         lifestyle_name: str | None,
         high_stress: bool = False,
-        exercises_per_workout: int = 4,
+        exercises_per_workout: int | None = None,  # legacy override; None → derived from available_time
+        available_time: int = 30,
+        disliked_exercises: list[str] | None = None,
+        equipment_label: str = "",
+        level_label: str = "",
     ) -> dict[str, Any]:
         """Deterministic 7-day plan sourced entirely from the KB. Every
         exercise/warm-up/mobility/stretch/cooldown/breathing/meditation pick
         is a real KB record — see module docstring for the firewall this
-        feeds into on the groq_service/routes/assessment.py side."""
+        feeds into on the groq_service/routes/assessment.py side.
+
+        available_time is a HARD budget: allocate_time() splits it across
+        sections first, and the exercise count is whatever fits inside the
+        main-work remainder — a 10-minute user gets a 10-minute day, always."""
         template = _WEEKLY_TEMPLATES.get(fitness_goal, _WEEKLY_TEMPLATES["general_fitness"])
+        alloc = allocate_time(available_time, high_stress)
 
         unsafe_ids: set[str] = set()
         preferred_ids: set[str] = set()
@@ -583,10 +663,32 @@ class WorkoutRecommendationEngine:
         preferred_ids |= life_preferred
         unsafe_ids |= life_avoid
 
+        # User preference memory (#13): exercises the athlete repeatedly
+        # skips are excluded exactly like a medical exclusion — by name.
+        for name in disliked_exercises or []:
+            eid = self._name_to_id.get(_norm(name))
+            if eid:
+                unsafe_ids.add(eid)
+
         kb_goals = _GOAL_TO_KB_GOALS.get(fitness_goal, ["General Fitness"])
         usage_counts: dict[str, int] = defaultdict(int)
         section_usage: dict[str, int] = defaultdict(int)
         variety_seed = "|".join([fitness_goal, lifestyle_name or "", *sorted(condition_names), *sorted(equipment_tags)])
+
+        # The "why this exercise" context — every constraint the pick already
+        # satisfies, phrased once and reused (#10 Explanations).
+        why_parts = [fitness_goal.replace("_", " ").title() + " goal",
+                     f"{alloc['total']}-minute session"]
+        if equipment_label:
+            why_parts.append(equipment_label + " equipment")
+        if level_label:
+            why_parts.append(level_label.title() + " level")
+        if condition_names:
+            why_parts.append("safe for " + ", ".join(condition_names))
+        why_context = ", ".join(why_parts)
+
+        n_strength = exercises_per_workout or max(1, alloc["main"] // _MINUTES_PER_STRENGTH_EXERCISE)
+        n_cardio = max(1, alloc["main"] // _MINUTES_PER_CARDIO_BLOCK)
 
         days = []
         for i, day_name in enumerate(_DAY_NAMES):
@@ -601,38 +703,48 @@ class WorkoutRecommendationEngine:
                 })
                 continue
 
-            warmup = self._pick_one("warmup", difficulty_levels, section_usage)
-            breathing = self._pick_one("breathing", difficulty_levels, section_usage, tag_hint="stress-relief" if high_stress else None)
-            meditation = self._pick_one("meditation", difficulty_levels, section_usage)
-            cooldown = self._pick_one("cooldown", difficulty_levels, section_usage)
-            mobility = self._pick_one("mobility", difficulty_levels, section_usage)
-            stretch1 = self._pick_one("stretch", difficulty_levels, section_usage)
-            stretch2 = self._pick_one("stretch", difficulty_levels, section_usage) if high_stress else None
-            stretching = [s for s in (stretch1, stretch2) if s]
+            warmup = self._pick_one("warmup", difficulty_levels, section_usage) if alloc["warmup"] else None
+            breathing = (self._pick_one("breathing", difficulty_levels, section_usage,
+                                        tag_hint="stress-relief" if high_stress else None)
+                         if alloc["breathing"] else None)
+            meditation = self._pick_one("meditation", difficulty_levels, section_usage) if alloc["mind_reset"] else None
+            cooldown = self._pick_one("cooldown", difficulty_levels, section_usage) if alloc["cooldown"] else None
+            mobility = self._pick_one("mobility", difficulty_levels, section_usage) if alloc["mobility"] else None
+            stretching = []
+            if alloc["stretch"]:
+                stretch1 = self._pick_one("stretch", difficulty_levels, section_usage)
+                stretch2 = self._pick_one("stretch", difficulty_levels, section_usage) if (high_stress and alloc["stretch"] >= 3) else None
+                stretching = [s for s in (stretch1, stretch2) if s]
 
             if slot.get("active_recovery"):
                 days.append({
-                    "day": day_name, "type": "Active Recovery", "focus": slot["focus"], "duration_minutes": 20,
+                    "day": day_name, "type": "Active Recovery", "focus": slot["focus"],
+                    "duration_minutes": min(alloc["total"], 20),
                     "exercises": [],
-                    "warmup": _kb_ref(warmup), "mobility": _kb_ref(mobility),
-                    "stretching": [_kb_ref(s) for s in stretching], "cooldown": _kb_ref(cooldown),
-                    "breathing": _kb_ref(breathing), "mind_reset": _kb_ref(meditation),
+                    "warmup": _kb_ref(warmup, alloc["warmup"]), "mobility": _kb_ref(mobility, alloc["mobility"]),
+                    "stretching": [_kb_ref(s, alloc["stretch"]) for s in stretching],
+                    "cooldown": _kb_ref(cooldown, alloc["cooldown"]),
+                    "breathing": _kb_ref(breathing, alloc["breathing"]), "mind_reset": _kb_ref(meditation, alloc["mind_reset"]),
                     "daily_tip": "Easy movement today speeds recovery more than sitting completely still.",
                 })
                 continue
 
+            is_cardio_day = slot.get("cardio_only", False)
+            n_main = n_cardio if is_cardio_day else n_strength
             day_seed = f"{variety_seed}|{day_name}"
             main = self.recommend_exercises(
                 categories=slot["categories"], kb_goals=kb_goals, equipment_tags=equipment_tags,
                 difficulty_levels=difficulty_levels, unsafe_ids=unsafe_ids, preferred_ids=preferred_ids,
-                usage_counts=usage_counts, top_n=exercises_per_workout, cardio_only=slot.get("cardio_only", False),
+                usage_counts=usage_counts, top_n=n_main, cardio_only=is_cardio_day,
                 variety_seed=day_seed,
             )
             for e in main:
                 usage_counts[e["id"]] += 1
 
+            # Accessory work only when the time budget actually has room for
+            # it (2 extra exercises ≈ 8 minutes of main-block time).
             accessory = []
-            if not slot.get("cardio_only") and len(main) >= 2:
+            if not is_cardio_day and len(main) >= 2 and alloc["main"] >= (n_strength + 2) * _MINUTES_PER_STRENGTH_EXERCISE - 2:
                 accessory_categories = [c for c in ["Core", "Full Body"] if c not in slot["categories"]] or slot["categories"]
                 accessory = self.recommend_exercises(
                     categories=accessory_categories, kb_goals=kb_goals, equipment_tags=equipment_tags,
@@ -643,20 +755,23 @@ class WorkoutRecommendationEngine:
                 for e in accessory:
                     usage_counts[e["id"]] += 1
 
-            exercises = [_exercise_to_plan_item(e, is_accessory=False) for e in main] + \
-                        [_exercise_to_plan_item(e, is_accessory=True) for e in accessory]
+            per_ex_minutes = max(1, alloc["main"] // max(1, len(main) + len(accessory)))
+            exercises = [_exercise_to_plan_item(e, is_accessory=False, time_minutes=per_ex_minutes, why_context=why_context) for e in main] + \
+                        [_exercise_to_plan_item(e, is_accessory=True, time_minutes=per_ex_minutes, why_context=why_context) for e in accessory]
 
             days.append({
                 "day": day_name, "type": slot["type"], "focus": slot["focus"],
-                "duration_minutes": 20 + len(exercises) * 6,
+                "duration_minutes": alloc["total"],
+                "time_allocation": {k: v for k, v in alloc.items() if k != "total" and v},
                 "exercises": exercises,
-                "warmup": _kb_ref(warmup), "mobility": _kb_ref(mobility),
-                "stretching": [_kb_ref(s) for s in stretching], "cooldown": _kb_ref(cooldown),
-                "breathing": _kb_ref(breathing), "mind_reset": _kb_ref(meditation),
+                "warmup": _kb_ref(warmup, alloc["warmup"]), "mobility": _kb_ref(mobility, alloc["mobility"]),
+                "stretching": [_kb_ref(s, alloc["stretch"]) for s in stretching],
+                "cooldown": _kb_ref(cooldown, alloc["cooldown"]),
+                "breathing": _kb_ref(breathing, alloc["breathing"]), "mind_reset": _kb_ref(meditation, alloc["mind_reset"]),
                 "daily_tip": None,
             })
 
-        return {"days": days}
+        return {"days": days, "time_allocation": alloc, "why_context": why_context}
 
     def build_recovery_week(self, recovery_condition_name: str, high_stress: bool = False) -> dict[str, Any]:
         """'I'm sick today' / 'injured' override — recovery breathing +
@@ -685,27 +800,34 @@ class WorkoutRecommendationEngine:
         }
 
 
-def _kb_ref(rec: dict | None) -> dict | None:
+def _kb_ref(rec: dict | None, minutes: int = 0) -> dict | None:
     if not rec:
         return None
     return {
         "name": rec.get("name"),
         "steps": rec.get("steps") or [],
-        "duration": rec.get("dose") or rec.get("duration") or rec.get("target") or "",
+        "duration": (f"{minutes} min" if minutes else "") or rec.get("dose") or rec.get("duration") or rec.get("target") or "",
+        "allocated_minutes": minutes or None,
         "breathing": rec.get("breathing"),
         "id": rec.get("id"),
     }
 
 
-def _exercise_to_plan_item(e: dict, is_accessory: bool) -> dict[str, Any]:
+def _exercise_to_plan_item(e: dict, is_accessory: bool, time_minutes: int = 0, why_context: str = "") -> dict[str, Any]:
+    why = f"Targets {e.get('primary', 'this muscle group')}"
+    if why_context:
+        why += f" — chosen to match your {why_context}."
+    else:
+        why += " — matched to your goal, equipment, and safety profile."
     return {
         "name": e["name"],
         "exercise_id": e["id"],
         "sets": e.get("sets") or "3",
         "reps_or_duration": e.get("reps") or "10-12 reps",
         "rest_seconds": _parse_rest_seconds(e.get("rest")),
+        "time_minutes": time_minutes or None,
         "tip": (e.get("tips") or [""])[0] or "Focus on controlled form over speed.",
-        "why_selected": f"Targets {e.get('primary', 'this muscle group')} — matched to your goal, equipment, and safety profile.",
+        "why_selected": why,
         "progression": e.get("progression") or "",
         "is_accessory": is_accessory,
         "category": e.get("category"),
@@ -775,6 +897,7 @@ def format_week_for_output(week_plan: dict, fitness_goal: str, llm_parsed: dict 
             "type": day["type"],
             "focus": day["focus"],
             "duration_minutes": day["duration_minutes"],
+            "time_allocation": day.get("time_allocation"),
             "calories_burned_est": round(day_kcal) if day["exercises"] else 0,
             "exercises": day["exercises"],
             "warmup": day["warmup"],
@@ -795,6 +918,17 @@ def format_week_for_output(week_plan: dict, fitness_goal: str, llm_parsed: dict 
             "Every exercise below comes from the ZITLAS verified workout knowledge base, matched to "
             "your goal, equipment, experience level, and any medical conditions you've shared."
         ),
+        # #10 Explanations — one concise, deterministic sentence stating the
+        # constraints every pick in this plan already satisfies.
+        "personalization_note": ("This plan matches your " + week_plan["why_context"] + ".")
+                                 if week_plan.get("why_context") else None,
+        # #7 Progressive overload — deterministic week-over-week guidance
+        # (per-exercise `progression` from the KB gives the specific move).
+        "progression_plan": {
+            "week_2": "Add 1-2 reps to each strength exercise, or 2-3 minutes to cardio blocks.",
+            "week_3": "Add one set to your two hardest exercises, or use each exercise's progression variation.",
+            "week_4": "Swap 1-2 exercises for their harder progression (listed on each exercise), then deload lightly next week.",
+        },
     }
     extra_field = _GOAL_TOP_LEVEL_FIELDS.get(fitness_goal, "weekly_calorie_burn_est")
     result[extra_field] = total_sets if extra_field == "weekly_training_volume_sets" else round(total_kcal)

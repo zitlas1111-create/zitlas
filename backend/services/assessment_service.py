@@ -56,6 +56,14 @@ class AssessmentInput(BaseModel):
     budget:             str = Field(default="",   description="e.g. ₹100/day or 150 rupees")
     medical_conditions: str = Field(default="none")
 
+    # Personalization (all optional — absent fields behave exactly as before)
+    uses_supplements:   str  = Field(default="", description="'no' | 'yes' | '' (not asked)")
+    supplement_types:   list = Field(default_factory=list, description="e.g. ['Whey Protein', 'Creatine'] when uses_supplements='yes'")
+    disliked_exercises: list = Field(default_factory=list, description="exercise names the user repeatedly skips — never recommend")
+    disliked_foods:     list = Field(default_factory=list, description="foods the user dislikes — never recommend")
+    workout_intensity_preference: str = Field(default="", description="light | moderate | intense | '' ")
+    preferred_workout_time:       str = Field(default="", description="morning | evening | flexible | ''")
+
     # Fitness goal type — controls which RAG knowledge base is used.
     fitness_goal: str = Field(
         default="weight_loss",
