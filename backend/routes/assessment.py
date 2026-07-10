@@ -18,6 +18,7 @@ from fastapi import APIRouter, HTTPException
 
 from services import groq_service, rag_service
 from services import medical_conditions as medcon
+from services import workout_engine
 from services.assessment_service import AssessmentInput, run_assessment
 
 router = APIRouter()
@@ -766,13 +767,45 @@ Output valid JSON only — no extra text."""
     return parsed, result
 
 
+_TIME_TO_EXERCISE_COUNT = [(15, 2), (20, 3), (30, 4), (45, 5), (60, 6), (999, 7)]
+
+
+def _exercises_per_workout(available_time: int) -> int:
+    for cutoff, count in _TIME_TO_EXERCISE_COUNT:
+        if available_time <= cutoff:
+            return count
+    return 4
+
+
 async def _generate_workout_plan(
     data: AssessmentInput,
     calc: dict,
     rag_context: str,
     fitness_goal: str = "weight_loss",
 ) -> tuple[dict | None, dict]:
-    """Call LLM with RAG context to produce a 7-day workout plan JSON."""
+    """
+    Exercises are ALWAYS retrieved from services/workout_engine.py (backend/
+    workout/zitlas_kb_records.jsonl) — never invented by the LLM. The LLM
+    below is only asked for plan_name/summary/daily_tip narration; whatever
+    it writes for exercises/warmup/mobility/stretching/cooldown/breathing/
+    mind_reset is discarded and replaced with the engine's picks in
+    workout_engine.format_week_for_output(), regardless of what the LLM
+    returns — the same hallucination firewall used for diet plans.
+
+    An acute "I'm sick today" / "injured" mention in medical_conditions
+    skips the LLM entirely and returns a KB-sourced recovery-only week
+    (no strength work, per spec) — see workout_engine.build_recovery_week().
+    """
+    empty_llm_result = {"tokens_used": 0, "model": "kb-engine", "reply": ""}
+
+    recovery_condition = workout_engine.WorkoutRecommendationEngine.resolve_recovery_condition(data.medical_conditions)
+    if recovery_condition:
+        engine = workout_engine.get_engine()
+        recovery_plan = engine.build_recovery_week(recovery_condition, high_stress=data.stress_level >= 8)
+        structured = workout_engine.format_recovery_for_output(recovery_plan, recovery_condition)
+        print(f"[WORKOUT ENGINE] Recovery mode active — {recovery_condition}")
+        return structured, empty_llm_result
+
     is_muscle         = fitness_goal == "muscle_gain"
     is_general        = fitness_goal == "general_fitness"
     is_transformation = fitness_goal == "transformation"
@@ -923,6 +956,48 @@ CRITICAL — FOLLOW THESE RULES OR THE PLAN WILL BE REJECTED:
     med_directives = medcon.build_condition_directives(data.medical_conditions)
     med_workout_block = medcon.format_prompt_block(med_directives, "workout")
 
+    # ── EXERCISE SELECTION happens here, deterministically, from the KB —
+    #    BEFORE the LLM is ever called. See docstring above.
+    if fitness_goal == "weight_loss":
+        bmi_val = float(calc.get("bmi", 25.0))
+        kb_fitness_level = "beginner" if bmi_val > 30 else ("intermediate" if bmi_val > 25 else "advanced")
+    else:
+        kb_fitness_level = getattr(data, "fitness_level", "intermediate")
+    engine = workout_engine.get_engine()
+    condition_names = workout_engine.WorkoutRecommendationEngine.resolve_condition_names(data.medical_conditions)
+
+    # Age/gender/disability profile hints — same avoid_ex/recommended
+    # resolution path as chronic conditions (see _unsafe_ids_for_condition),
+    # just resolved from age/gender/free-text instead of a keyword-detected
+    # illness. Senior/kids also force Beginner difficulty regardless of the
+    # stated fitness_level — safety-first for those age brackets.
+    age_profile = workout_engine.WorkoutRecommendationEngine.resolve_age_profile_name(data.age)
+    disability_profile = workout_engine.WorkoutRecommendationEngine.resolve_disability_name(data.medical_conditions)
+    women_profile = workout_engine.WorkoutRecommendationEngine.resolve_women_focus_name(data.gender, condition_names)
+    for extra in (age_profile, disability_profile, women_profile):
+        if extra:
+            condition_names.append(extra)
+    if data.age >= 60 or data.age <= 17:
+        kb_fitness_level = "beginner"
+
+    lifestyle_name = workout_engine.WorkoutRecommendationEngine.resolve_lifestyle_name(data.living_situation, data.occupation)
+    difficulty_levels = workout_engine.difficulty_levels_for(kb_fitness_level)
+    equipment_tags = workout_engine.equipment_tags_for(data.workout_preference, data.living_situation)
+    high_stress = data.stress_level >= 8
+    week_plan = engine.build_week_plan(
+        fitness_goal=fitness_goal, difficulty_levels=difficulty_levels, equipment_tags=equipment_tags,
+        condition_names=condition_names, lifestyle_name=lifestyle_name, high_stress=high_stress,
+        exercises_per_workout=_exercises_per_workout(data.available_time),
+    )
+    print(f"[WORKOUT ENGINE] goal={fitness_goal} level={kb_fitness_level} equipment={equipment_tags} "
+          f"conditions={condition_names} lifestyle={lifestyle_name} stress_high={high_stress}")
+
+    kb_summary_lines = []
+    for day in week_plan["days"]:
+        names = ", ".join(e["name"] for e in day["exercises"]) or "(rest / recovery — no exercises)"
+        kb_summary_lines.append(f"  {day['day']} ({day['type']} — {day['focus']}): {names}")
+    kb_summary = "\n".join(kb_summary_lines)
+
     prompt = f"""RESEARCH CONTEXT ({goal_label} fitness and conditioning knowledge base):
 {rag_context if rag_context else "No specific research retrieved — use general evidence-based principles."}
 
@@ -932,7 +1007,12 @@ CRITICAL — FOLLOW THESE RULES OR THE PLAN WILL BE REJECTED:
 {muscle_context}
 {med_workout_block}
 
-Generate a complete 7-day {goal_label} workout plan. All exercises must suit {data.workout_preference} setting.
+PRE-SELECTED EXERCISES (from the ZITLAS verified workout knowledge base — already chosen for
+equipment/experience/goal/medical safety; do not add, remove, or substitute any exercise):
+{kb_summary}
+
+Write a plan_name, a 2-sentence summary, and one daily_tip per day for the plan above. Do not
+restate exercises, sets, or reps yourself — those are filled in automatically.
 Output valid JSON only — no extra text."""
 
     prompt += (
@@ -942,15 +1022,23 @@ Output valid JSON only — no extra text."""
     )
 
     print(f"[WORKOUT AI] {fitness_goal} prompt | Using GROQ_API_KEY")
-    result = await groq_service.chat(
-        user_message=prompt,
-        system_override=workout_system,
-        temperature=0.5,
-        max_tokens=4000,
-        json_mode=True,
-        provider="groq_first",
-    )
-    return _extract_json(result["reply"]), result
+    try:
+        result = await groq_service.chat(
+            user_message=prompt,
+            system_override=workout_system,
+            temperature=0.5,
+            max_tokens=4000,
+            json_mode=True,
+            provider="groq_first",
+        )
+        llm_parsed = _extract_json(result["reply"])
+    except Exception as e:
+        print(f"[WORKOUT AI] LLM call failed ({type(e).__name__}: {e}) — "
+              f"continuing with KB-only plan (names/tips auto-generated)")
+        llm_parsed, result = None, empty_llm_result
+
+    structured = workout_engine.format_week_for_output(week_plan, fitness_goal, llm_parsed)
+    return structured, result
 
 
 # ══════════════════════════════════════════════════════════════════════════════
