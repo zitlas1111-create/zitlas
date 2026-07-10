@@ -544,6 +544,12 @@
       var cls = 'hs-status-btn' + (activeKey === s.key ? ' ' + s.cls : '');
       return '<button class="' + cls + '" data-hs-status="' + s.key + '">' + s.label + '</button>';
     }).join('');
+    /* Only ever appears alongside an active temporary status (sick/injured/
+       poor_sleep/stress/unwell/other) — "great" never sets zitlas_health_
+       today at all, so `today` is already the exact right condition. */
+    if (today) {
+      btns += '<button class="hs-status-btn hs-status-btn--clear" id="hsClearStatusChip">✕ Clear Status</button>';
+    }
 
     var recovery = '';
     if (today) {
@@ -563,7 +569,6 @@
         '<div class="hs-rec-row" style="margin-top:6px"><b>Steps:</b> ' +
           esc(String(today.oldStepsGoal)) + ' → <b style="color:#578A2C">' + esc(String(today.stepsGoal)) + '</b></div>' +
         '<div class="hs-rec-row"><b>Streak:</b> protected — today counts as a Recovery Day, not a miss.</div>' +
-        '<button class="hs-clear-btn" id="hsClearBtn">I’m feeling better — restore today’s plan</button>' +
         '</div>';
     } else if (todayGreat()) {
       recovery = '<div class="hs-recovery hs-recovery--ok">' +
@@ -602,10 +607,17 @@
     mount.querySelectorAll('[data-hs-status]').forEach(function (b) {
       b.addEventListener('click', function () { openReportSheet(b.dataset.hsStatus); });
     });
-    var clearBtn = $('hsClearBtn');
-    if (clearBtn) clearBtn.addEventListener('click', function () {
+    /* Clears only today's temporary status — clearToday() removes just the
+       zitlas_health_today override, never touching assessment, profile,
+       goals, or expert-reviewed plans. Removing it is what restores the
+       original workout/diet/step goal: diet.js/weekly-plan.js/dashboard.js
+       all fall back to the untouched AI (or expert) plan the moment this
+       key is gone, and the Recovery Mode card disappears on the re-render
+       below since activeToday() then returns null. */
+    var clearChip = $('hsClearStatusChip');
+    if (clearChip) clearChip.addEventListener('click', function () {
       clearToday();
-      toast('Full plan restored for today.');
+      toast('Status cleared — today’s original plan is restored.');
       renderCard();
     });
   }
