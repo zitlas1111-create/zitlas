@@ -508,6 +508,11 @@ img { display: block; max-width: 100%; }
   line-height: 1.35;
 }
 
+/* Recovery-day meals: swap stays visible but visually muted — tapping
+   explains why instead of opening the swap modal (see wireSwapButtons()). */
+.swap-btn--locked:hover { background: rgba(var(--white-rgb),0.06); transform: none; }
+.swap-btn--locked .swap-label { color: var(--text-muted); }
+
 /* =============================================
    TODAY'S NUTRITION SUMMARY
    ============================================= */

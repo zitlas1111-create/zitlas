@@ -573,6 +573,15 @@
       <path d="M21 13v2a4 4 0 0 1-4 4H3"/>
     </svg>`;
 
+    /* Recovery meals are a fixed, health-safe template for today only —
+       swap stays visible (not silently removed) but locked, with a toast
+       explaining why on tap. See wireSwapButtons(). */
+    const lockSvg = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none"
+      stroke="var(--text-muted)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="5" y="11" width="14" height="10" rx="2"/>
+      <path d="M8 11V7a4 4 0 0 1 8 0v4"/>
+    </svg>`;
+
     const isExpertActive  = expertReview && expertReview.status === 'APPROVED';
     const isNewExpertPlan = planSource === 'expert';
     const reviewedBy      = isExpertActive ? (expertReview.reviewedBy || 'Expert') : '';
@@ -634,10 +643,15 @@
             ${meal.purpose ? `<span class="meal-purpose">${esc(meal.purpose)}</span>` : ''}
             ${expertNote}
           </div>
-          ${meal._recovery ? '' : `<button class="swap-btn" data-meal="${esc(meal.meal_name || '')}" aria-label="Swap ${esc(meal.meal_name || '')}">
-            ${swapSvg}
-            <span class="swap-label">Can't eat<br>this?</span>
-          </button>`}
+          ${meal._recovery
+            ? `<button class="swap-btn swap-btn--locked" data-meal="${esc(meal.meal_name || '')}" data-recovery-locked="1" aria-label="Swap locked — recovery meal">
+                ${lockSvg}
+                <span class="swap-label">Recovery<br>meal</span>
+              </button>`
+            : `<button class="swap-btn" data-meal="${esc(meal.meal_name || '')}" aria-label="Swap ${esc(meal.meal_name || '')}">
+                ${swapSvg}
+                <span class="swap-label">Can't eat<br>this?</span>
+              </button>`}
         </article>` + buildCoachMealRow(meal, dayData.day || dayData.day_type);
     }).join('');
 
@@ -978,6 +992,12 @@
   function wireSwapButtons() {
     document.querySelectorAll('.swap-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
+        /* Recovery-day meals are a fixed, health-safe template for today
+           only — never opens the swap modal, just explains why. */
+        if (btn.dataset.recoveryLocked) {
+          showToast('🛟 Recovery meals are fixed for today to keep you safe while you recover — your normal plan resumes tomorrow.');
+          return;
+        }
         const mealName = btn.dataset.meal || '';
         /* Find the foods for this meal from the current day plan */
         const day   = weeklyPlan && weeklyPlan.days && weeklyPlan.days[currentDay];
