@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from groq import AsyncGroq
-from services import gemini_service, openrouter_service, food_engine
+from services import gemini_service, openrouter_service, food_engine, location_food_engine
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 DATA_DIR = Path(__file__).parent.parent / "data"
@@ -1440,11 +1440,29 @@ def _engine_query_context(player_profile: dict, lifestyle_data: dict | None) -> 
     profile_rules = food_engine.load_profile_for_user(player_profile, ld)
     uses_supp = str(player_profile.get("uses_supplements") or ld.get("uses_supplements") or "").lower()
     disliked = list(ld.get("disliked_foods", []) or [])
+    favorite = list(ld.get("favorite_foods", []) or [])
     if uses_supp == "no":
         profile_rules = dict(profile_rules)
         profile_rules["avoidCategories"] = list(profile_rules.get("avoidCategories") or []) + ["Protein Supplements"]
         disliked += _SUPPLEMENT_NAME_KEYWORDS
         print("[FOOD ENGINE] Supplements excluded (user preference: no supplements)")
+
+    # Location (Geo-Aware Food Intelligence): purely additive — merges into
+    # the SAME preferredCategories/favorite_foods mechanisms above, so a user
+    # with no saved location behaves exactly as before (region_boost is None).
+    region_boost = location_food_engine.build_region_boost(
+        player_profile.get("location") or ld.get("location")
+    )
+    region_note = None
+    if region_boost:
+        profile_rules = dict(profile_rules)
+        profile_rules["preferredCategories"] = list(dict.fromkeys(
+            list(profile_rules.get("preferredCategories") or []) + region_boost["preferred_categories"]
+        ))
+        favorite = list(dict.fromkeys(favorite + region_boost["preferred_keywords"]))
+        region_note = region_boost["explanation"]
+        print(f"[FOOD ENGINE] Region boost: {region_boost['region_label']}")
+
     print(f"[FOOD ENGINE] Occupation profile: {profile_rules.get('profileName')}")
     return {
         "goal_tags":     food_engine.goal_tags_from_profile(player_profile),
@@ -1453,11 +1471,12 @@ def _engine_query_context(player_profile: dict, lifestyle_data: dict | None) -> 
         "budget_tier":   food_engine.budget_tier_from_lifestyle(ld.get("daily_budget", "")),
         "disease_tags":  food_engine.FoodRecommendationEngine.resolve_disease_tags(medical_raw),
         "allergens":     food_engine.FoodRecommendationEngine.resolve_allergens(ld.get("allergies", [])),
-        "favorite_foods": ld.get("favorite_foods", []) or [],
+        "favorite_foods": favorite,
         "disliked_foods": disliked,
         "profile":       profile_rules,
         "subgoal_tag":   food_engine.resolve_subgoal(player_profile),
         "season_tag":    food_engine.current_season(),
+        "region_note":   region_note,
     }
 
 
@@ -1491,9 +1510,12 @@ def _meal_personalization_note(ctx: dict | None) -> str | None:
         parts.append(ctx["budget_tier"].lower() + " budget")
     if ctx.get("disease_tags"):
         parts.append("safe for " + ", ".join(ctx["disease_tags"]))
-    if not parts:
-        return None
-    return "These meals match your " + ", ".join(parts) + "."
+    note = None
+    if parts:
+        note = "These meals match your " + ", ".join(parts) + "."
+    if ctx.get("region_note"):
+        note = (note + " " + ctx["region_note"]) if note else ctx["region_note"]
+    return note
 
 
 def _apply_engine_foods(parsed: dict | None, week_plan: dict, ctx: dict | None = None) -> dict[str, Any]:
@@ -1516,7 +1538,15 @@ def _apply_engine_foods(parsed: dict | None, week_plan: dict, ctx: dict | None =
             combo_protein = sum(f["protein"] for f in combo)
             llm_meal = llm_meals.get(slot) if isinstance(llm_meals.get(slot), dict) else {}
             name = (llm_meal.get("name") or "").strip() or " + ".join(f["name"] for f in combo)
-            tip = (llm_meal.get("tip") or "").strip() or f"{combo[0]['name']} — {combo[0]['description']}"
+            # Healthy-local-alternative guidance (geo STEP 6) — only steps in
+            # when the LLM didn't already write its own tip, and only for a
+            # food that actually matched a known keyword (see healthy_swap_tip).
+            swap_tip = location_food_engine.healthy_swap_tip(combo[0]["name"])
+            tip = (
+                (llm_meal.get("tip") or "").strip()
+                or (f"Enjoy {combo[0]['name']} — {swap_tip}" if swap_tip else None)
+                or f"{combo[0]['name']} — {combo[0]['description']}"
+            )
             meals_out[slot] = {
                 "name": name,
                 "foods": [food_engine.format_food_line(f) for f in combo],
@@ -1555,6 +1585,7 @@ def _apply_engine_foods(parsed: dict | None, week_plan: dict, ctx: dict | None =
             "goal, budget, living situation, and any medical conditions you've shared."
         ),
         "personalization_note": _meal_personalization_note(ctx),
+        "location_note": ctx.get("region_note") if ctx else None,
     }
 
 

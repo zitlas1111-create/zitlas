@@ -807,6 +807,14 @@
     const athleteProfile = safeJSON('athlete_profile', {});
     const lifestyleData  = safeJSON('lifestyle_data', {});
 
+    /* Geo-Aware Food Intelligence: optional, only present once the user has
+       granted location permission. Absent -> lifestyleData.location stays
+       unset -> backend behaves exactly as before. */
+    const _savedLoc = safeJSON('zitlas_location', null);
+    if (_savedLoc && typeof _savedLoc === 'object') {
+      lifestyleData.location = _savedLoc;
+    }
+
     /* Supplement preference lives on the assessment (new flow) — merge it in
        so swap suggestions also respect "no supplements" (backend reads
        user_profile.uses_supplements; absent = old behavior). */
@@ -2037,6 +2045,7 @@
     loadTheme();
 
     renderPrecautions();
+    renderLocationNote();
     initDaySelector();
     initSwapModal();
     initNutriSelectModal();
@@ -2257,6 +2266,30 @@
             return '<li style="font-size:13px;color:var(--text-sec);line-height:1.6;margin-bottom:4px">' + esc(p) + '</li>';
           }).join('') +
         '</ul>' +
+      '</div>';
+    wrap.style.display = 'block';
+  }
+
+  /* ══════════════════════════════════════════
+     LOCATION-AWARE MEAL NOTE — one-line explanation set by ai-coach.js /
+     the weekly-plan fetch whenever the backend's response carried a
+     location_note (i.e. the user has a saved location AND it matched a
+     known region). Absent entirely for users with no saved location —
+     zitlas_location_note is only ever written when non-empty.
+  ══════════════════════════════════════════ */
+  function renderLocationNote() {
+    var wrap = document.getElementById('geoLocationNote');
+    if (!wrap) return;
+    var note = localStorage.getItem('zitlas_location_note') || '';
+    if (!note) {
+      wrap.style.display = 'none';
+      wrap.innerHTML = '';
+      return;
+    }
+    wrap.innerHTML =
+      '<div class="cw-card" style="margin:0 16px 14px;display:flex;align-items:flex-start;gap:8px">' +
+        '<span style="font-size:16px;line-height:1.5">📍</span>' +
+        '<p style="margin:0;font-size:13px;color:var(--text-sec);line-height:1.6">' + esc(note) + '</p>' +
       '</div>';
     wrap.style.display = 'block';
   }

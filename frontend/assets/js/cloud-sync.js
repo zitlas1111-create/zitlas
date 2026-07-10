@@ -44,6 +44,7 @@
     precautions:  'zitlas_precautions',
     personalInfo: 'zitlas_personal_info',
     wallet:       'zitlas_wallet',
+    location:     'zitlas_location', /* Geo-Aware Food Intelligence — optional */
     planMeta:     null, /* virtual — see planGeneratedAt/planId below */
   };
   /* Small standalone string/number fields that don't warrant a whole

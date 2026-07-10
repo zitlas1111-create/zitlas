@@ -64,6 +64,12 @@ class AssessmentInput(BaseModel):
     workout_intensity_preference: str = Field(default="", description="light | moderate | intense | '' ")
     preferred_workout_time:       str = Field(default="", description="morning | evening | flexible | ''")
 
+    # Geo-Aware Food Intelligence (optional — absent behaves exactly as
+    # before). {city, district, state, country, pincode, latitude,
+    # longitude, timezone} — every key optional, set by the frontend's
+    # location-permission prompt. See services/location_food_engine.py.
+    location: dict = Field(default_factory=dict)
+
     # Fitness goal type — controls which RAG knowledge base is used.
     fitness_goal: str = Field(
         default="weight_loss",

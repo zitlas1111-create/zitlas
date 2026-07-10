@@ -16,7 +16,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from services import food_engine
+from services import food_engine, location_food_engine
 
 _DATA_DIR = Path(__file__).parent.parent / "data"
 
@@ -612,6 +612,10 @@ _OFFLINE_SLOT_MAP = {
 def _engine_context(player_profile: dict | None, lifestyle_data: dict | None):
     ld = lifestyle_data or {}
     pp = player_profile or {}
+    # Region boost (geo-aware food intelligence) — additive only; a user with
+    # no saved location gets profile=None, i.e. unchanged offline behavior.
+    region_boost = location_food_engine.build_region_boost(pp.get("location") or ld.get("location"))
+    profile = {"preferredCategories": region_boost["preferred_categories"]} if region_boost else None
     return {
         "goal_tags": food_engine.goal_tags_from_profile(pp),
         "diet_tags": food_engine.diet_tags_from_lifestyle(ld.get("diet_type", "")),
@@ -620,6 +624,7 @@ def _engine_context(player_profile: dict | None, lifestyle_data: dict | None):
         "disease_tags": food_engine.FoodRecommendationEngine.resolve_disease_tags(
             pp.get("medical_conditions") or pp.get("medical_condition") or ""),
         "allergens": food_engine.FoodRecommendationEngine.resolve_allergens(ld.get("allergies", [])),
+        "profile": profile,
     }
 
 
@@ -631,6 +636,7 @@ def _engine_foods_for_slot(engine, meal_name: str, ctx: dict, usage_counts: dict
         disease_tags=ctx["disease_tags"], allergens=ctx["allergens"],
         disliked_foods=list(rejected), usage_counts=usage_counts,
         top_n=2 if slot in ("lunch", "dinner") else 1,
+        profile=ctx.get("profile"),
     )
     if not picks:
         return None

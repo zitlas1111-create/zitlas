@@ -18,7 +18,7 @@ from fastapi import APIRouter, HTTPException
 
 from services import groq_service, rag_service
 from services import medical_conditions as medcon
-from services import workout_engine
+from services import workout_engine, location_food_engine
 from services.assessment_service import AssessmentInput, run_assessment
 
 router = APIRouter()
@@ -723,6 +723,23 @@ async def _generate_diet_plan(
     else:
         budget_rule = ""
 
+    # Geo-Aware Food Intelligence (#12 spec): purely additive — a hard rule
+    # only appears when the user actually shared a location; absent location
+    # renders "" and this prompt is byte-for-byte what it was before.
+    region_boost = location_food_engine.build_region_boost(data.location)
+    if region_boost:
+        geo_rule = (
+            f"\nREGIONAL FOOD RULE: The user is in {region_boost['region_label']}. "
+            f"Where it fits their goal and budget, prefer foods and dishes common in this "
+            f"region ({', '.join(region_boost['preferred_keywords'])}) over foods that are "
+            f"hard to find locally (e.g. imported/exotic items). If you include a popular "
+            f"local street food, make it healthier rather than replacing it "
+            f"(e.g. less oil/ghee, baked instead of fried, paired with curd/buttermilk) — "
+            f"do not just drop it."
+        )
+    else:
+        geo_rule = ""
+
     prompt = f"""RESEARCH CONTEXT ({goal_label} nutrition knowledge base):
 {rag_context if rag_context else "No specific research retrieved — use general evidence-based principles."}
 
@@ -732,7 +749,7 @@ async def _generate_diet_plan(
 
 DIET RULE: {veg_rule}
 LIVING SITUATION NOTE: {'Hostel/canteen foods — keep suggestions mess-friendly.' if data.living_situation.lower() == 'hostel' else 'Home cooking available.'}
-{med_diet_block}{supplement_rule}{budget_rule}
+{med_diet_block}{supplement_rule}{budget_rule}{geo_rule}
 
 Generate a complete 7-day {goal_label} diet plan. Hit {calc['weight_loss_calories_kcal']} kcal and {calc['protein_target_g']}g protein EVERY day.
 Output valid JSON only — no extra text."""
@@ -798,6 +815,8 @@ Output valid JSON only — no extra text."""
         day_order = {d: i for i, d in enumerate(all_days)}
         parsed["days"] = sorted(days, key=lambda d: day_order.get(d.get("day", ""), 99))
         print(f"[DIET AI] Final day count: {len(parsed['days'])}")
+    if parsed is not None and region_boost:
+        parsed["location_note"] = region_boost["explanation"]
     return parsed, result
 
 

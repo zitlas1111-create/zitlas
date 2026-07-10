@@ -1316,7 +1316,18 @@
       // Nothing writes these keys yet — the backend excludes them when present.
       disliked_exercises: _prefList('zitlas_skipped_exercises'),
       disliked_foods:     _prefList('zitlas_disliked_foods'),
+      // Geo-Aware Food Intelligence: optional, only present once the user
+      // has granted location permission (see assets/js/geo-location.js).
+      // Absent -> {} -> backend behaves exactly as before.
+      location: _savedLocation(),
     };
+  }
+
+  function _savedLocation() {
+    try {
+      var v = JSON.parse(localStorage.getItem('zitlas_location') || 'null');
+      return (v && typeof v === 'object') ? v : {};
+    } catch (_) { return {}; }
   }
 
   function _supplementsUsed(a) {
@@ -2105,6 +2116,14 @@
           isExpertPlan:        false,
         };
         localStorage.setItem('zitlas_diet_plan', JSON.stringify(_aiPlanStorage));
+        /* Geo-Aware Food Intelligence: one-line "why these meals" explanation,
+           only ever present when the user has a saved location that matched
+           a known region (see services/location_food_engine.py). */
+        if (data.diet_plan.location_note) {
+          localStorage.setItem('zitlas_location_note', data.diet_plan.location_note);
+        } else {
+          localStorage.removeItem('zitlas_location_note');
+        }
       }
       if (data.workout_plan) {
         /* Wrap in new schema (mirrors diet) so schema detection in weekly-plan / day.js
