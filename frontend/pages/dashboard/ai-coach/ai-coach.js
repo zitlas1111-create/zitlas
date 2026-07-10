@@ -192,14 +192,8 @@
       field: 'available_time',
       prompt: 'How much time can you realistically dedicate each day?',
       hint: 'Be honest — a 10-minute workout you actually do beats a 60-minute one you skip. We will never give you a longer workout than this.',
-      type: 'text',
-      placeholder: 'e.g. 30',
-      validate: function (v) {
-        var n = parseInt(v, 10);
-        return !isNaN(n) && n >= 0 && n <= 180;
-      },
+      type: 'text', // dispatches to the wheel picker via WHEEL_CONFIG.available_time — see renderQuestion()
       parse: function (v) { return parseInt(v, 10); },
-      errMsg: 'Please enter 0–180 minutes',
     },
     {
       field: 'budget',
@@ -537,6 +531,10 @@
     weight_kg:      { min: 25,  max: 250, unit: 'kg',    defaultVal: 70  },
     goal_weight_kg: { min: 25,  max: 250, unit: 'kg',    defaultVal: 65  },
     sleep_hours:    { min: 4,   max: 12,  unit: 'hours', defaultVal: 8   },
+    /* Discrete presets, not a contiguous range — replaces the free-text
+       minutes input. Stored as the same plain integer minutes value
+       (q.parse below), so AssessmentInput.available_time is unaffected. */
+    available_time: { values: [5, 10, 15, 20, 25, 30, 45, 60, 75, 90], unit: 'min', defaultVal: 30 },
   };
 
   /* ══════════════════════════════════════════
@@ -548,15 +546,31 @@
     var ITEM_H      = 56;
     var PADDING     = ITEM_H * 2; // 112 — centering space above/below list
 
+    /* opts.values: explicit discrete list (e.g. [5,10,15,...,90] duration
+       presets) — arbitrary spacing, unlike the contiguous min..max ranges
+       height/weight use. When absent, behavior is 100% unchanged: a
+       contiguous integer range from min to max. */
+    var values      = Array.isArray(opts.values) ? opts.values.slice() : null;
     var min         = opts.min;
     var max         = opts.max;
     var unit        = opts.unit || '';
-    var count       = max - min + 1;
+    var count       = values ? values.length : (max - min + 1);
 
-    var initVal = (opts.value !== undefined && opts.value >= min && opts.value <= max)
+    function indexToValue(idx) { return values ? values[idx] : (min + idx); }
+    function valueToIndex(val) {
+      if (!values) return val - min;
+      var closest = 0, bestDiff = Infinity;
+      for (var vi = 0; vi < values.length; vi++) {
+        var diff = Math.abs(values[vi] - val);
+        if (diff < bestDiff) { bestDiff = diff; closest = vi; }
+      }
+      return closest;
+    }
+
+    var initVal = (opts.value !== undefined && (values ? values.indexOf(Math.round(opts.value)) !== -1 : (opts.value >= min && opts.value <= max)))
       ? Math.round(opts.value)
-      : (opts.defaultVal !== undefined ? opts.defaultVal : min);
-    var currentIndex = initVal - min;
+      : (opts.defaultVal !== undefined ? opts.defaultVal : (values ? values[0] : min));
+    var currentIndex = valueToIndex(initVal);
     var scrollY      = currentIndex * ITEM_H;
 
     /* ── Build DOM ── */
@@ -567,8 +581,8 @@
     picker.className = 'wheel-picker';
     picker.setAttribute('tabindex', '0');
     picker.setAttribute('role', 'spinbutton');
-    picker.setAttribute('aria-valuemin', String(min));
-    picker.setAttribute('aria-valuemax', String(max));
+    picker.setAttribute('aria-valuemin', String(values ? values[0] : min));
+    picker.setAttribute('aria-valuemax', String(values ? values[values.length - 1] : max));
     picker.setAttribute('aria-valuenow', String(initVal));
 
     var fadeTop       = document.createElement('div');
@@ -595,7 +609,7 @@
     for (var i = 0; i < count; i++) {
       var el       = document.createElement('div');
       el.className = 'wheel-item';
-      el.textContent = String(min + i);
+      el.textContent = String(indexToValue(i));
       itemEls.push(el);
       itemsCont.appendChild(el);
     }
@@ -654,7 +668,7 @@
         }
       }
       currentIndex = Math.round(scrollY / ITEM_H);
-      picker.setAttribute('aria-valuenow', String(min + currentIndex));
+      picker.setAttribute('aria-valuenow', String(indexToValue(currentIndex)));
     }
 
     function snapTo(idx, animated) {
@@ -664,7 +678,7 @@
         scrollY = target;
         currentIndex = idx;
         applyScroll();
-        if (opts.onChange) opts.onChange(min + idx);
+        if (opts.onChange) opts.onChange(indexToValue(idx));
         return;
       }
       var start = scrollY;
@@ -683,7 +697,7 @@
           scrollY      = target;
           currentIndex = idx;
           applyScroll();
-          if (opts.onChange) opts.onChange(min + idx);
+          if (opts.onChange) opts.onChange(indexToValue(idx));
         }
       }
       requestAnimationFrame(step);
@@ -777,7 +791,7 @@
 
     return {
       el:       wrap,
-      getValue: function() { return min + currentIndex; },
+      getValue: function() { return indexToValue(currentIndex); },
       cleanup:  function() {
         document.removeEventListener('mousemove', onMouseMove);
         document.removeEventListener('mouseup',   onMouseUp);
@@ -1050,7 +1064,7 @@
       var wcfg    = WHEEL_CONFIG[q.field];
       var initVal = state.answers[q.field] !== undefined ? state.answers[q.field] : wcfg.defaultVal;
       var wp      = createWheelPicker({
-        min: wcfg.min, max: wcfg.max, unit: wcfg.unit,
+        min: wcfg.min, max: wcfg.max, unit: wcfg.unit, values: wcfg.values,
         value: initVal, defaultVal: wcfg.defaultVal,
       });
       _wpCleanup = wp.cleanup;
@@ -2271,23 +2285,13 @@
       });
     }
 
-    // S8 → S9 (CTA)
+    // S8 → S11 (Done). The ₹149 expert-review upsell no longer interrupts
+    // onboarding — it's offered later as an optional card on the dashboard
+    // (see dashboard.js) once the user has actually seen their AI plan.
     var btnWorkout = document.getElementById('btnWorkoutNext');
     if (btnWorkout) {
-      btnWorkout.addEventListener('click', function () { showScreen('s-cta'); });
+      btnWorkout.addEventListener('click', function () { showScreen('s-done'); });
     }
-
-    // S9 Book / Skip
-    var btnBook = document.getElementById('btnBookNow');
-    if (btnBook) {
-      btnBook.addEventListener('click', function () {
-        // Placeholder — link to booking when available
-        alert('Nutritionist booking coming soon! Your plan has been saved.');
-        showScreen('s-done');
-      });
-    }
-    var btnSkip = document.getElementById('btnSkipCta');
-    if (btnSkip) btnSkip.addEventListener('click', function () { showScreen('s-done'); });
 
     // S11 → Dashboard
     var btnDone = document.getElementById('btnDone');

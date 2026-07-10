@@ -96,21 +96,6 @@ body {
 .cta-btn:hover  { opacity: 0.9; transform: translateY(-2px); }
 .cta-btn:active { transform: translateY(0); }
 
-.skip-btn {
-  width: 100%;
-  padding: 16px;
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--text-2);
-  font-size: 15px;
-  font-weight: 600;
-  cursor: pointer;
-  margin-top: 12px;
-  transition: border-color 0.18s, color 0.18s;
-}
-.skip-btn:hover { border-color: var(--text-2); color: var(--text-1); }
-
 /* ══════════════════════════════════════════
    S1: WELCOME
 ══════════════════════════════════════════ */
@@ -1098,37 +1083,6 @@ body {
 .plan-rules-title { font-size: 14px; font-weight: 700; margin-bottom: 10px; }
 .plan-rule { font-size: 13px; color: var(--text-2); margin-bottom: 6px; padding-left: 12px; position: relative; }
 .plan-rule::before { content: "→"; position: absolute; left: 0; color: var(--accent); }
-
-/* ══════════════════════════════════════════
-   S9: NUTRITIONIST CTA
-══════════════════════════════════════════ */
-.ntr-hero { text-align: center; padding: 28px 0 24px; }
-.ntr-price-badge {
-  display: inline-block;
-  background: linear-gradient(135deg, #E07000, var(--accent));
-  color: var(--text-primary);
-  font-size: 28px;
-  font-weight: 900;
-  border-radius: 50px;
-  padding: 10px 28px;
-  margin-bottom: 20px;
-  box-shadow: 0 4px 20px rgba(var(--primary-rgb),0.4);
-}
-.ntr-title { font-size: 28px; font-weight: 800; line-height: 1.2; margin-bottom: 14px; }
-.ntr-desc { font-size: 15px; color: var(--text-2); line-height: 1.7; max-width: 360px; margin: 0 auto; }
-
-.ntr-features {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 18px;
-  margin-bottom: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.ntr-feature { display: flex; align-items: center; gap: 12px; font-size: 14px; }
-.ntr-check { font-size: 18px; }
 
 /* ══════════════════════════════════════════
    S11: DONE

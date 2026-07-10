@@ -1,0 +1,72 @@
+/*!
+ * ZITLAS — Expert Review Promo Card (assets/css/expert-review-promo.css)
+ * Self-contained (erp- prefix); injected card lives on the Home Dashboard,
+ * after the Goal card. Driven by assets/js/expert-review-promo.js.
+ */
+
+.erp-card {
+  position: relative;
+  background: #fff;
+  border: 1px solid rgba(255,152,0,0.18);
+  border-radius: 22px;
+  padding: 18px 18px 16px;
+  margin: 0 0 18px;
+  box-shadow: 0 8px 24px rgba(30,41,59,0.06);
+  animation: erpFadeIn 0.35s ease;
+}
+@keyframes erpFadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+.erp-close {
+  position: absolute;
+  top: 12px; right: 12px;
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  background: rgba(30,41,59,0.05);
+  color: var(--text-sec, #64748B);
+  font-size: 12px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+.erp-close:hover { background: rgba(30,41,59,0.1); }
+
+.erp-head { display: flex; align-items: flex-start; gap: 12px; padding-right: 22px; }
+.erp-icon {
+  font-size: 24px; line-height: 1; flex-shrink: 0;
+  width: 42px; height: 42px; border-radius: 13px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255,152,0,0.12);
+}
+.erp-headtext { flex: 1; min-width: 0; }
+.erp-title { display: block; font-size: 15px; font-weight: 800; color: var(--text, #1E293B); }
+.erp-sub   { display: block; font-size: 12px; color: var(--text-sec, #64748B); margin-top: 2px; line-height: 1.4; }
+.erp-price {
+  flex-shrink: 0; font-size: 15px; font-weight: 800; color: #FF9800;
+  background: rgba(255,152,0,0.1); border-radius: 10px; padding: 4px 10px;
+}
+
+.erp-benefits {
+  list-style: none; margin: 13px 0 14px; padding: 0;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.erp-benefits li {
+  display: flex; align-items: center; gap: 9px;
+  font-size: 13px; font-weight: 600; color: var(--text, #1E293B);
+}
+.erp-tick {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border-radius: 50%; flex-shrink: 0;
+  background: rgba(107,165,57,0.15); color: #6BA539;
+  font-size: 11px; font-weight: 900;
+}
+
+.erp-cta {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; padding: 12px; border-radius: 14px; cursor: pointer;
+  background: linear-gradient(135deg, #FFA940, #FF7A00);
+  color: #fff; font-size: 13.5px; font-weight: 800;
+  box-shadow: 0 8px 22px rgba(255,122,0,0.28);
+  border: none; font-family: inherit;
+  transition: opacity 0.18s, transform 0.18s;
+}
+.erp-cta:hover  { opacity: 0.92; transform: translateY(-1px); }
+.erp-cta:active { transform: scale(0.98); }
