@@ -1,8 +1,9 @@
 """
 ZITLAS — AI Service
-Primary provider: Groq (llama-3.3-70b-versatile).
-Automatic fallback: Gemini 2.5 Flash on rate-limit / quota / timeout errors.
-The user never sees an error — the provider switches silently.
+Primary provider: Groq (GROQ_PRIMARY_MODEL, with intra-Groq fallback to
+GROQ_FALLBACK_MODEL — see _groq_completion).
+Automatic provider fallback: Gemini 2.5 Flash on rate-limit / quota / timeout
+errors. The user never sees an error — the provider switches silently.
 """
 
 import json
@@ -18,9 +19,34 @@ from services import gemini_service, openrouter_service, food_engine, location_f
 DATA_DIR = Path(__file__).parent.parent / "data"
 
 # ── Model config ──────────────────────────────────────────────────────────────
-DEFAULT_MODEL       = "llama-3.3-70b-versatile"
+# llama-3.3-70b-versatile was deprecated by Groq on 10 Jul 2026 (decommission
+# 16 Aug 2026). Primary/fallback below are Groq's recommended replacements,
+# env-overridable so the next deprecation is a config change, not a code hunt.
+# Every Groq request goes through _groq_completion(), which tries PRIMARY and
+# automatically retries with FALLBACK on any failure.
+GROQ_PRIMARY_MODEL  = os.getenv("GROQ_PRIMARY_MODEL",  "openai/gpt-oss-120b")
+GROQ_FALLBACK_MODEL = os.getenv("GROQ_FALLBACK_MODEL", "qwen/qwen3.6-27b")
+DEFAULT_MODEL       = GROQ_PRIMARY_MODEL  # existing call sites/signatures use this name
 DEFAULT_TEMPERATURE = 0.7
 DEFAULT_MAX_TOKENS  = 1024
+
+# What callers see when every provider is down. Raw provider exceptions are
+# logged server-side only — routes put str(err) into HTTPException detail, so
+# this string is what reaches the frontend instead of a Groq stack dump.
+AI_UNAVAILABLE_MSG = "AI service temporarily unavailable. Please try again shortly."
+
+
+def _model_extra_kwargs(model: str) -> dict:
+    """Per-model-family request params. Both replacement models are reasoning
+    models whose hidden thinking burns completion tokens against max_tokens —
+    llama-3.3 had zero reasoning burn, so every existing max_tokens budget was
+    sized without it. Capping the burn keeps long JSON outputs (7-day plans)
+    from truncating. gpt-oss only accepts low/medium/high; qwen accepts none."""
+    if model.startswith("openai/gpt-oss"):
+        return {"reasoning_effort": "low"}
+    if model.startswith("qwen/"):
+        return {"reasoning_effort": "none"}
+    return {}
 
 # ── System prompt ─────────────────────────────────────────────────────────────
 ZITLAS_SYSTEM_PROMPT = """You are ZINO — a friendly weight-loss and nutrition assistant on ZITLAS.
@@ -333,6 +359,50 @@ def _get_client(key_env: str = "GROQ_API_KEY") -> AsyncGroq:
     return AsyncGroq(api_key=api_key)
 
 
+async def _groq_completion(
+    messages:     list[dict],
+    temperature:  float,
+    max_tokens:   int,
+    model:        str,
+    json_mode:    bool,
+    groq_key_env: str,
+    key_label:    str,
+) -> dict[str, Any]:
+    """The one place a Groq chat completion is made. Tries `model`, then
+    retries once with GROQ_FALLBACK_MODEL on any failure (rate limit, outage,
+    decommissioned model, invalid output) before letting the error escape to
+    _ai_call's provider-level fallback (Gemini → OpenRouter). EnvironmentError
+    (missing API key) is raised immediately — retrying can't fix config."""
+    client = _get_client(groq_key_env)
+    extra = {"response_format": {"type": "json_object"}} if json_mode else {}
+    models = [model] if model == GROQ_FALLBACK_MODEL else [model, GROQ_FALLBACK_MODEL]
+
+    last_err: Exception | None = None
+    for i, m in enumerate(models):
+        try:
+            completion = await client.chat.completions.create(
+                model=m, messages=messages,
+                temperature=temperature, max_tokens=max_tokens,
+                **extra, **_model_extra_kwargs(m),
+            )
+            choice = completion.choices[0]
+            usage  = completion.usage
+            print(f"[AI] Groq OK [{key_label}] model={completion.model} tokens={usage.total_tokens}")
+            return {
+                "reply":             choice.message.content or "",
+                "model":             completion.model,
+                "tokens_used":       usage.total_tokens,
+                "prompt_tokens":     usage.prompt_tokens,
+                "completion_tokens": usage.completion_tokens,
+            }
+        except Exception as _e:
+            last_err = _e
+            if i + 1 < len(models):
+                print(f"[AI] Groq model {m} failed ({type(_e).__name__}: {str(_e)[:150]}) "
+                      f"-> retrying with {models[i + 1]}")
+    raise last_err
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # PROVIDER FALLBACK — Groq → Gemini
 # ══════════════════════════════════════════════════════════════════════════════
@@ -362,23 +432,9 @@ async def _ai_call(
     # ── Direct: Groq ──────────────────────────────────────────────────────────
     if provider == "groq":
         print(f"[AI] Provider: Groq (direct) [{key_label}]")
-        client = _get_client(groq_key_env)
-        extra  = {"response_format": {"type": "json_object"}} if json_mode else {}
-        completion = await client.chat.completions.create(
-            model=model, messages=messages,
-            temperature=temperature, max_tokens=max_tokens,
-            **extra,
+        return await _groq_completion(
+            messages, temperature, max_tokens, model, json_mode, groq_key_env, key_label,
         )
-        choice = completion.choices[0]
-        usage  = completion.usage
-        print(f"[AI] Groq OK (direct) [{key_label}] tokens={usage.total_tokens}")
-        return {
-            "reply":             choice.message.content or "",
-            "model":             completion.model,
-            "tokens_used":       usage.total_tokens,
-            "prompt_tokens":     usage.prompt_tokens,
-            "completion_tokens": usage.completion_tokens,
-        }
 
     # ── Direct: OpenRouter ────────────────────────────────────────────────────
     if provider == "openrouter":
@@ -395,23 +451,9 @@ async def _ai_call(
         or_err     = None
 
         try:
-            client     = _get_client(groq_key_env)
-            extra      = {"response_format": {"type": "json_object"}} if json_mode else {}
-            completion = await client.chat.completions.create(
-                model=model, messages=messages,
-                temperature=temperature, max_tokens=max_tokens,
-                **extra,
+            return await _groq_completion(
+                messages, temperature, max_tokens, model, json_mode, groq_key_env, key_label,
             )
-            print(f"[AI] Groq OK [{key_label}]")
-            choice = completion.choices[0]
-            usage  = completion.usage
-            return {
-                "reply":             choice.message.content or "",
-                "model":             completion.model,
-                "tokens_used":       usage.total_tokens,
-                "prompt_tokens":     usage.prompt_tokens,
-                "completion_tokens": usage.completion_tokens,
-            }
         except EnvironmentError:
             raise
         except Exception as _e:
@@ -437,12 +479,12 @@ async def _ai_call(
             print(f"[AI] OpenRouter FAILED - {type(or_err).__name__}: {or_err}")
             print(_tb.format_exc())
 
-        raise RuntimeError(
-            f"All AI providers failed. "
-            f"Groq: {type(groq_err).__name__}: {groq_err}. "
-            f"Gemini: {type(gemini_err).__name__}: {gemini_err}. "
-            f"OpenRouter: {type(or_err).__name__}: {or_err}."
-        ) from or_err
+        # Full detail is logged above for debugging; callers put str(err) into
+        # HTTP responses, so the raised message stays clean and user-facing.
+        print(f"[AI] ALL PROVIDERS FAILED. Groq: {type(groq_err).__name__}: {groq_err}. "
+              f"Gemini: {type(gemini_err).__name__}: {gemini_err}. "
+              f"OpenRouter: {type(or_err).__name__}: {or_err}.")
+        raise RuntimeError(AI_UNAVAILABLE_MSG) from or_err
 
     # ── Auto: Gemini -> Groq -> OpenRouter ────────────────────────────────────
     print(f"[AI] Provider: auto | Groq channel: {key_label}")
@@ -460,23 +502,9 @@ async def _ai_call(
               f"-> Groq [{key_label}]")
 
     try:
-        client     = _get_client(groq_key_env)
-        extra      = {"response_format": {"type": "json_object"}} if json_mode else {}
-        completion = await client.chat.completions.create(
-            model=model, messages=messages,
-            temperature=temperature, max_tokens=max_tokens,
-            **extra,
+        return await _groq_completion(
+            messages, temperature, max_tokens, model, json_mode, groq_key_env, key_label,
         )
-        print(f"[AI] Groq OK [{key_label}]")
-        choice = completion.choices[0]
-        usage  = completion.usage
-        return {
-            "reply":             choice.message.content or "",
-            "model":             completion.model,
-            "tokens_used":       usage.total_tokens,
-            "prompt_tokens":     usage.prompt_tokens,
-            "completion_tokens": usage.completion_tokens,
-        }
     except EnvironmentError:
         raise
     except Exception as _e:
@@ -492,12 +520,11 @@ async def _ai_call(
         print(f"[AI] OpenRouter FAILED - {type(or_err).__name__}: {or_err}")
         print(_tb.format_exc())
 
-    raise RuntimeError(
-        f"All AI providers failed. "
-        f"Gemini: {type(gemini_err).__name__}: {gemini_err}. "
-        f"Groq: {type(groq_err).__name__}: {groq_err}. "
-        f"OpenRouter: {type(or_err).__name__}: {or_err}."
-    ) from or_err
+    # Full detail is logged; the raised message is the clean user-facing one.
+    print(f"[AI] ALL PROVIDERS FAILED. Gemini: {type(gemini_err).__name__}: {gemini_err}. "
+          f"Groq: {type(groq_err).__name__}: {groq_err}. "
+          f"OpenRouter: {type(or_err).__name__}: {or_err}.")
+    raise RuntimeError(AI_UNAVAILABLE_MSG) from or_err
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1737,6 +1764,12 @@ USER PROFILE:
 Give each meal an appetising name and a short practical tip. Write a daily_tip per day and an
 overall plan_notes summary. Use simple, warm, everyday language.
 """
+    # groq_first (not direct groq): this prompt embeds a full week of engine
+    # candidates (~12k tokens), which exceeds Groq's free-tier per-request TPM
+    # for the replacement models — Gemini/OpenRouter must be reachable behind
+    # Groq or every call here would silently lose the LLM names/tips layer.
+    # Food safety is provider-independent: _apply_engine_foods() overwrites
+    # whatever any provider writes with the engine's picks.
     result = await chat(
         user_message=prompt,
         system_override=NUTRITION_WEEKLY_PLAN_SYSTEM,
@@ -1744,7 +1777,7 @@ overall plan_notes summary. Use simple, warm, everyday language.
         max_tokens=8000,
         json_mode=True,
         groq_key_env="GROQ_API_KEY_DIET",
-        provider="groq",
+        provider="groq_first",
     )
 
     # ── Debug logging ──────────────────────────────────────────────────────────
@@ -2106,13 +2139,16 @@ USER:
 Write a `name` and a `reason` for the swap and the alternative using ONLY the pre-selected foods
 above. Do not restate calories/protein yourself — those are filled in automatically.
 """
+    # groq_first for the same reason as generate_nutrition_weekly_plan: keep
+    # Gemini/OpenRouter reachable behind Groq. _apply_engine_swap() makes the
+    # foods provider-independent either way.
     result = await chat(
         user_message=prompt,
         system_override=_build_meal_swap_system(fitness_goal),
         temperature=0.7,
         max_tokens=400,
         groq_key_env="GROQ_API_KEY_DIET",
-        provider="groq",
+        provider="groq_first",
     )
 
     llm_structured = _extract_json(result["reply"])

@@ -11,8 +11,17 @@ App opens at:
 
 import asyncio
 import os
+import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
+
+# LLM output can contain characters (non-breaking hyphens, emoji) that a
+# cp1252 console can't encode; without this, a mere log print of a reply
+# raises UnicodeEncodeError inside the request handler and gets mistaken
+# for a provider failure. No-op on UTF-8 terminals (Render/Linux).
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
 
 from dotenv import load_dotenv
 from fastapi import FastAPI

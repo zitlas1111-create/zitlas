@@ -32,7 +32,7 @@ FastAPI server in `main.py`. All API prefixes:
 - `/api/assessment/*` — three-brain assessment pipeline (mental → physical → nutrition)
 - `/api/auth/*`, `/api/user/*`, `/api/diet/*`, `/api/review/*`, `/api/support/*`, `/api/system/*`
 
-**AI provider chain** (`services/groq_service.py`): Groq (`llama-3.3-70b-versatile`) → Gemini 2.5 Flash → OpenRouter. Failover is silent — all three are tried before raising.
+**AI provider chain** (`services/groq_service.py`): Groq (`openai/gpt-oss-120b`, intra-Groq fallback to `qwen/qwen3.6-27b` via `_groq_completion()`) → Gemini 2.5 Flash → OpenRouter. Failover is silent — all are tried before raising. Model IDs are env-overridable (`GROQ_PRIMARY_MODEL`/`GROQ_FALLBACK_MODEL`).
 
 **RAG pipeline** (`services/rag_service.py` + `services/kb_manager.py`): 4 goal-specific knowledge bases (`weight_loss`, `muscle_gain`, `general_fitness`, `transformation`). FAISS indexes are lazy-loaded on first request and LRU-evicted (max 2 in RAM simultaneously). Pre-built indexes live in `backend/vector_store/<goal>/`. Source PDFs are NOT in the repo; only the serialized FAISS index and chunk pickle files are.
 

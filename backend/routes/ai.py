@@ -672,11 +672,14 @@ async def nutrition_weekly_plan(body: NutritionWeeklyPlanRequest) -> dict[str, A
         print(f"  plan_name       : {structured.get('plan_name', 'N/A')}")
         print(f"  days_count      : {len(days)}")
         if days:
+            # meals is a slot-keyed dict on the engine/LLM path
+            # (_apply_engine_foods) and a list on the offline path — log both.
             d0_meals = days[0].get("meals", [])
+            d0_list = list(d0_meals.values()) if isinstance(d0_meals, dict) else d0_meals
             print(f"  day[0].theme    : {days[0].get('theme', 'N/A')}")
-            print(f"  day[0].meals    : {[m.get('meal_name') for m in d0_meals]}")
-            if d0_meals:
-                print(f"  day[0].breakfast: {d0_meals[0].get('foods', [])}")
+            print(f"  day[0].meals    : {[m.get('meal_name') or m.get('name') for m in d0_list]}")
+            if d0_list:
+                print(f"  day[0].breakfast: {d0_list[0].get('foods', [])}")
     else:
         raw_reply = result.get("reply", "") or ""
         print(f"\n[nutrition-weekly-plan] FAILURE — structured is None")

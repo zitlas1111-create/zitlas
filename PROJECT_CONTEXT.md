@@ -508,9 +508,10 @@ Each KB uses:
 ## AI Provider Flow
 
 Primary model:
-- Groq `llama-3.3-70b-versatile`
+- Groq `openai/gpt-oss-120b` (env: `GROQ_PRIMARY_MODEL`)
 
 Fallbacks:
+- Groq `qwen/qwen3.6-27b` (intra-Groq retry, env: `GROQ_FALLBACK_MODEL`)
 - Gemini `gemini-2.5-flash`
 - OpenRouter models:
   - `deepseek/deepseek-chat`
