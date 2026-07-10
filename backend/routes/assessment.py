@@ -16,7 +16,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
-from services import groq_service, rag_service
+from services import groq_service, rag_service, food_engine
 from services import medical_conditions as medcon
 from services import workout_engine, location_food_engine
 from services.assessment_service import AssessmentInput, run_assessment
@@ -56,6 +56,99 @@ def _extract_json(text: str) -> dict | None:
         except (json.JSONDecodeError, ValueError):
             pass
     return None
+
+
+# Slot -> (display label, default time). Presentational only — the foods
+# themselves always come from FoodRecommendationEngine (see
+# _engine_grounded_diet_plan below), same hallucination-firewall guarantee
+# as groq_service._apply_engine_foods() / offline_fallback.nutrition_weekly_plan().
+_DIET_FALLBACK_SLOTS: list[tuple[str, str, str]] = [
+    ("breakfast",      "Breakfast",      "8:00 AM"),
+    ("mid_morning",    "Mid-Morning",    "11:00 AM"),
+    ("lunch",          "Lunch",          "1:00 PM"),
+    ("evening_snack",  "Evening Snack",  "5:00 PM"),
+    ("dinner",         "Dinner",         "8:00 PM"),
+]
+
+
+def _engine_grounded_diet_plan(data: "AssessmentInput", calc: dict, fitness_goal: str) -> dict:
+    """Safety net for when the LLM (both the initial call and the retry)
+    never returns valid, complete JSON — e.g. Groq rate-limited -> Gemini
+    fallback -> output truncated by max_tokens, or any other transient
+    provider hiccup. Rather than surfacing `diet_plan: null` to the user
+    (the actual root cause of "Diet plan could not be loaded" appearing
+    right after assessment — there is no synchronization bug on the
+    frontend; callGeneratePlan() already awaits this response correctly
+    before rendering), this builds a REAL, complete 7-day plan directly
+    from the same verified food database and engine every other diet
+    surface (weekly-plan regen, meal swap, offline fallback) already uses,
+    so the user is never blocked on the LLM being available at all.
+    """
+    player_profile = {
+        "primary_goal":       fitness_goal,
+        "occupation":         data.occupation,
+        "medical_conditions": data.medical_conditions,
+        "uses_supplements":   data.uses_supplements,
+        "location":           data.location,
+    }
+    lifestyle_data = {
+        "living_situation": data.living_situation,
+        "diet_type":         data.diet_preference,
+        "daily_budget":      data.budget,
+        "disliked_foods":    data.disliked_foods,
+    }
+    ctx = groq_service._engine_query_context(player_profile, lifestyle_data)
+    week = food_engine.get_engine().build_week_plan(
+        goal_tags=ctx["goal_tags"], diet_tags=ctx["diet_tags"], living_situation=ctx["living_tag"],
+        budget_tier=ctx["budget_tier"], disease_tags=ctx["disease_tags"], allergens=ctx["allergens"],
+        favorite_foods=ctx["favorite_foods"], disliked_foods=ctx["disliked_foods"],
+        daily_calorie_target=calc.get("weight_loss_calories_kcal"),
+        profile=ctx["profile"], subgoal_tag=ctx["subgoal_tag"], season_tag=ctx["season_tag"],
+    )
+
+    days_out = []
+    for day in week["days"]:
+        meals_out = []
+        total_cal, total_protein = 0, 0.0
+        for slot_key, label, time in _DIET_FALLBACK_SLOTS:
+            slot_data = day["meals"].get(slot_key)
+            if not slot_data or not slot_data.get("primary"):
+                continue
+            combo = slot_data["primary"]
+            cal = sum(f["calories"] for f in combo)
+            protein = sum(f["protein"] for f in combo)
+            meals_out.append({
+                "meal_name": label,
+                "time":      time,
+                "foods":     [food_engine.format_food_line(f) for f in combo],
+                "calories":  round(cal),
+                "protein_g": round(protein, 1),
+                "tip":       f"{combo[0]['name']} — {combo[0]['description']}",
+            })
+            total_cal += cal
+            total_protein += protein
+        days_out.append({
+            "day":             day["day"],
+            "theme":           "Balanced Nutrition Day",
+            "total_calories":  round(total_cal),
+            "total_protein_g": round(total_protein, 1),
+            "meals":           meals_out,
+        })
+
+    print(f"[DIET AI] LLM produced no usable plan — served an engine-grounded fallback "
+          f"({len(days_out)} days, sourced from the verified food database)")
+    return {
+        "plan_name":              "7-Day Personalised Meal Plan",
+        "daily_calories_target":  calc.get("weight_loss_calories_kcal"),
+        "daily_protein_target_g": calc.get("protein_target_g"),
+        "days":                   days_out,
+        "key_rules": [
+            "Every meal is sourced from ZITLAS's verified food database.",
+            "Stay consistent with your daily calorie and protein targets.",
+            "Drink water regularly and prioritise whole foods.",
+        ],
+        "summary": "A balanced, goal-aligned 7-day plan built directly from our verified food database.",
+    }
 
 
 def _build_user_profile_block(
@@ -770,7 +863,7 @@ Output valid JSON only — no extra text."""
             user_message=_prompt,
             system_override=diet_system,
             temperature=0.5,
-            max_tokens=4000,
+            max_tokens=6000,
             json_mode=True,
             groq_key_env="GROQ_API_KEY_DIET",
             provider="groq_first",
@@ -796,8 +889,19 @@ Output valid JSON only — no extra text."""
         else:
             print(f"[DIET AI] Retry did not improve day count — using auto-pad")
 
-    # ── Auto-pad any still-missing days (copy last day as template) ──────────
-    if parsed and isinstance(parsed.get("days"), list):
+    # ── Both attempts failed to produce ANY usable plan (e.g. every provider
+    #    hit a rate limit / truncated output and _extract_json got nothing
+    #    parseable) — serve a real, complete plan from the same verified
+    #    food database instead of surfacing `diet_plan: null`. This is the
+    #    actual fix for "Diet plan could not be loaded" right after
+    #    assessment: the frontend already awaits this response correctly,
+    #    there was never a race condition — the response body itself was
+    #    legitimately empty, with no fallback to catch it, unlike every
+    #    other diet surface in the app (weekly-plan regen, meal swap).
+    if not parsed or not isinstance(parsed.get("days"), list) or len(parsed["days"]) == 0:
+        parsed = _engine_grounded_diet_plan(data, calc, fitness_goal)
+    else:
+        # ── Auto-pad any still-missing days (copy last day as template) ──────
         days = parsed["days"]
         present = {d.get("day", "") for d in days}
         for day_name in all_days:
