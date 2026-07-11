@@ -246,12 +246,31 @@
    */
   var MODAL_SELECTOR = '[class*="overlay"],[class*="backdrop"]';
 
+  /* A third real mechanism exists alongside (a) display and (b) opacity:
+   * (c) always display:flex/opacity:1, hidden by sliding off-screen with
+   * `transform: translateX(100%)` — used by the full-screen chat panel
+   * (.zc-overlay, #chatOverlay on cprofile.html/expert-dashboard.html).
+   * Missing this made isAnyModalOpen() see that panel as permanently
+   * "open" on every load (display/opacity never changed), which added
+   * body.modal-open -> body{overflow:hidden} forever and froze scrolling
+   * wherever the page happened to be — the root cause of the coach-profile
+   * "can't scroll to the bottom" bug. A bounding-rect check catches this
+   * mechanism generically, without hardcoding which class uses it. */
+  function isOffscreen(el) {
+    var r = el.getBoundingClientRect();
+    if (r.width === 0 && r.height === 0) return true;
+    return r.right <= 0 || r.bottom <= 0 ||
+      r.left >= (window.innerWidth || document.documentElement.clientWidth) ||
+      r.top >= (window.innerHeight || document.documentElement.clientHeight);
+  }
+
   function isAnyModalOpen() {
     var els = document.querySelectorAll(MODAL_SELECTOR);
     for (var i = 0; i < els.length; i++) {
       if (els[i].id === 'zitlas-navbar') continue; /* not itself */
       var cs = window.getComputedStyle(els[i]);
-      if (cs.display !== 'none' && cs.opacity !== '0' && cs.visibility !== 'hidden') return true;
+      if (cs.display !== 'none' && cs.opacity !== '0' && cs.visibility !== 'hidden' &&
+          !isOffscreen(els[i])) return true;
     }
     return false;
   }
@@ -289,11 +308,12 @@
       subtree: true, attributes: true, attributeFilter: ['class', 'style'],
     });
     /* The class/style mutation fires the instant .open is removed, before
-       the opacity fade (mechanism (b) above) has actually finished — so a
-       single check right then would still see the old, "open" opacity.
-       Re-checking on transitionend catches the moment it truly reaches 0. */
+       the opacity fade (mechanism (b)) or the slide-off-screen transform
+       (mechanism (c), e.g. .zc-overlay) has actually finished — so a
+       single check right then would still see the old, "open" state.
+       Re-checking on transitionend catches the moment it truly settles. */
     document.addEventListener('transitionend', function (e) {
-      if (e.propertyName === 'opacity') _recheckModalState();
+      if (e.propertyName === 'opacity' || e.propertyName === 'transform') _recheckModalState();
     }, true);
   }
 
