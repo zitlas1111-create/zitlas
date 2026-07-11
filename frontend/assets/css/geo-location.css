@@ -6,7 +6,9 @@
 .geoloc-overlay {
   position: fixed;
   inset: 0;
-  z-index: 9999;
+  /* Above Zino's floating assistant/bubble layers (zino.css tops out at
+     20003) — a permission prompt must never have its buttons intercepted. */
+  z-index: 21000;
   background: rgba(15, 23, 42, 0.55);
   display: flex;
   align-items: center;

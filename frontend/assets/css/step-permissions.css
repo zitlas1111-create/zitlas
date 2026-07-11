@@ -1,0 +1,152 @@
+/*!
+ * ZITLAS — Step-tracking permission onboarding (assets/css/step-permissions.css)
+ * Self-contained (spp- prefix); appended to <body> by assets/js/step-permissions.js.
+ * Same visual family as the geo-location popup.
+ */
+
+.spp-overlay {
+  position: fixed;
+  inset: 0;
+  /* Above Zino's floating assistant/bubble layers (zino.css tops out at
+     20003) — a permission modal must never have its buttons intercepted. */
+  z-index: 21000;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: sppFadeIn 0.25s ease;
+}
+@keyframes sppFadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.spp-card {
+  position: relative;
+  background: var(--card-bg, #fff);
+  border-radius: 24px;
+  padding: 26px 24px 22px;
+  max-width: 350px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  animation: sppPopIn 0.3s ease;
+}
+@keyframes sppPopIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.97); }
+  to   { opacity: 1; transform: none; }
+}
+
+.spp-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px; height: 56px;
+  border-radius: 50%;
+  background: rgba(255,152,0,0.12);
+  font-size: 26px;
+  margin-bottom: 12px;
+}
+
+.spp-title {
+  margin: 0 0 6px;
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--text, #1E293B);
+  line-height: 1.35;
+}
+
+.spp-sub {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--text-sec, #64748B);
+  line-height: 1.55;
+}
+
+.spp-list {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  text-align: left;
+}
+.spp-list li {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text, #1E293B);
+}
+.spp-tick {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: rgba(107,165,57,0.15);
+  color: #6BA539;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.spp-note {
+  margin: 0 0 4px;
+  font-size: 11.5px;
+  color: var(--text-sec, #94A3B8);
+  line-height: 1.5;
+}
+
+.spp-status {
+  min-height: 18px;
+  margin: 4px 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #FF9800;
+}
+
+.spp-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.spp-btn {
+  width: 100%;
+  padding: 13px;
+  border-radius: 14px;
+  font-size: 14px;
+  font-weight: 800;
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  transition: opacity 0.18s, transform 0.18s;
+}
+.spp-btn:disabled { opacity: 0.6; cursor: default; }
+.spp-btn:active:not(:disabled) { transform: scale(0.98); }
+
+.spp-btn--allow {
+  background: linear-gradient(135deg, #FFA940, #FF7A00);
+  color: #fff;
+  box-shadow: 0 8px 22px rgba(255,122,0,0.28);
+}
+.spp-btn--allow:hover:not(:disabled) { opacity: 0.92; }
+
+.spp-btn--later {
+  background: rgba(30,41,59,0.06);
+  color: var(--text-sec, #64748B);
+}
+.spp-btn--later:hover { background: rgba(30,41,59,0.1); }
+
+@media (prefers-color-scheme: dark) {
+  .spp-card { background: var(--card-bg, #1E293B); }
+  .spp-title, .spp-list li { color: var(--text, #F1F5F9); }
+  .spp-btn--later { background: rgba(255,255,255,0.08); color: var(--text-sec, #94A3B8); }
+  .spp-btn--later:hover { background: rgba(255,255,255,0.14); }
+}
+:root[data-theme="dark"] .spp-card { background: var(--card-bg, #1E293B); }
+:root[data-theme="dark"] .spp-title, :root[data-theme="dark"] .spp-list li { color: var(--text, #F1F5F9); }
+:root[data-theme="dark"] .spp-btn--later { background: rgba(255,255,255,0.08); color: var(--text-sec, #94A3B8); }
+:root[data-theme="dark"] .spp-btn--later:hover { background: rgba(255,255,255,0.14); }

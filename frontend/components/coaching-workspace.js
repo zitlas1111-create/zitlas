@@ -599,6 +599,12 @@
         }).join('') + '</div></div>';
     }
 
+    /* 🚶 Live Activity & Steps — reads users/{athleteId}/activity (the day
+       documents activity-service.js syncs from the athlete's device) and
+       subscribes to today's doc so the coach sees new steps in real time. */
+    html += '<div class="cw-card"><p class="cw-card-title">🚶 Activity &amp; Steps</p>' +
+      '<div id="cwActivityCard"><div class="cw-empty" style="padding:8px 0">Loading step data…</div></div></div>';
+
     /* 🏥 Medical Profile — directly below AI Fitness Metrics. Severity
        badges + precautions + AI coaching notes come from the deterministic
        backend rules engine, never the LLM. The assessment captures medical
@@ -666,6 +672,98 @@
       '. The coach never needs to re-ask these questions.</div></div>';
 
     body.innerHTML = html;
+    loadActivityCard();
+  }
+
+  /* ── 🚶 Activity & Steps card (Overview tab) ──
+     Fetches the athlete's last 30 archived day docs + today's live doc.
+     Rendered async so a slow/offline Firestore never blocks the Overview. */
+  function loadActivityCard() {
+    var mount = $('cwActivityCard');
+    var d = db();
+    if (!mount) return;
+    if (!d || !S.opts || !S.opts.athleteId) {
+      mount.innerHTML = '<div class="cw-empty" style="padding:8px 0">Step data unavailable.</div>';
+      return;
+    }
+    var todayStr = new Date().getFullYear() + '-' +
+      String(new Date().getMonth() + 1).padStart(2, '0') + '-' +
+      String(new Date().getDate()).padStart(2, '0');
+
+    function renderCard(days, goal) {
+      var el = $('cwActivityCard');
+      if (!el) return; /* user switched tabs */
+      if (!days.length) {
+        el.innerHTML = '<div class="cw-empty" style="padding:8px 0">No step data synced yet.<br>' +
+          'It appears automatically once the athlete opens their dashboard with step tracking on.</div>';
+        return;
+      }
+      var byDate = {};
+      days.forEach(function (r) { byDate[r.date] = r; });
+      var today = byDate[todayStr] || null;
+      var past = days.filter(function (r) { return r.date !== todayStr; });
+
+      function avg(list) {
+        if (!list.length) return 0;
+        return Math.round(list.reduce(function (s, r) { return s + (r.steps || 0); }, 0) / list.length);
+      }
+      var avg7  = avg(past.slice(0, 7));
+      var avg30 = avg(past.slice(0, 30));
+      var prev7 = avg(past.slice(7, 14));
+      var trend = (avg7 && prev7) ? (avg7 > prev7 * 1.05 ? '📈 Improving' : (avg7 < prev7 * 0.95 ? '📉 Declining' : '➡️ Steady')) : '—';
+      var missed = past.slice(0, 30).filter(function (r) { return !r.goalCompleted; }).length;
+      var todaySteps = today ? (today.steps || 0) : 0;
+      var todayGoal = (today && today.goalEffective) || goal || 10000;
+      var pctToday = todayGoal > 0 ? Math.min(100, Math.round((todaySteps / todayGoal) * 100)) : 100;
+      var recovery = !!(today && today.recoveryMode);
+
+      /* Mini 7-day bar strip (pure CSS heights) */
+      var last7 = days.slice(0, 7).reverse();
+      var maxSteps = Math.max.apply(null, last7.map(function (r) { return r.steps || 1; }).concat([1]));
+      var bars = last7.map(function (r) {
+        var h = Math.max(8, Math.round(((r.steps || 0) / maxSteps) * 42));
+        var done = r.goalCompleted;
+        return '<div title="' + esc(r.date + ': ' + (r.steps || 0).toLocaleString() + ' steps') + '"' +
+          ' style="width:16px;height:' + h + 'px;border-radius:5px 5px 2px 2px;' +
+          'background:' + (done ? 'linear-gradient(180deg,#FFA940,#FF7A00)' : 'rgba(148,163,184,0.4)') + '"></div>';
+      }).join('');
+
+      el.innerHTML =
+        '<div class="cw-kv-row"><span>Today’s Steps</span><b id="cwActToday">' + todaySteps.toLocaleString() +
+          ' <span style="font-weight:600;color:var(--text-sec,#94A3B8)">/ ' + todayGoal.toLocaleString() +
+          ' (' + pctToday + '%)</span></b></div>' +
+        (recovery
+          ? '<div class="cw-kv-row"><span>Status</span><b style="color:#0EA5E9">🛟 Recovery Mode — goal reduced</b></div>'
+          : '') +
+        '<div class="cw-kv-row"><span>7-Day Average</span><b>' + avg7.toLocaleString() + '</b></div>' +
+        '<div class="cw-kv-row"><span>30-Day Average</span><b>' + avg30.toLocaleString() + '</b></div>' +
+        '<div class="cw-kv-row"><span>Current Goal</span><b>' + (goal || 10000).toLocaleString() + ' steps</b></div>' +
+        '<div class="cw-kv-row"><span>Missed Goal Days (30d)</span><b>' + missed + '</b></div>' +
+        '<div class="cw-kv-row"><span>Trend</span><b>' + trend + '</b></div>' +
+        '<div style="display:flex;align-items:flex-end;gap:6px;height:46px;margin-top:10px">' + bars + '</div>';
+    }
+
+    var userRef = d.collection('users').doc(S.opts.athleteId);
+    Promise.all([
+      userRef.get().catch(function () { return null; }),
+      userRef.collection('activity').orderBy('date', 'desc').limit(30).get().catch(function () { return null; }),
+    ]).then(function (res) {
+      var goal = (res[0] && res[0].exists && res[0].data().dailyStepGoal) || 10000;
+      var days = [];
+      if (res[1]) res[1].forEach(function (doc) { days.push(doc.data()); });
+      renderCard(days, goal);
+
+      /* Live: today's doc updates the card the moment the athlete's
+         device syncs new steps — no refresh on the coach's side. */
+      S.unsubs.push(userRef.collection('activity').doc(todayStr).onSnapshot(function (snap) {
+        if (!snap.exists) return;
+        var fresh = snap.data();
+        var rest = days.filter(function (r) { return r.date !== todayStr; });
+        rest.unshift(fresh);
+        days = rest;
+        renderCard(days, goal);
+      }, function () {}));
+    });
   }
 
   /* ══════════════════════════════════════════════

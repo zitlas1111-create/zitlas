@@ -88,9 +88,72 @@
     return t;
   }
 
+  /* ── Sensor-mode increment (step-sensor.js) ──
+     Only called when Health Connect is NOT the source, so distance and
+     calories are estimated from steps (avg stride 0.762 m; ~0.04 kcal per
+     step — the standard pedometer approximations). syncFs is throttled by
+     the caller so live sensor events don't spam Firestore. */
+  function addSensorSteps(delta, syncFs) {
+    var t = getToday();
+    t.steps    = Math.max(0, t.steps + Math.round(delta || 0));
+    t.distance = +(t.steps * 0.000762).toFixed(2);
+    t.calories = Math.round(t.steps * 0.04);
+    var completed = checkGoalCompletion(t.steps);
+    if (completed && !t.goalCompleted) {
+      t.goalCompleted = true;
+      win.ZitlasStreak.updateStreak(t.date);
+    }
+    _save(TODAY_KEY, t);
+    if (syncFs) _syncDayToFirestore(t);
+    return t;
+  }
+
+  /* ── Effective goal — Recovery Mode aware ──
+     health-status.js stores today's adjusted step goal in
+     zitlas_health_today.stepsGoal ('Rest' or a reduced number). It's
+     date-keyed to TODAY only, so the base goal restores automatically at
+     midnight with zero extra bookkeeping. 'Rest' pauses the goal (0 —
+     any activity counts as complete, so a sick day never breaks a streak). */
+  function getEffectiveGoal() {
+    var base = getDailyGoal();
+    try {
+      var h = JSON.parse(localStorage.getItem('zitlas_health_today') || 'null');
+      if (h && h.date === todayStr() && h.stepsGoal != null && h.status !== 'great') {
+        if (h.stepsGoal === 'Rest') return { goal: 0, base: base, recovery: true, rest: true };
+        var n = parseInt(h.stepsGoal, 10);
+        if (n > 0 && n < base) return { goal: n, base: base, recovery: true, rest: false };
+      }
+    } catch (_) {}
+    return { goal: base, base: base, recovery: false, rest: false };
+  }
+
   function checkGoalCompletion(steps) {
     if (steps === undefined) steps = getTodaySteps();
-    return steps >= getDailyGoal();
+    return steps >= getEffectiveGoal().goal;
+  }
+
+  /* ── Adaptive goal suggestion (AI personalization) ──
+     A SUGGESTION the dashboard/AI can surface — never a silent change.
+     Consistently smashing the goal -> nudge it up ~10%; consistently far
+     below -> offer a temporary easier target so momentum isn't lost.
+     Needs >= 5 archived days so two good days don't whipsaw the goal. */
+  function getAdaptiveGoalSuggestion() {
+    var history = _load(HISTORY_KEY, {});
+    var dates = Object.keys(history).sort().slice(-7);
+    if (dates.length < 5) return null;
+    var goal = getDailyGoal();
+    var avg = Math.round(dates.reduce(function (s, d) { return s + (history[d].steps || 0); }, 0) / dates.length);
+    if (avg >= goal * 1.15) {
+      var up = Math.min(Math.round((goal * 1.1) / 500) * 500, goal + 2000);
+      return { direction: 'up', currentGoal: goal, suggestedGoal: up, avg7day: avg,
+               reason: 'You averaged ' + avg.toLocaleString() + ' steps this week — above your goal. Ready to raise it?' };
+    }
+    if (avg > 0 && avg < goal * 0.4) {
+      var down = Math.max(Math.round((goal * 0.7) / 500) * 500, 3000);
+      return { direction: 'down', currentGoal: goal, suggestedGoal: down, avg7day: avg,
+               reason: 'You averaged ' + avg.toLocaleString() + ' steps this week. A smaller target you can actually hit builds the habit faster.' };
+    }
+    return null;
   }
 
   /* ── Midnight rollover — never lose historical data ──
@@ -125,7 +188,8 @@
 
   /* ── Dashboard messages (spec) ── */
   function getStatusMessage() {
-    var t = getToday(), goal = getDailyGoal();
+    var t = getToday(), eff = getEffectiveGoal(), goal = eff.goal;
+    if (eff.rest) return '🛟 Rest day — step goal paused while you recover.';
     if (t.steps >= goal) {
       var over = t.steps - goal;
       return over > 0
@@ -177,6 +241,11 @@
 
   function _syncDayToFirestore(record) {
     if (!_fsReady()) { _queuePending(record.date); return; }
+    /* Goal fields make the day self-describing for the coach dashboard and
+       future analytics (completion % is derivable: steps / goal). Recovery
+       state only differs from the base goal on the CURRENT day. */
+    var eff  = record.date === todayStr() ? getEffectiveGoal() : null;
+    var goal = eff ? eff.base : getDailyGoal();
     ZitlasDB.collection('users').doc(ZitlasAuth.currentUser.uid)
       .collection('activity').doc(record.date)
       .set({
@@ -186,6 +255,9 @@
         calories:      record.calories,
         activeMinutes: record.activeMinutes,
         goalCompleted: record.goalCompleted,
+        goal:          goal,
+        goalEffective: eff ? eff.goal : goal,
+        recoveryMode:  eff ? eff.recovery : false,
       }, { merge: true })
       .then(function () {
         _unqueuePending(record.date);
@@ -231,8 +303,11 @@
     getTodayCalories:         getTodayCalories,
     getTodayActiveMinutes:    getTodayActiveMinutes,
     setTodayFromHealth:       setTodayFromHealth,
+    addSensorSteps:           addSensorSteps,
     getDailyGoal:             getDailyGoal,
     setDailyGoal:             setDailyGoal,
+    getEffectiveGoal:         getEffectiveGoal,
+    getAdaptiveGoalSuggestion: getAdaptiveGoalSuggestion,
     checkGoalCompletion:      checkGoalCompletion,
     archiveYesterdayActivity: archiveYesterdayActivity,
     getStatusMessage:         getStatusMessage,

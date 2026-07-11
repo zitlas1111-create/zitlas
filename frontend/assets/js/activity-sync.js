@@ -19,6 +19,10 @@
   'use strict';
 
   var _midnightTimer = null;
+  var _livePollTimer = null;
+  var _hcIsSource    = false;   /* set by the last sync pass */
+  var LIVE_POLL_MS   = 60000;   /* HC re-read cadence while visible — one
+                                   aggregate query/min, negligible battery */
 
   function _emitUpdated(model) {
     try {
@@ -26,7 +30,10 @@
     } catch (_) {}
   }
 
-  /* Full sync pass. Resolves the up-to-date today model. */
+  /* Full sync pass. Resolves the up-to-date today model.
+     Source selection: Health Connect is the source of truth whenever it
+     answers; the hardware step sensor (step-sensor.js) only takes over
+     when HC is absent/denied — never both, so a step can't count twice. */
   function syncTodayActivity() {
     var A = win.ZitlasActivity;
     if (!A) return Promise.resolve(null);
@@ -39,16 +46,47 @@
         var model;
         if (hc && hc.available && hc.granted && !hc.error) {
           console.log('[SYNC] Health Connect data:', hc.steps, 'steps');
+          _hcIsSource = true;
+          if (win.ZitlasStepSensor) win.ZitlasStepSensor.setEnabled(false);
           model = A.setTodayFromHealth(hc);
-        } else {
-          /* Browser / no permission / HC error — persisted model stands */
-          console.log('[SYNC] Health Connect unavailable — using persisted data');
-          model = A.getToday();
+          A.flushPendingSync();
+          _emitUpdated(model);
+          return model;
         }
+        /* Browser / no permission / HC error — persisted model stands,
+           then the hardware sensor path (native only) catches us up and
+           starts live foreground counting. */
+        console.log('[SYNC] Health Connect unavailable — sensor fallback/persisted data');
+        _hcIsSource = false;
+        model = A.getToday();
         A.flushPendingSync();
         _emitUpdated(model);
+        if (win.ZitlasStepSensor) {
+          win.ZitlasStepSensor.setEnabled(true);
+          win.ZitlasStepSensor.syncFromSensor().then(function (used) {
+            if (used && document.visibilityState === 'visible') {
+              win.ZitlasStepSensor.startLiveWatch();
+            }
+          });
+        }
         return model;
       });
+  }
+
+  /* ── Live updates while the app is on screen ──
+     HC source: re-read the day aggregate every minute (steps taken with
+     the phone in a pocket appear without any reload). Sensor source: the
+     hardware event listener in step-sensor.js already pushes every step. */
+  function _startLivePoll() {
+    _stopLivePoll();
+    if (!_hcIsSource || !win.Capacitor) return;
+    _livePollTimer = setInterval(function () {
+      if (document.visibilityState !== 'visible') return;
+      syncTodayActivity();
+    }, LIVE_POLL_MS);
+  }
+  function _stopLivePoll() {
+    if (_livePollTimer) { clearInterval(_livePollTimer); _livePollTimer = null; }
   }
 
   /* Indirection so this file never throws if health-connect.js is missing */
@@ -91,23 +129,62 @@
     }, ms);
   }
 
+  /* ── Optional evening reminder (permission asked in onboarding) ──
+     Fires once per day at/after 6 PM if the user is under 40% of their
+     effective goal. Web Notification API only — shows while the webview
+     is alive; a fully-backgrounded scheduled notification would need the
+     LocalNotifications native plugin (future enhancement). */
+  function _maybeStepReminder() {
+    try {
+      if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+      var A = win.ZitlasActivity;
+      if (!A) return;
+      var today = A.todayStr();
+      if (localStorage.getItem('zitlas_step_reminder_sent') === today) return;
+      if (new Date().getHours() < 18) return;
+      var eff = A.getEffectiveGoal();
+      if (eff.rest || eff.goal <= 0) return;
+      var steps = A.getTodaySteps();
+      if (steps >= eff.goal * 0.4) return;
+      localStorage.setItem('zitlas_step_reminder_sent', today);
+      new Notification('ZITLAS — evening walk? 🚶', {
+        body: "You've walked " + steps.toLocaleString() + ' of ' + eff.goal.toLocaleString() +
+              ' steps today. A short 10-minute walk gets you moving!',
+        tag: 'zitlas-step-reminder',
+      });
+    } catch (_) {}
+  }
+
   function init() {
     if (init._done) return;
     init._done = true;
 
-    syncTodayActivity();
+    syncTodayActivity().then(_startLivePoll);
     _scheduleMidnightRollover();
 
     /* Re-sync when the app returns to the foreground (Capacitor webview
        fires visibilitychange on resume) — also catches a midnight that
        passed while the device slept, since the timer above doesn't run
-       during sleep. */
+       during sleep. Hidden -> stop the live poll and the sensor listener
+       (zero work while backgrounded; the hardware counter keeps counting
+       on its own and we catch up on the next resume). */
     document.addEventListener('visibilitychange', function () {
       if (document.visibilityState === 'visible') {
-        syncTodayActivity();
+        syncTodayActivity().then(function () {
+          _startLivePoll();
+          if (!_hcIsSource && win.ZitlasStepSensor) win.ZitlasStepSensor.startLiveWatch();
+        });
         _scheduleMidnightRollover();
+        _maybeStepReminder();
+      } else {
+        _stopLivePoll();
+        if (win.ZitlasStepSensor) win.ZitlasStepSensor.stopLiveWatch();
       }
     });
+
+    /* Reminder check every 30 min while the app stays open in the evening */
+    setInterval(_maybeStepReminder, 30 * 60000);
+    _maybeStepReminder();
   }
 
   win.ZitlasActivitySync = {

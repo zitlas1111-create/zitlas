@@ -50,4 +50,10 @@
     <!-- General permissions -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Hardware step-counter fallback (StepSensorPlugin) — required for
+         TYPE_STEP_COUNTER on Android 10+ when Health Connect is unavailable -->
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+    <!-- Optional step reminders (Android 13+ runtime notification permission) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
 </manifest>

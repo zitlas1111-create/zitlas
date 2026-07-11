@@ -44,6 +44,24 @@ No build step — plain HTML/CSS/JS files served as static assets. No npm, no bu
 
 **All JS files use an IIFE pattern** (`(function(){ 'use strict'; ... })()`), except `expert-dashboard.js` which is a plain top-level script.
 
+### Step Counter System
+
+Android app is the web frontend wrapped in Capacitor (`android/`, `appId com.zitlas.app`, `webDir: frontend`). No iOS project exists.
+
+**Data sources (never both — no double counting):** Health Connect is the source of truth when installed+granted (native plugin `HealthConnectPlugin.java` + `HealthConnectManager.kt`, aggregate reads). Fallback: hardware `TYPE_STEP_COUNTER` via `StepSensorPlugin.java` — the chip counts steps since boot with the app dead/locked, so background tracking = read the cumulative value on next open and diff against a persisted baseline (no service, no battery cost).
+
+**JS pipeline (load order matters):** `health-connect.js` → `streak-service.js` → `activity-service.js` (daily model, history 90d, goal, Firestore sync `users/{uid}/activity/{date}`, offline pending queue) → `step-sensor.js` (baseline math `computeDelta()` — reboot detection, anti-cheat cap ~5 steps/sec, day-boundary handling; live foreground watch) → `activity-sync.js` (orchestrator: sync on open/visible/midnight, 60s HC poll while visible, evening reminder). `activity-sync.syncTodayActivity()` calls `ZitlasStepSensor.setEnabled(false)` whenever HC answers.
+
+**Midnight reset:** `archiveYesterdayActivity()` — date-keyed model; any sync pass after midnight archives the stale "today" into history+Firestore, settles streak, starts fresh. In-app `setTimeout` to 00:00:05 covers the app-stays-open case.
+
+**Recovery Mode:** `ZitlasActivity.getEffectiveGoal()` reads `zitlas_health_today.stepsGoal` (set by health-status.js: sick→2000, 'Rest'→goal paused at 0). Date-keyed to today → auto-restores at midnight. Goal completion + dashboard ring + coach sync all use the effective goal.
+
+**Permission onboarding:** `step-permissions.js` modal (native only, `zitlas_step_perm_state`, never re-asks once `granted`). Overlay z-index must stay above zino.css layers (>20003).
+
+**Coach visibility:** day docs carry `goal`/`goalEffective`/`recoveryMode`; coaching-workspace.js Overview renders an Activity card from `users/{athleteId}/activity` (last 30) + onSnapshot on today's doc. Zino AI context gets `activity_today` (steps, goal_pct, steps_remaining, recovery_mode, goal_suggestion) from `zino.js buildContext()`.
+
+**Adaptive goal:** `getAdaptiveGoalSuggestion()` — ≥5 archived days; 7-day avg ≥115% of goal → suggest +10%; <40% → suggest temporary reduction. Suggestion + one-tap apply on the dashboard card, never a silent change.
+
 ### Key localStorage Keys
 
 All state is localStorage-first. The most important keys:

@@ -124,6 +124,25 @@
         current_mood_status: healthToday && healthToday.date === new Date().toISOString().slice(0, 10)
           ? { status: healthToday.status, safety: healthToday.safety } : 'feeling normal / not reported today',
         streak_days: streak && streak.currentStreak,
+        /* Live step tracking (activity-service.js) — lets Zino say things
+           like "only 1,577 steps to go" or suggest an evening walk. */
+        activity_today: (function () {
+          var A = window.ZitlasActivity;
+          if (!A) return undefined;
+          var t = A.getToday();
+          var eff = A.getEffectiveGoal ? A.getEffectiveGoal() : { goal: A.getDailyGoal(), recovery: false, rest: false };
+          return {
+            steps: t.steps,
+            step_goal: eff.goal,
+            goal_pct: eff.goal > 0 ? Math.round((t.steps / eff.goal) * 100) : 100,
+            steps_remaining: Math.max(0, eff.goal - t.steps),
+            distance_km: t.distance,
+            calories_burned: t.calories,
+            recovery_mode: eff.recovery,
+            rest_day: eff.rest,
+            goal_suggestion: A.getAdaptiveGoalSuggestion ? (A.getAdaptiveGoalSuggestion() || undefined) : undefined,
+          };
+        })(),
         personal_coaching: _coachingCache && _coachingCache.status === 'active'
           ? { active: true, coachName: _coachingCache.coachName, planType: _coachingCache.planType }
           : { active: false },

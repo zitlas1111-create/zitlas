@@ -1299,9 +1299,13 @@
   window.zitlasSteps = window.zitlasSteps || (function () {
     const A = window.ZitlasActivity, S = window.ZitlasStreak;
     const t = A ? A.getToday() : null;
+    const eff = A && A.getEffectiveGoal ? A.getEffectiveGoal() : null;
     return {
       today_steps:     t ? t.steps         : 0,
-      daily_step_goal: A ? A.getDailyGoal() : 10000,
+      daily_step_goal: eff ? eff.goal : (A ? A.getDailyGoal() : 10000),
+      base_step_goal:  eff ? eff.base : (A ? A.getDailyGoal() : 10000),
+      recovery_mode:   eff ? eff.recovery : false,
+      rest_day:        eff ? eff.rest : false,
       calories_burned: t ? t.calories      : 0,
       distance_km:     t ? t.distance      : 0,
       active_minutes:  t ? t.activeMinutes : 0,
@@ -1312,7 +1316,10 @@
   /* Returns { pct, circumference, targetOffset } for the SVG ring */
   function calculateStepProgress() {
     const { today_steps, daily_step_goal } = window.zitlasSteps;
-    const pct           = Math.min(100, (today_steps / daily_step_goal) * 100);
+    /* Rest day (recovery): goal is paused — show a full, calm ring */
+    const pct           = daily_step_goal > 0
+      ? Math.min(100, (today_steps / daily_step_goal) * 100)
+      : 100;
     const R             = 80;
     const circumference = +(2 * Math.PI * R).toFixed(2);
     const targetOffset  = +(circumference * (1 - pct / 100)).toFixed(2);
@@ -1354,7 +1361,9 @@
         const eased   = 1 - Math.pow(1 - t, 3);
         const current = Math.round(eased * target);
         count.textContent = current.toLocaleString();
-        if (pctEl) pctEl.textContent = Math.round(Math.min(100, (current / goal) * 100)) + '%';
+        if (pctEl) pctEl.textContent = goal > 0
+          ? Math.round(Math.min(100, (current / goal) * 100)) + '%'
+          : '100%';
         if (t < 1) requestAnimationFrame(tick);
       };
       requestAnimationFrame(tick);
@@ -1411,7 +1420,30 @@
       ? `<div class="sac-streak-badge">🔥 ${streakDays} Day Streak</div>`
       : '';
 
-    if (label) label.textContent = `${pctRounded}% of daily goal`;
+    /* Recovery Mode — health-status.js reduced/paused today's goal */
+    const recoveryLine = d.recovery_mode
+      ? `<p class="sac-remaining" style="color:#0EA5E9;font-weight:700">🛟 Recovery Mode — ` +
+        (d.rest_day
+          ? 'step goal paused for today'
+          : `today's goal reduced to ${(d.daily_step_goal || 0).toLocaleString()} steps`) +
+        `. Back to ${(d.base_step_goal || 10000).toLocaleString()} tomorrow.</p>`
+      : '';
+
+    /* Adaptive goal suggestion (7-day average) — one-tap apply */
+    let adaptiveLine = '';
+    if (!d.recovery_mode && window.ZitlasActivity && window.ZitlasActivity.getAdaptiveGoalSuggestion) {
+      const sug = window.ZitlasActivity.getAdaptiveGoalSuggestion();
+      if (sug) {
+        adaptiveLine =
+          `<p class="sac-remaining" style="font-size:12px">💡 ${sug.reason} ` +
+          `<button id="sacApplyGoal" data-goal="${sug.suggestedGoal}" ` +
+          `style="border:none;background:rgba(255,152,0,0.14);color:#FF9800;font-weight:800;` +
+          `border-radius:8px;padding:3px 9px;cursor:pointer;font-family:inherit">` +
+          `Set ${sug.suggestedGoal.toLocaleString()}</button></p>`;
+      }
+    }
+
+    if (label) label.textContent = d.rest_day ? 'Recovery rest day' : `${pctRounded}% of daily goal`;
 
     content.innerHTML = `
       <div class="sac-card">
@@ -1446,8 +1478,10 @@
         </div>
 
         <div class="sac-right">
-          <p class="sac-goal-line">🎯 Today's Target: ${(d.daily_step_goal || 10000).toLocaleString()} Steps</p>
+          <p class="sac-goal-line">🎯 Today's Target: ${d.rest_day ? 'Rest &amp; recover' : (d.daily_step_goal || 10000).toLocaleString() + ' Steps'}</p>
+          ${recoveryLine}
           ${remainingLine}
+          ${adaptiveLine}
 
           <div class="sac-stats-row">
             <div class="sac-stat">
@@ -1500,11 +1534,24 @@
           const eased   = 1 - Math.pow(1 - t, 3);
           const current = Math.round(eased * target);
           if (count)  count.textContent = current.toLocaleString();
-          if (pctEl)  pctEl.textContent = Math.round(Math.min(100, (current / (d.daily_step_goal || 10000)) * 100)) + '%';
+          if (pctEl)  pctEl.textContent = d.daily_step_goal > 0
+            ? Math.round(Math.min(100, (current / d.daily_step_goal) * 100)) + '%'
+            : '100%';
           if (t < 1) requestAnimationFrame(tick);
         };
         requestAnimationFrame(tick);
       });
+    });
+
+    /* Adaptive goal apply — one tap updates the goal + re-renders */
+    const applyBtn = content.querySelector('#sacApplyGoal');
+    if (applyBtn) applyBtn.addEventListener('click', () => {
+      const g = parseInt(applyBtn.dataset.goal, 10);
+      if (g && window.ZitlasActivity) {
+        window.ZitlasActivity.setDailyGoal(g);
+        applyActivityModel(window.ZitlasActivity.getToday());
+        showToast(`🎯 Daily step goal updated to ${g.toLocaleString()}`);
+      }
     });
   }
 
@@ -1917,9 +1964,14 @@
   /* Single render path for activity updates — fired by activity-sync.js on
      every sync (app open, foreground resume, midnight rollover). */
   function applyActivityModel(model) {
+    const A   = window.ZitlasActivity;
+    const eff = A && A.getEffectiveGoal ? A.getEffectiveGoal() : null;
     window.zitlasSteps = {
       today_steps:     model.steps         || 0,
-      daily_step_goal: window.ZitlasActivity ? window.ZitlasActivity.getDailyGoal() : 10000,
+      daily_step_goal: eff ? eff.goal : (A ? A.getDailyGoal() : 10000),
+      base_step_goal:  eff ? eff.base : (A ? A.getDailyGoal() : 10000),
+      recovery_mode:   eff ? eff.recovery : false,
+      rest_day:        eff ? eff.rest : false,
       calories_burned: model.calories      || 0,
       distance_km:     model.distance      || 0,
       active_minutes:  model.activeMinutes || 0,
