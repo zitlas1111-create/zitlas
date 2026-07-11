@@ -2578,19 +2578,47 @@
        ID, the review is stale and must not be shown. */
     var activePlanId = localStorage.getItem('zitlas_plan_id') || null;
 
-    return all.slice().reverse().find(function (r) {
+    /* Anchor to the ACTIVE review request (submitVerifyRequest() writes this
+       the moment the athlete asks a specific expert for a review — its `id`
+       is the exact same id every review document is keyed by, all the way
+       through Firestore's review_requests/{id} and expert_plan_reviews).
+       Without this anchor, "any completed diet review for this user" can
+       return a stale, never-accepted review from a DIFFERENT expert the
+       athlete reviewed with previously (e.g. Pratik) while they're actually
+       waiting on a brand-new request to a different expert (e.g. Srujan) —
+       the exact production bug this filter closes. A review only qualifies
+       if it IS the active request, identified by id first (authoritative)
+       and cross-checked by expertId when both are present. */
+    var activeRequest = safeJSON('zitlas_review_request', null);
+
+    var candidates = all.slice().reverse().filter(function (r) {
       var isCompleted    = r.status === 'review_completed' || r.status === 'completed';
       var planIdMismatch = activePlanId && r.planId && r.planId !== activePlanId;
-      console.log("[PLAN CHECK]", "activePlanId:", activePlanId, "review.planId:", r.planId, "mismatch:", planIdMismatch);
-      console.log("[REVIEW]", r.id, r.status);
       var _rtype = r.reviewType || r.planReviewType || 'diet';
-      console.log("[MATCH]", _rtype === 'diet', isCompleted, !!r.reviewedDietPlan, !planIdMismatch);
       return _rtype === 'diet' &&
              isCompleted &&
              r.reviewedDietPlan &&
              (!uid || r.userId === uid) &&
              !planIdMismatch;
-    }) || null;
+    });
+
+    /* No active request on this device -> nothing to anchor to. Falling
+       back to "the newest qualifying review" is exactly the bug being
+       fixed here (it can resurface a stale, unaccepted review from a
+       different, earlier expert) — showing no banner is always safer
+       than showing the wrong one. */
+    if (!activeRequest || !activeRequest.id) {
+      console.log("[REVIEW MATCH] no active review request on this device — no banner shown");
+      return null;
+    }
+
+    var forActiveRequest = candidates.find(function (r) {
+      var expertMatches = !r.expertId || !activeRequest.expertId || r.expertId === activeRequest.expertId;
+      return r.id === activeRequest.id && expertMatches;
+    });
+    console.log("[REVIEW MATCH] active request:", activeRequest.id, activeRequest.expertId,
+      "-> matched:", forActiveRequest ? forActiveRequest.id : null);
+    return forActiveRequest || null;
   }
 
   /* ══════════════════════════════════════════
