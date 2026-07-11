@@ -102,7 +102,15 @@
   /* ── Apply a cumulative reading to today's model ── */
   function _applyReading(cumulative) {
     if (!_enabled || !win.ZitlasActivity) return;
-    var res = computeDelta(_loadState(), cumulative, Date.now(), _todayStr());
+    var prev = _loadState();
+    /* Raw-value trace: proves whether the OS counter itself is moving.
+       If `raw` never changes after walking, the problem is below us
+       (sensor/permission); if it changes but `added` stays 0, it's the
+       baseline/anti-cheat logic. */
+    console.log('[STEP SENSOR] raw reading:', cumulative,
+      '| prev baseline:', prev && prev.lastCumulative,
+      '| at', new Date().toISOString());
+    var res = computeDelta(prev, cumulative, Date.now(), _todayStr());
     _saveState(res.state);
     if (res.rejected) {
       console.warn('[STEP SENSOR] implausible jump rejected');

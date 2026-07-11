@@ -30,6 +30,85 @@
     } catch (_) {}
   }
 
+  /* ── Step-pipeline diagnostics ──
+     Probes every stage of the pipeline and returns one structured report.
+     Run from the console anywhere: ZitlasStepDiagnostics().then(console.table)
+     A summary block is also logged on every sync pass ([STEP DIAG]). */
+  function runStepDiagnostics() {
+    var cap = win.Capacitor && win.Capacitor.Plugins;
+    var d = {
+      timestamp:            new Date().toISOString(),
+      runtime:              cap ? 'native (Capacitor app)' : 'browser website',
+      capacitorPresent:     !!cap,
+      hcPluginPresent:      !!(cap && cap.HealthConnect),
+      sensorPluginPresent:  !!(cap && cap.StepSensor),
+      hcAvailable:          null, hcStatus: null, hcGranted: null, hcSteps: null,
+      sensorAvailable:      null, sensorPermission: null, sensorCumulative: null,
+      permOnboardingState:  (function () {
+        try { return JSON.parse(localStorage.getItem('zitlas_step_perm_state') || 'null'); } catch (_) { return null; }
+      })(),
+      persistedToday:       win.ZitlasActivity ? win.ZitlasActivity.getToday() : null,
+      activeSource:         'none',
+      verdict:              '',
+    };
+
+    var probes = [];
+    if (d.hcPluginPresent) {
+      probes.push(cap.HealthConnect.isAvailable().then(function (st) {
+        d.hcAvailable = !!st.available; d.hcStatus = st.status;
+        if (!st.available) return;
+        return cap.HealthConnect.getTodayActivity().then(function (a) {
+          if (a && a.available === false)        { d.hcAvailable = false; return; }
+          if (a && a.permissionGranted === false) { d.hcGranted = false; return; }
+          d.hcGranted = true;
+          d.hcSteps = a ? a.today_steps : null;
+        });
+      }).catch(function (e) { d.hcStatus = 'probe error: ' + e; }));
+    }
+    if (d.sensorPluginPresent) {
+      probes.push(cap.StepSensor.isAvailable().then(function (st) {
+        d.sensorAvailable = !!st.available;
+        d.sensorPermission = !!st.permissionGranted;
+        if (!st.available || !st.permissionGranted) return;
+        return cap.StepSensor.readCumulative().then(function (r) {
+          d.sensorCumulative = r ? r.cumulative : null; /* raw OS steps-since-boot */
+        });
+      }).catch(function (e) { d.sensorAvailable = 'probe error: ' + e; }));
+    }
+
+    return Promise.all(probes).then(function () {
+      if (d.hcGranted && d.hcSteps != null)                  d.activeSource = 'health_connect';
+      else if (d.sensorAvailable === true && d.sensorPermission) d.activeSource = 'step_sensor';
+
+      if (!d.capacitorPresent) {
+        d.verdict = 'Running as a WEBSITE in a browser. Browsers have no step-counter ' +
+          'API and cannot read Health Connect — real step data is only possible in the ' +
+          'ZITLAS Android app (Capacitor APK). This is a platform limitation, not a bug.';
+      } else if (d.activeSource === 'health_connect') {
+        d.verdict = 'Health Connect is the active source (' + d.hcSteps + ' steps today from the OS).';
+      } else if (d.activeSource === 'step_sensor') {
+        d.verdict = 'Hardware step sensor is the active source (raw counter since boot: ' +
+          d.sensorCumulative + '). Walk a few steps and re-run — the raw value must increase.';
+      } else if (d.hcPluginPresent && d.hcAvailable && d.hcGranted === false) {
+        d.verdict = 'Health Connect installed but PERMISSION DENIED — re-run the permission flow.';
+      } else if (!d.sensorPluginPresent) {
+        d.verdict = 'Native app detected but StepSensor plugin missing — this APK predates the ' +
+          'step-sensor build. Rebuild the APK (npx cap sync android + Gradle build).';
+      } else if (d.sensorAvailable === false) {
+        d.verdict = 'Device reports NO hardware step counter and Health Connect is unavailable — ' +
+          'this device cannot count steps.';
+      } else if (d.sensorPermission === false) {
+        d.verdict = 'Step sensor present but ACTIVITY_RECOGNITION permission not granted — ' +
+          're-run the permission flow.';
+      } else {
+        d.verdict = 'No usable step source found.';
+      }
+      console.log('[STEP DIAG]', JSON.stringify(d, null, 2));
+      win.__zitlasStepDiag = d;
+      return d;
+    });
+  }
+
   /* Full sync pass. Resolves the up-to-date today model.
      Source selection: Health Connect is the source of truth whenever it
      answers; the hardware step sensor (step-sensor.js) only takes over
@@ -162,6 +241,10 @@
     syncTodayActivity().then(_startLivePoll);
     _scheduleMidnightRollover();
 
+    /* One diagnostic report per session — answers "why 0 steps?" in the
+       console without anyone having to reproduce with a debugger attached. */
+    setTimeout(function () { runStepDiagnostics(); }, 4000);
+
     /* Re-sync when the app returns to the foreground (Capacitor webview
        fires visibilitychange on resume) — also catches a midnight that
        passed while the device slept, since the timer above doesn't run
@@ -191,8 +274,9 @@
     syncTodayActivity: syncTodayActivity,
     init:              init,
   };
-  /* Bare global alias (spec-required name) */
-  win.syncTodayActivity = syncTodayActivity;
+  /* Bare global aliases (spec-required names) */
+  win.syncTodayActivity     = syncTodayActivity;
+  win.ZitlasStepDiagnostics = runStepDiagnostics;
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);

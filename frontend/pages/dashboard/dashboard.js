@@ -1420,6 +1420,15 @@
       ? `<div class="sac-streak-badge">🔥 ${streakDays} Day Streak</div>`
       : '';
 
+    /* Browser reality check: websites have no step-counter API and cannot
+       read Health Connect — only the Android app can. Saying so beats
+       leaving the user staring at a zero that looks broken. */
+    const browserNote = (!window.Capacitor && (d.today_steps || 0) === 0)
+      ? `<p class="sac-remaining" style="font-size:11.5px;color:var(--text-sec,#94A3B8)">` +
+        `📱 Live step tracking works in the ZITLAS Android app — mobile browsers can't ` +
+        `read the phone's step sensor.</p>`
+      : '';
+
     /* Recovery Mode — health-status.js reduced/paused today's goal */
     const recoveryLine = d.recovery_mode
       ? `<p class="sac-remaining" style="color:#0EA5E9;font-weight:700">🛟 Recovery Mode — ` +
@@ -1481,6 +1490,7 @@
           <p class="sac-goal-line">🎯 Today's Target: ${d.rest_day ? 'Rest &amp; recover' : (d.daily_step_goal || 10000).toLocaleString() + ' Steps'}</p>
           ${recoveryLine}
           ${remainingLine}
+          ${browserNote}
           ${adaptiveLine}
 
           <div class="sac-stats-row">
