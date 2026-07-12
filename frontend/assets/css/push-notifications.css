@@ -1,0 +1,156 @@
+/*!
+ * ZITLAS — Push notification prompts (assets/css/push-notifications.css)
+ * Self-contained (push- prefix); appended to <body> by
+ * assets/js/push-notifications.js. Same visual family as the geo-location
+ * and step-permissions prompts.
+ */
+
+.push-overlay {
+  position: fixed;
+  inset: 0;
+  /* Above Zino's floating layers (zino.css tops out at 20003) — same
+     layering lesson as the other permission prompts */
+  z-index: 21000;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: pushFadeIn 0.25s ease;
+}
+@keyframes pushFadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.push-card {
+  position: relative;
+  background: var(--card-bg, #fff);
+  border-radius: 24px;
+  padding: 26px 24px 22px;
+  max-width: 350px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  animation: pushPopIn 0.3s ease;
+}
+@keyframes pushPopIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.97); }
+  to   { opacity: 1; transform: none; }
+}
+
+.push-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px; height: 56px;
+  border-radius: 50%;
+  background: rgba(255,152,0,0.12);
+  font-size: 26px;
+  margin-bottom: 12px;
+}
+
+.push-title {
+  margin: 0 0 6px;
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--text, #1E293B);
+  line-height: 1.35;
+}
+
+.push-sub {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--text-sec, #64748B);
+  line-height: 1.55;
+}
+
+.push-list {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  text-align: left;
+}
+.push-list li {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text, #1E293B);
+}
+.push-tick {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: rgba(107,165,57,0.15);
+  color: #6BA539;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.push-steps {
+  margin: 0 0 14px;
+  padding-left: 20px;
+  text-align: left;
+  font-size: 13px;
+  color: var(--text-sec, #64748B);
+  line-height: 1.7;
+}
+.push-steps b { color: var(--text, #1E293B); }
+
+.push-status {
+  min-height: 18px;
+  margin: 4px 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #FF9800;
+}
+
+.push-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.push-btn {
+  width: 100%;
+  padding: 13px;
+  border-radius: 14px;
+  font-size: 14px;
+  font-weight: 800;
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  transition: opacity 0.18s, transform 0.18s;
+}
+.push-btn:disabled { opacity: 0.6; cursor: default; }
+.push-btn:active:not(:disabled) { transform: scale(0.98); }
+
+.push-btn--enable {
+  background: linear-gradient(135deg, #FFA940, #FF7A00);
+  color: #fff;
+  box-shadow: 0 8px 22px rgba(255,122,0,0.28);
+}
+.push-btn--enable:hover:not(:disabled) { opacity: 0.92; }
+
+.push-btn--later {
+  background: rgba(30,41,59,0.06);
+  color: var(--text-sec, #64748B);
+}
+.push-btn--later:hover { background: rgba(30,41,59,0.1); }
+
+@media (prefers-color-scheme: dark) {
+  .push-card { background: var(--card-bg, #1E293B); }
+  .push-title, .push-list li, .push-steps b { color: var(--text, #F1F5F9); }
+  .push-btn--later { background: rgba(255,255,255,0.08); color: var(--text-sec, #94A3B8); }
+  .push-btn--later:hover { background: rgba(255,255,255,0.14); }
+}
+:root[data-theme="dark"] .push-card { background: var(--card-bg, #1E293B); }
+:root[data-theme="dark"] .push-title, :root[data-theme="dark"] .push-list li, :root[data-theme="dark"] .push-steps b { color: var(--text, #F1F5F9); }
+:root[data-theme="dark"] .push-btn--later { background: rgba(255,255,255,0.08); color: var(--text-sec, #94A3B8); }
+:root[data-theme="dark"] .push-btn--later:hover { background: rgba(255,255,255,0.14); }

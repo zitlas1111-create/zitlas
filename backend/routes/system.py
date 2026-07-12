@@ -1,14 +1,17 @@
 """
 ZITLAS — System Routes
 
-GET /api/system/kb-status   — Knowledge base lazy-loading cache status
+GET  /api/system/kb-status   — Knowledge base lazy-loading cache status
+POST /api/system/test-push   — Send a test web-push notification to a token
 """
 
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
 
 from services.kb_manager import kb_manager
+from services import push_service
 
 router = APIRouter()
 
@@ -38,3 +41,31 @@ async def kb_status() -> dict[str, Any]:
         "cache_size":      stats["cache_size"],
         "memory_optimized": True,
     }
+
+
+class TestPushRequest(BaseModel):
+    token: str = Field(..., min_length=20, description="FCM device token (frontend: localStorage zitlas_push_token)")
+    title: str = Field(default="ZITLAS test notification")
+    body:  str = Field(default="If you can read this, web push works end to end. 🎉")
+
+
+@router.post("/test-push")
+async def test_push(req: TestPushRequest) -> dict[str, Any]:
+    """
+    End-to-end push verification: sends one real FCM message to one device
+    token. Requires FIREBASE_SERVICE_ACCOUNT_JSON (or _FILE) in the
+    environment — returns 503 with setup instructions until it's configured,
+    so the endpoint is safe to ship before the credential exists.
+    """
+    if not push_service.is_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="Push sending is not configured. Set FIREBASE_SERVICE_ACCOUNT_JSON "
+                   "(Firebase console -> Project settings -> Service accounts -> "
+                   "Generate new private key) in the backend environment.",
+        )
+    result = push_service.send_to_token(req.token, req.title, req.body,
+                                        data={"category": "system", "type": "test"})
+    if not result.get("ok"):
+        raise HTTPException(status_code=502, detail=result.get("detail"))
+    return {"success": True, "detail": result.get("detail")}
