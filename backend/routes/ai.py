@@ -202,8 +202,10 @@ async def zino_chat(body: ZinoChatRequest) -> dict[str, Any]:
     persona + tone (groq_service.ZINO_COMPANION_SYSTEM), full athlete context
     injection, and short conversation history for continuity.
     """
+    # 16 turns (spec: "at least 10-20") so "it"/"that" a few messages back
+    # still resolves — this is what conversation memory IS for this endpoint.
     history_lines = []
-    for h in body.history[-8:]:
+    for h in body.history[-16:]:
         role = 'Athlete' if h.get('role') == 'user' else 'Zino'
         text = str(h.get('text', ''))[:400]
         if text:

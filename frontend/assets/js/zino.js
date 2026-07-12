@@ -93,6 +93,65 @@
       };
     }
 
+    /* ── Page awareness — where the athlete IS right now ──
+       Zino must answer "who do I send it to?" on the Experts page like a
+       coach standing next to the user, not like a chatbot with amnesia. */
+    var _PAGE_MAP = [
+      { re: /\/dashboard\/dashboard/,   name: 'Home Dashboard',    purpose: 'overview: goal progress, today’s steps, SWOT, health status check-in' },
+      { re: /\/weekly-plan/,            name: 'Training Plan',     purpose: 'the weekly workout plan — user questions here are usually about exercises, skipping, replacing, or making workouts easier/harder' },
+      { re: /\/diet\/diet/,             name: 'Diet Plan',         purpose: 'the 7-day meal plan — user questions here are usually about foods, replacing meals (Swap Meal button on each meal card), or requesting an expert diet review' },
+      { re: /\/coaches\/cprofile/,      name: 'Expert Profile',    purpose: 'viewing one specific expert — user can Chat, hire as Personal Coach, or Request Review of their diet/workout plan from this page' },
+      { re: /\/coaches\/coaches/,       name: 'Experts Directory', purpose: 'browsing verified experts — user questions here are usually about WHICH expert to pick or send a review/verification request to' },
+      { re: /\/profile\/profile/,       name: 'My Profile',        purpose: 'account settings, personal info, wallet' },
+    ];
+    function currentPage() {
+      var p = win.location.pathname;
+      for (var i = 0; i < _PAGE_MAP.length; i++) {
+        if (_PAGE_MAP[i].re.test(p)) return { name: _PAGE_MAP[i].name, purpose: _PAGE_MAP[i].purpose };
+      }
+      return { name: 'ZITLAS app', purpose: '' };
+    }
+
+    /* Experts cached at login (zitlas_experts) — lets Zino recommend a
+       specific person by name instead of "browse the experts page". */
+    function availableExperts() {
+      var list = safeJSON('zitlas_experts');
+      if (!Array.isArray(list) || !list.length) return undefined;
+      return list.slice(0, 8).map(function (e) {
+        return { name: e.name, specialization: e.specialization || e.role || 'Expert' };
+      });
+    }
+
+    /* On an Expert Profile page, name the expert being viewed */
+    function viewingExpert() {
+      if (!/\/coaches\/cprofile/.test(win.location.pathname)) return undefined;
+      var id = new URLSearchParams(win.location.search).get('expertId') ||
+               new URLSearchParams(win.location.search).get('id');
+      if (!id) return undefined;
+      var list = safeJSON('zitlas_experts') || [];
+      var e = list.find(function (x) { return String(x.id) === String(id); });
+      return e ? { name: e.name, specialization: e.specialization || 'Expert' } : undefined;
+    }
+
+    /* The active review request + whether its result is waiting to be
+       accepted — so "the request" / "my review" always has a referent. */
+    function reviewRequestContext() {
+      var req = safeJSON('zitlas_review_request');
+      if (!req || !req.id) return undefined;
+      var experts = safeJSON('zitlas_experts') || [];
+      var exp = experts.find(function (x) { return String(x.id) === String(req.expertId); });
+      var out = { status: req.status || 'pending', expertName: exp ? exp.name : undefined };
+      var all = safeJSON('expert_plan_reviews') || [];
+      var done = all.find(function (r) {
+        return r.id === req.id && (r.status === 'review_completed' || r.status === 'completed');
+      });
+      if (done) {
+        out.status = done.athleteAccepted ? 'completed_and_accepted' : 'completed_awaiting_your_acceptance';
+        out.expertName = done.expertName || out.expertName;
+      }
+      return out;
+    }
+
     function buildContext() {
       var assessment = safeJSON('zitlas_assessment') || safeJSON('zitlas_survey');
       var calc = safeJSON('zitlas_calculations');
@@ -102,9 +161,16 @@
       var healthToday = safeJSON('zitlas_health_today');
       var streak = (typeof ZitlasStreak !== 'undefined' && ZitlasStreak.getStreak) ? ZitlasStreak.getStreak() : null;
 
+      var loc = safeJSON('zitlas_location');
       var ctx = {
         athleteName: myName(),
         today: new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short' }),
+        /* Where the user is RIGHT NOW — anchor ambiguous questions here */
+        current_page: currentPage(),
+        viewing_expert: viewingExpert(),
+        experts_available: availableExperts(),
+        review_request: reviewRequestContext(),
+        region: loc && (loc.city || loc.state) ? { city: loc.city, state: loc.state } : undefined,
         goal: goal || undefined,
         bmi: calc && calc.bmi, bmi_category: calc && calc.bmi_category,
         bmr_kcal: calc && calc.bmr_kcal, tdee_kcal: calc && calc.tdee_kcal,
@@ -406,7 +472,18 @@
      FLOATING ASSISTANT + CHAT OVERLAY
   ══════════════════════════════════════════════ */
   var FloatingAssistant = (function () {
-    var _history = []; /* [{role:'user'|'zino', text}] — in-memory, per page load */
+    /* [{role:'user'|'zino', text}] — persisted per browser session so the
+       conversation SURVIVES page navigation: "I want to verify my diet"
+       said on the Diet page must still be in memory when the athlete asks
+       "who do I send it to?" on the Experts page a moment later. */
+    var HISTORY_KEY = 'zitlas_zino_history';
+    var _history = (function () {
+      try { var v = JSON.parse(sessionStorage.getItem(HISTORY_KEY) || '[]'); return Array.isArray(v) ? v : []; }
+      catch (_) { return []; }
+    })();
+    function _persistHistory() {
+      try { sessionStorage.setItem(HISTORY_KEY, JSON.stringify(_history)); } catch (_) {}
+    }
     var _busy = false;
 
     var CHIPS = [
@@ -471,6 +548,13 @@
       if (badge) badge.classList.remove('show');
       if (!_history.length) {
         renderBubble('zino', "Hey " + myName().split(' ')[0] + "! 👋 I'm Zino — ask me anything about your plan, or tap a quick action below.");
+      } else {
+        /* Session history restored (e.g. after navigating between pages) —
+           re-render it so the visible thread matches what Zino remembers */
+        var wrap = $('znChatMsgs');
+        if (wrap && !wrap.childElementCount) {
+          _history.forEach(function (h) { renderBubble(h.role === 'user' ? 'user' : 'zino', h.text); });
+        }
       }
       bd.classList.add('show');
       requestAnimationFrame(function () { requestAnimationFrame(function () { bd.classList.add('open'); }); });
@@ -520,6 +604,7 @@
         renderBubble('zino', reply);
         _history.push({ role: 'user', text: text }, { role: 'zino', text: reply });
         if (_history.length > 20) _history = _history.slice(-20);
+        _persistHistory();
       }).catch(function (err) {
         removeTyping();
         renderBubble('zino', "Hmm, I'm having trouble connecting right now 😅 Try again in a moment?");
