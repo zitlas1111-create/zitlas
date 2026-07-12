@@ -64,14 +64,85 @@
     return null;
   }
 
-  /* personalInfo can carry a base64 profile photo, which is device-local
-     on purpose (Firestore documents cap out at 1 MiB — a proper fix needs
-     Storage-hosted URLs like the chat/certificate uploads already use).
-     Callers that write personalInfo strip `photo` before syncing to the
-     cloud, so applying a cloud copy must MERGE on top of the existing
-     local object instead of overwriting it, or the local photo would be
-     wiped out the next time this device hydrates. */
+  /* personalInfo carries the base64 profile photo. Historically the photo
+     was device-local (an uncompressed camera photo as base64 can exceed
+     Firestore's 1 MiB document cap), which meant two devices on the same
+     account showed different avatars. Now the photo is canvas-compressed
+     to a small thumbnail (compressImage below, ~20-60 KB) and synced like
+     every other personalInfo field, with PHOTO_SYNC_MAX_CHARS as the
+     safety valve: anything larger stays local-only exactly as before.
+     Applying a cloud copy still MERGES on top of the existing local
+     object — so a device holding a legacy oversized local photo keeps it
+     until the migration below replaces it with the compressed copy. */
   var MERGE_ON_APPLY = { personalInfo: true };
+  var PHOTO_SYNC_MAX_CHARS = 180000; /* ~135 KB binary — well under 1 MiB
+                                        even alongside diet/workout plans
+                                        on the same users/{uid} doc */
+
+  /* ── Shared avatar compressor ──
+     dataUrl -> downscaled JPEG data URL (max maxPx on the longest side).
+     White background flatten so transparent PNGs don't turn black. */
+  function compressImage(dataUrl, maxPx, quality) {
+    maxPx = maxPx || 512;
+    quality = quality || 0.8;
+    return new Promise(function (resolve, reject) {
+      var img = new Image();
+      img.onload = function () {
+        try {
+          var scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+          var w = Math.max(1, Math.round(img.width * scale));
+          var h = Math.max(1, Math.round(img.height * scale));
+          var canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          var ctx = canvas.getContext('2d');
+          ctx.fillStyle = '#fff';
+          ctx.fillRect(0, 0, w, h);
+          ctx.drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        } catch (e) { reject(e); }
+      };
+      img.onerror = function () { reject(new Error('image decode failed')); };
+      img.src = dataUrl;
+    });
+  }
+
+  /* ── One-time migration: push this device's existing local photo up ──
+     Runs after every hydrate. If this device has a photo the cloud doesn't,
+     compress it (legacy full-size uploads) and sync it, so a photo uploaded
+     BEFORE this feature existed reaches the user's other devices without
+     them having to re-upload. Deep-merge patch touches ONLY the photo key
+     (Firestore set+merge merges nested maps), never other personalInfo. */
+  function _maybePushLocalPhoto(cloudData) {
+    try {
+      var local = JSON.parse(localStorage.getItem('zitlas_personal_info') || '{}') || {};
+      var localPhoto = local.photo;
+      if (!localPhoto || typeof localPhoto !== 'string' || localPhoto.indexOf('data:') !== 0) return;
+      var cloudPhoto = cloudData && cloudData.personalInfo && cloudData.personalInfo.photo;
+      if (cloudPhoto) return; /* cloud already has one — nothing to migrate */
+
+      var push = function (photo) {
+        var d = db(); var uid = myUid();
+        if (!d || !uid) return;
+        d.collection('users').doc(uid)
+          .set({ personalInfo: { photo: photo } }, { merge: true })
+          .then(function () { console.log('[CLOUD SYNC] local profile photo migrated to cloud (' + photo.length + ' chars)'); })
+          .catch(function (e) { console.warn('[CLOUD SYNC] photo migration failed', e); });
+      };
+
+      if (localPhoto.length <= PHOTO_SYNC_MAX_CHARS) {
+        push(localPhoto);
+      } else {
+        compressImage(localPhoto, 512, 0.8).then(function (small) {
+          if (small.length > PHOTO_SYNC_MAX_CHARS) return; /* pathological — keep local-only */
+          /* Replace the oversized local copy too, so localStorage stops
+             carrying a multi-MB string this device re-parses on every read */
+          local.photo = small;
+          try { localStorage.setItem('zitlas_personal_info', JSON.stringify(local)); } catch (_) {}
+          push(small);
+        }).catch(function (e) { console.warn('[CLOUD SYNC] photo compression failed — staying local-only', e); });
+      }
+    } catch (_) {}
+  }
 
   function _applyField(cloudKey, lsKey, cloudValue) {
     if (MERGE_ON_APPLY[cloudKey]) {
@@ -107,10 +178,15 @@
     if (_hydratePromiseFor === uid && _hydratePromise) return _hydratePromise;
     _hydratePromiseFor = uid;
     _hydratePromise = d.collection('users').doc(uid).get().then(function (snap) {
-      if (!snap.exists) return false;
-      _applySnapshot(snap.data());
-      _hydratedFor = uid;
-      return true;
+      var data = snap.exists ? snap.data() : null;
+      if (data) {
+        _applySnapshot(data);
+        _hydratedFor = uid;
+      }
+      /* Photo migration runs even when the doc doesn't exist yet — a photo
+         uploaded on this device before first cloud write still syncs up. */
+      _maybePushLocalPhoto(data || {});
+      return !!data;
     }).catch(function (e) {
       console.warn('[CLOUD SYNC] hydrate failed — continuing with local cache', e);
       return false;
@@ -254,5 +330,7 @@
     saveBulk: saveBulk,
     bootWithSync: bootWithSync,
     myUid: myUid,
+    compressImage: compressImage,
+    PHOTO_SYNC_MAX_CHARS: PHOTO_SYNC_MAX_CHARS,
   };
 })(window);

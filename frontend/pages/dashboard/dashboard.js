@@ -1914,6 +1914,9 @@
           safeRun('renderGoalCard',      renderGoalCard);
           safeRun('renderSwotWidget',    renderSwotWidget);
           safeRun('renderTrainingWidget', renderTrainingWidget);
+          /* personalInfo (name/photo) syncs through the same doc — a photo
+             changed on another device updates this screen live */
+          safeRun('applyProfileImages',  applyProfileImages);
         });
       });
     });

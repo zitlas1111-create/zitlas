@@ -144,7 +144,19 @@
       if (!file) return;
       if (!file.type.startsWith('image/')) { showToast(window.ZitlasLang ? ZitlasLang.t('toast_select_image') : 'Please select an image file'); return; }
       var reader = new FileReader();
-      reader.onload = function (ev) { photoImg.src = ev.target.result; };
+      reader.onload = function (ev) {
+        /* Compress to an avatar-sized thumbnail (max 512px JPEG) so the
+           photo fits in the Firestore personalInfo sync and every device
+           on this account shows it — a raw camera photo as base64 would
+           exceed the 1 MiB document cap and stay stuck on this device. */
+        if (typeof ZitlasCloudSync !== 'undefined' && ZitlasCloudSync.compressImage) {
+          ZitlasCloudSync.compressImage(ev.target.result, 512, 0.8)
+            .then(function (small) { photoImg.src = small; })
+            .catch(function () { photoImg.src = ev.target.result; });
+        } else {
+          photoImg.src = ev.target.result;
+        }
+      };
       reader.readAsDataURL(file);
     });
   }
@@ -341,11 +353,16 @@
         localStorage.setItem(SURVEY_KEY, JSON.stringify(survey));
 
         /* Cross-device sync — every OTHER device on this account must see
-           this same name/age/height/weight/etc. The photo stays local-only:
-           a base64 image can exceed Firestore's 1 MiB document cap. */
+           this same name/photo/age/height/weight/etc. The photo is
+           compressed at pick time (initPhotoUpload), so it fits in the
+           personalInfo doc; only a pathological/legacy oversized photo is
+           stripped and stays local (same behavior as before this feature). */
         if (typeof ZitlasCloudSync !== 'undefined') {
           var _cloudData = Object.assign({}, data);
-          delete _cloudData.photo;
+          var _photoCap = ZitlasCloudSync.PHOTO_SYNC_MAX_CHARS || 180000;
+          if (_cloudData.photo && _cloudData.photo.length > _photoCap) {
+            delete _cloudData.photo;
+          }
           ZitlasCloudSync.saveCloudOnly('personalInfo', _cloudData);
           ZitlasCloudSync.save('survey', survey);
         }
