@@ -217,6 +217,39 @@
       return ctx;
     }
 
+    /* Defense-in-depth: the backend already unwraps a model's occasional
+       self-wrapped JSON reply (unwrap_conversational_reply in
+       groq_service.py), but a chat bubble must NEVER render raw JSON even
+       if that layer ever regresses or a future endpoint skips it. Plain
+       prose (the overwhelming common case) returns from this unchanged —
+       JSON.parse throws immediately on non-JSON text. */
+    var REPLY_KEYS = ['response', 'message', 'answer', 'reply', 'text', 'content'];
+    function unwrapReply(raw) {
+      if (typeof raw !== 'string' || !raw) return raw;
+      var trimmed = raw.trim();
+      if (!trimmed) return raw;
+      var candidate = trimmed;
+      var fence = /^```(?:json)?\s*([\s\S]*?)\s*```$/.exec(trimmed);
+      if (fence) candidate = fence[1].trim();
+      if (!candidate || (candidate[0] !== '{' && candidate[0] !== '"')) return raw;
+      var parsed;
+      try { parsed = JSON.parse(candidate); } catch (_) { return raw; }
+      if (typeof parsed === 'string') return parsed;
+      if (parsed && typeof parsed === 'object') {
+        for (var i = 0; i < REPLY_KEYS.length; i++) {
+          if (typeof parsed[REPLY_KEYS[i]] === 'string' && parsed[REPLY_KEYS[i]].trim()) {
+            return parsed[REPLY_KEYS[i]];
+          }
+        }
+        var strVals = Object.keys(parsed).map(function (k) { return parsed[k]; })
+          .filter(function (v) { return typeof v === 'string' && v.trim(); });
+        if (strVals.length === 1) return strVals[0];
+        console.warn('[ZINO] backend returned an unrecognized object shape — using fallback message', parsed);
+        return "Sorry, I got a bit tangled up there 😅 Could you ask that again?";
+      }
+      return raw;
+    }
+
     function send(message, history) {
       var body = { message: message, context: buildContext(), history: history || [] };
       return fetch('/api/ai/zino-chat', {
@@ -224,7 +257,7 @@
       }).then(function (r) {
         if (!r.ok) throw new Error('Zino is having trouble connecting (' + r.status + ')');
         return r.json();
-      }).then(function (data) { return data.reply; });
+      }).then(function (data) { return unwrapReply(data.reply); });
     }
 
     refreshCoachingStatus();

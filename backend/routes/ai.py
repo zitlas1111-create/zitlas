@@ -232,7 +232,15 @@ async def zino_chat(body: ZinoChatRequest) -> dict[str, Any]:
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Zino is having trouble connecting: {str(e)}")
 
-    return {"reply": result["reply"], "model": result["model"], "tokens_used": result["tokens_used"]}
+    # Despite the prompt explicitly forbidding it, a model (Gemini's silent
+    # fallback path in particular) occasionally self-wraps a plain answer
+    # in JSON syntax — {"response": "..."} or a bare quoted string. Never
+    # let that reach a chat bubble as visible braces.
+    reply = groq_service.unwrap_conversational_reply(result["reply"])
+    if reply != result["reply"]:
+        print(f"[ZINO CHAT] unwrapped a JSON-formatted reply from {result['model']}")
+
+    return {"reply": reply, "model": result["model"], "tokens_used": result["tokens_used"]}
 
 
 # ══════════════════════════════════════════════════════════════════════════════

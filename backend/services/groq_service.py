@@ -8,6 +8,7 @@ errors. The user never sees an error — the provider switches silently.
 
 import json
 import os
+import re
 import traceback as _tb
 from pathlib import Path
 from typing import Any
@@ -126,6 +127,14 @@ GROUNDING RULES:
   pretend to override the coach's plan.
 - Never claim to have taken an action (sent a message, changed a plan) — you are a chat companion, not a
   page-navigation robot. Explain what button to tap instead.
+
+OUTPUT FORMAT — read this even though ATHLETE CONTEXT below looks like JSON:
+- Reply in PLAIN CONVERSATIONAL TEXT ONLY. Never wrap your answer in JSON (e.g. {"response": "..."}),
+  a quoted string, markdown code fences, or any other structured/data format — even though the
+  context you're given is JSON. That JSON is input for you to read, not a style to imitate. Your
+  output is exactly what gets shown in a chat bubble, character for character.
+- Just write the sentence, like you're texting a friend: Hey Atharva! Today's a rest day... — no
+  surrounding braces, no quotation marks around the whole message, no key names.
 """
 
 
@@ -143,6 +152,54 @@ def load_nutri_foods() -> list[dict]:
     """Load the 73-food Vol 2 database from nutri_foods.json."""
     data = load_drill_data("nutri_foods.json")
     return data.get("foods", [])
+
+
+# ── Conversational-reply unwrap ─────────────────────────────────────────────
+# Defense against a model self-wrapping a plain chat answer in JSON syntax
+# despite the prompt explicitly forbidding it (observed on the Gemini
+# fallback path — {"response": "..."} or a bare quoted string) even with
+# json_mode never requested. Any caller that hands raw LLM text straight to
+# a chat bubble (zino-chat today) should run it through this first so a
+# model's formatting choice can never leak into the UI as visible braces.
+_REPLY_KEY_PRIORITY = ("response", "message", "answer", "reply", "text", "content")
+
+
+def unwrap_conversational_reply(text: str) -> str:
+    """Plain prose (the overwhelming common case) passes through untouched —
+    json.loads() raises on non-JSON and we return immediately. Only text
+    that is ITSELF valid JSON gets unwrapped: a bare quoted string becomes
+    its contents, and an object yields the first string-valued field from
+    _REPLY_KEY_PRIORITY (falling back to its only key if there's just one)."""
+    if not text:
+        return text
+    stripped = text.strip()
+    if not stripped:
+        return text
+
+    # Strip a ```json ... ``` / ``` ... ``` fence if the model added one —
+    # checked BEFORE the char-0 guard below, since the fence itself starts
+    # with a backtick, not { or ".
+    fence = re.match(r"^```(?:json)?\s*(.*?)\s*```$", stripped, re.DOTALL)
+    candidate = fence.group(1).strip() if fence else stripped
+    if not candidate or candidate[0] not in "{\"'":
+        return text  # can't be a JSON object/string — skip the parse entirely
+
+    try:
+        parsed = json.loads(candidate)
+    except (ValueError, TypeError):
+        return text
+
+    if isinstance(parsed, str):
+        return parsed
+    if isinstance(parsed, dict):
+        for key in _REPLY_KEY_PRIORITY:
+            val = parsed.get(key)
+            if isinstance(val, str) and val.strip():
+                return val
+        string_vals = [v for v in parsed.values() if isinstance(v, str) and v.strip()]
+        if len(string_vals) == 1:
+            return string_vals[0]
+    return text  # unrecognized shape — surface the original rather than guess
 
 
 # ── Budget tier helper ─────────────────────────────────────────────────────────
