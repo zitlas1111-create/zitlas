@@ -823,6 +823,18 @@
       athleteProfile.uses_supplements = _assess.uses_supplements;
     }
 
+    /* Diet type / living situation / budget also live on the assessment
+       (as diet_preference/living_situation/budget) — without this merge the
+       backend swap engine saw diet_type: N/A and could offer non-veg swaps
+       to a vegetarian (the layer that actually picks the food never knew).
+       lifestyle_data's own values win when both exist. */
+    if (_assess) {
+      if (_assess.diet_preference  && lifestyleData.diet_type        == null) lifestyleData.diet_type        = _assess.diet_preference;
+      if (_assess.living_situation && lifestyleData.living_situation == null) lifestyleData.living_situation = _assess.living_situation;
+      if (_assess.budget           && lifestyleData.daily_budget     == null) lifestyleData.daily_budget     = _assess.budget;
+      if (Array.isArray(_assess.disliked_foods) && lifestyleData.disliked_foods == null) lifestyleData.disliked_foods = _assess.disliked_foods;
+    }
+
     /* rejected_foods = ONLY the current meal's foods + this specific meal's prior swap
        suggestions (max 15). Never includes foods from other meals, other days, or the
        full weekly plan — that's what was causing the list to grow until nothing was valid. */

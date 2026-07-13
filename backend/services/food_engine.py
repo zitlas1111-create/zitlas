@@ -265,15 +265,17 @@ class FoodRecommendationEngine:
             if base - avoid_ids:
                 base -= avoid_ids
 
-        # Stages 4-9: Goal -> SubGoal -> Lifestyle(preferred) -> Budget ->
-        # Living -> MealType -> Season. Relaxed from the tail on empty result.
+        # Stages 4-9, relaxed from the TAIL on empty result — so list order
+        # is protection order. Meal-slot integrity comes FIRST (relaxed
+        # last): a thin pool must never bleed breakfast foods into dinner —
+        # budget/living/season give way long before the slot does.
         stages: list[tuple[str, set[int] | None]] = [
+            ("meal", self._idx_meal.get(meal_tag) if meal_tag else None),
             ("goal", self._union(self._idx_goal, goal_tags) if goal_tags else None),
             ("subgoal", self._idx_goal.get(subgoal_tag) if subgoal_tag else None),
             ("lifestyle_preferred", self._union(self._idx_category, preferred_categories) if preferred_categories else None),
             ("budget", self._budget_ids(budget_tier) if budget_tier else None),
             ("living", self._idx_living.get(living_tag) if living_tag else None),
-            ("meal", self._idx_meal.get(meal_tag) if meal_tag else None),
             ("season", self._idx_season.get(season_tag) if season_tag else None),
             # STEP 14 (time intelligence): a relaxable preference, not a hard
             # cut — someone with 10 minutes shouldn't get zero food options
@@ -316,9 +318,14 @@ class FoodRecommendationEngine:
         # today?") — folded into the existing Availability bucket, same
         # convention as every other profile-rule bonus above, so the
         # documented 40/25/15/10/5/5 weight formula never changes shape.
+        # daily_household_score (the "Chapati/Dal/Rice first" anchor signal)
+        # averages in equally, so everyday staples outrank niche regional
+        # dishes and festival foods among otherwise-equal candidates.
         pop_avail = food.get("availability_score")
         if pop_avail is not None:
-            avail_component = min(1.0, avail_component * 0.5 + (pop_avail / 100.0) * 0.5)
+            household = food.get("daily_household_score")
+            signal = (pop_avail + (household if household is not None else pop_avail)) / 200.0
+            avail_component = min(1.0, avail_component * 0.5 + signal * 0.5)
 
         if budget_tier:
             diff = _BUDGET_RANK.get(food.get("budgetCategory", "Medium"), 1) - _BUDGET_RANK.get(budget_tier, 1)
@@ -450,25 +457,136 @@ class FoodRecommendationEngine:
 
     # ── Public plan builders ─────────────────────────────────────────────
 
-    # STEP 6 (realistic meal engine): categories that, on their own, are a
-    # snack/side/produce item rather than a full meal — "would a normal
-    # person eat ONLY this for dinner?" is no for all of these. Dinner's
-    # anchor (the combo's first, calorie-anchoring pick) is never chosen
-    # from this list when a real alternative exists in the same ranked pool
-    # — the combo-filler below still runs normally afterward, so a dinner
-    # can still include a side salad/vegetable, just never AS the anchor.
-    _INCOMPLETE_MEAL_CATEGORIES = frozenset({
-        "Vegetables", "Salads and Soups", "Fruits", "Beverages",
-        "Protein Supplements", "Desserts & Sweets",
-    })
+    # ── Meal Validation Engine ────────────────────────────────────────────
+    # Built on the dataset's meal_role/complete_meal classification
+    # (enrich_food_dataset_v3.py): lunch and dinner must be anchored by a
+    # genuine full meal (Rajma Chawal, Roti with Sabzi, ...), never by a
+    # single ingredient, fruit, soup, or beverage — those may only join a
+    # combo as sides. Breakfast is culturally more permissive (Poha, Eggs,
+    # Milk are all legitimate breakfasts on their own); snacks are free.
 
-    def _pick_anchor(self, pool: list[dict], slot: str) -> dict:
-        if slot != "dinner":
-            return pool[0]
-        for food in pool:
-            if food.get("category") not in self._INCOMPLETE_MEAL_CATEGORIES:
-                return food
-        return pool[0]  # nothing better in this pool — never return an empty meal
+    _MAIN_SLOTS = frozenset({"lunch", "dinner"})
+    # roles that may ANCHOR a breakfast (a plate someone actually calls
+    # breakfast) — fruit/beverage/supplement still can't be the whole plate.
+    _BREAKFAST_ANCHOR_ROLES = frozenset({
+        "breakfast_dish", "complete_meal", "protein_source", "dairy",
+    })
+    # roles that can complete a main meal as sides
+    _VEG_SIDE_ROLES = frozenset({"vegetable", "soup_salad", "side_dish", "single_ingredient"})
+
+    @staticmethod
+    def _role(food: dict) -> str:
+        return food.get("meal_role", "side_dish")
+
+    def _is_meal_anchor(self, food: dict, slot: str) -> bool:
+        if slot in self._MAIN_SLOTS:
+            return food.get("complete_meal") is True
+        if slot == "breakfast":
+            return self._role(food) in self._BREAKFAST_ANCHOR_ROLES
+        return True
+
+    def build_meal_combo(self, pool: list[dict], slot: str, slot_target: float | None) -> list[dict]:
+        """Compose one realistic meal from a ranked candidate pool.
+
+        Mains (lunch/dinner): anchor on a complete meal, then fill missing
+        roles the way an Indian nutritionist plates food — protein first,
+        then carb, then a vegetable/fiber side ("Dal + Chapati + Sabzi").
+        Breakfast: anchor on a breakfast-legitimate dish, then top up toward
+        the calorie target. Snack slots: the top-ranked item stands alone.
+        """
+        anchor = next((f for f in pool if self._is_meal_anchor(f, slot)), None)
+        if anchor is None and slot in self._MAIN_SLOTS:
+            # No ready-made complete meal in this pool (e.g. muscle-gain +
+            # low-budget filters leave mostly protein singles) — compose the
+            # plate from parts instead: protein anchor + carb + veg below is
+            # exactly the "Paneer + Chapati + Salad" pattern.
+            anchor = next((f for f in pool if self._role(f) in ("protein_source", "dairy")), None)
+        if anchor is None:
+            anchor = pool[0]
+        combo = [anchor]
+        combo_ids = {anchor["id"]}
+        combo_bases = {_base_dish_name(anchor["name"])}
+
+        def _shares_staple(f: dict) -> bool:
+            # "Curd Rice + Lemon Rice + Fried Rice" is three plates of rice,
+            # not a meal — never let a FILL add a second dish built on a
+            # staple the plate already has (the carb-base fill is exempt;
+            # adding the staple is its whole job).
+            name = _norm(f["name"])
+            for staple in ("rice", "roti", "khichdi", "paratha", "dal"):
+                if staple in name and any(staple in _norm(x["name"]) for x in combo):
+                    return True
+            return False
+
+        def _add_first(predicate, allow_shared_staple: bool = False) -> bool:
+            for f in pool:
+                if f["id"] in combo_ids or _base_dish_name(f["name"]) in combo_bases:
+                    continue
+                if not allow_shared_staple and _shares_staple(f):
+                    continue
+                if predicate(f):
+                    combo.append(f)
+                    combo_ids.add(f["id"])
+                    combo_bases.add(_base_dish_name(f["name"]))
+                    return True
+            return False
+
+        if slot in self._MAIN_SLOTS:
+            # Fill like a plate, not a buffet: prefer true sides to complete
+            # the anchor (Curd Rice + Chole Rice is two dinners, not one).
+            # Last-resort tiers accept imperfect items — an incomplete plate
+            # is the worse outcome, and validate_meal_combo + the caller's
+            # retry handle whatever still can't be fixed from this pool.
+            #
+            # 1. Carb base is STRUCTURAL: an Indian main sits on rice/roti
+            #    unless the anchor is already a complete plate. Checking
+            #    carb grams instead is how "Moong Dal + Masoor Dal" (50g of
+            #    carbs, no rice) slipped through as a lunch.
+            if not any(f.get("complete_meal") or self._role(f) == "carb_source" for f in combo):
+                _add_first(lambda f: self._role(f) == "carb_source", allow_shared_staple=True) \
+                    or _add_first(lambda f: f["carbs"] >= 25 and not f.get("complete_meal")
+                                  and f["category"] != anchor["category"], allow_shared_staple=True)
+            # 2. Protein — from a different category than what's plated
+            #    (a second dal adds bulk, not balance).
+            if sum(f["protein"] for f in combo) < 12:
+                cats = {f["category"] for f in combo}
+                _add_first(lambda f: self._role(f) in ("protein_source", "dairy")
+                           and not f.get("complete_meal") and f["category"] not in cats) \
+                    or _add_first(lambda f: f["protein"] >= 10 and not f.get("complete_meal")) \
+                    or _add_first(lambda f: f["protein"] >= 6)
+            # 3. Vegetable/fiber side
+            if len(combo) < 3 and sum(f["fiber"] for f in combo) < 5 \
+                    and not any(self._role(f) in self._VEG_SIDE_ROLES for f in combo):
+                _add_first(lambda f: self._role(f) in self._VEG_SIDE_ROLES and f["calories"] <= 200)
+        elif slot_target:
+            total_cal = anchor["calories"]
+            while total_cal < slot_target * 0.85 and len(combo) < 3:
+                if not _add_first(lambda f: total_cal + f["calories"] <= slot_target * 1.25):
+                    break
+                total_cal = sum(f["calories"] for f in combo)
+        return combo
+
+    def validate_meal_combo(self, combo: list[dict], slot: str) -> list[str]:
+        """STEP-15-style checklist for a single composed meal. Empty = valid."""
+        issues: list[str] = []
+        if not combo:
+            return ["empty meal"]
+        if slot in self._MAIN_SLOTS:
+            if not any(f.get("complete_meal") or self._role(f) in ("protein_source", "carb_source") for f in combo):
+                issues.append("no substantial main item (only sides/produce)")
+            if sum(f["protein"] for f in combo) < 8:
+                issues.append("no meaningful protein")
+            # Structural, not gram-based: a main needs a complete plate or a
+            # real carb base (rice/roti) — 50g of carbs from two dals is
+            # still not a lunch.
+            if not any(f.get("complete_meal") or self._role(f) == "carb_source" for f in combo):
+                issues.append("no carb base (rice/roti/complete plate)")
+            if len(combo) == 1 and not combo[0].get("complete_meal"):
+                issues.append(f"single non-complete item as a main meal ({combo[0]['name']})")
+        for f in combo:
+            if f.get("festival_food"):
+                issues.append(f"festival food in a regular meal ({f['name']})")
+        return issues
 
     def build_week_plan(
         self,
@@ -519,18 +637,28 @@ class FoodRecommendationEngine:
                 if not pool:
                     continue
                 slot_target = slot_calorie_cap.get(slot) or (target * _SLOT_CALORIE_WEIGHT.get(slot, 0.2))
-                anchor = self._pick_anchor(pool, slot)
-                combo = [anchor]
-                combo_ids = {anchor["id"]}
-                total_cal = anchor["calories"]
-                for food in pool:
-                    if food["id"] in combo_ids:
-                        continue
-                    if total_cal >= slot_target * 0.85 or len(combo) >= 3:
-                        break
-                    combo.append(food)
-                    combo_ids.add(food["id"])
-                    total_cal += food["calories"]
+                combo = self.build_meal_combo(pool, slot, slot_target)
+                if slot in self._MAIN_SLOTS and self.validate_meal_combo(combo, slot):
+                    # Reject-and-regenerate (STEP 15): the pool couldn't make
+                    # a valid plate. Retry WITHOUT the goal hard-filter (a
+                    # muscle-gain "every item >=15g protein" cut can leave
+                    # only dairy singles at low budgets) — goal still shapes
+                    # the RANKING, and a balanced complete lunch serves the
+                    # goal better than a lone bowl of curd. Medical/diet
+                    # filters are inside the pipeline and never relax.
+                    wide_pool = self.recommend(
+                        meal_slot=slot, goal_tags=[], diet_tags=diet_tags,
+                        living_situation=living_situation, budget_tier=budget_tier,
+                        disease_tags=disease_tags, allergens=allergens,
+                        favorite_foods=favorite_foods, disliked_foods=disliked_foods,
+                        usage_counts=usage_counts, top_n=40,
+                        profile=profile, subgoal_tag=None, season_tag=season_tag,
+                        max_prep_minutes=max_prep_minutes,
+                    )
+                    retry = self.build_meal_combo(wide_pool, slot, slot_target)
+                    if len(self.validate_meal_combo(retry, slot)) < len(self.validate_meal_combo(combo, slot)):
+                        combo = retry
+                combo_ids = {f["id"] for f in combo}
                 # A food used 3x already this week drops out of future primary
                 # picks entirely (still eligible as a lower-priority alternative).
                 for food in combo:
@@ -564,12 +692,8 @@ class FoodRecommendationEngine:
                     issues.append(f"{day_name}/{slot}: empty meal")
                     continue
                 day_cal += sum(f.get("calories", 0) for f in primary)
-                if slot == "dinner" and len(primary) == 1 and \
-                        primary[0].get("category") in self._INCOMPLETE_MEAL_CATEGORIES:
-                    issues.append(f"{day_name}/dinner: single-item incomplete meal ({primary[0]['name']})")
-                for f in primary:
-                    if f.get("festival_food"):
-                        issues.append(f"{day_name}/{slot}: festival food in a regular plan ({f['name']})")
+                for issue in self.validate_meal_combo(primary, slot):
+                    issues.append(f"{day_name}/{slot}: {issue}")
             if daily_calorie_target and not (0.75 * daily_calorie_target <= day_cal <= 1.25 * daily_calorie_target):
                 issues.append(f"{day_name}: total calories {day_cal} outside ±25% of target {daily_calorie_target}")
         food_counts: dict[int, int] = defaultdict(int)
@@ -581,6 +705,51 @@ class FoodRecommendationEngine:
             if count > 3:
                 issues.append(f"food id={fid} repeated {count}x this week (limit 3)")
         return {"passed": not issues, "issues": issues}
+
+    def _is_excluded(self, food: dict, exclude_strings: list[str], exclude_bases: set[str]) -> bool:
+        """Rejected/current foods arrive as free-form display strings ('150g
+        grilled chicken breast (marinated...)', 'Sweet Corn (Raw) (100 g ...)')
+        — an exact-name comparison never matches them, which is exactly how a
+        rejected Sweet Corn kept coming back. Match on the dish's BASE name
+        (style/serving suffixes stripped) in both directions instead: the
+        candidate is out if its base name equals an excluded base OR appears
+        anywhere inside an excluded display string."""
+        base = _base_dish_name(food["name"])
+        if base in exclude_bases:
+            return True
+        return any(base in s for s in exclude_strings)
+
+    def _ranked_swap_pool(
+        self, meal_slot, goal_tags, diet_tags, living_situation, budget_tier,
+        disease_tags, allergens, exclude_names, profile, subgoal_tag, season_tag,
+        pool_size: int = 30,
+    ) -> list[dict]:
+        exclude_strings = [_norm(n) for n in exclude_names if n]
+        exclude_bases = {_base_dish_name(n) for n in exclude_names if n}
+        ids = self._pipeline_ids(
+            disease_tags=disease_tags, allergens=allergens, diet_tags=diet_tags,
+            goal_tags=goal_tags, subgoal_tag=subgoal_tag, profile=profile,
+            budget_tier=budget_tier, living_tag=living_situation,
+            meal_tag=_SLOT_TO_MEAL_TAG.get(meal_slot, meal_slot), season_tag=season_tag,
+        )
+        ids = {i for i in ids if not self._is_excluded(self.by_id[i], exclude_strings, exclude_bases)}
+        if not ids:
+            # Relax goal/budget/living but NEVER the meal slot — a dinner swap
+            # must stay a dinner-suitable food (diet/medical stay protected
+            # inside _pipeline_ids itself).
+            ids = self._pipeline_ids(
+                disease_tags=disease_tags, allergens=allergens, diet_tags=diet_tags,
+                goal_tags=[], subgoal_tag=None, profile=None,
+                budget_tier=None, living_tag=None,
+                meal_tag=_SLOT_TO_MEAL_TAG.get(meal_slot, meal_slot), season_tag=None,
+            )
+            ids = {i for i in ids if not self._is_excluded(self.by_id[i], exclude_strings, exclude_bases)}
+        scored = [
+            (self._score(self.by_id[i], goal_tags, living_situation, budget_tier, [], 0, profile), i)
+            for i in ids
+        ]
+        scored.sort(key=lambda t: (-t[0], t[1]))
+        return [self.by_id[i] for _, i in scored[:pool_size]]
 
     def find_swap_alternatives(
         self,
@@ -597,28 +766,77 @@ class FoodRecommendationEngine:
         subgoal_tag: str | None = None,
         season_tag: str | None = None,
     ) -> list[dict]:
-        exclude_lc = {_norm(n) for n in exclude_names if n}
-        ids = self._pipeline_ids(
-            disease_tags=disease_tags, allergens=allergens, diet_tags=diet_tags,
-            goal_tags=goal_tags, subgoal_tag=subgoal_tag, profile=profile,
-            budget_tier=budget_tier, living_tag=living_situation,
-            meal_tag=_SLOT_TO_MEAL_TAG.get(meal_slot, meal_slot), season_tag=season_tag,
+        """Ranked single-food alternatives (kept for offline fallback and
+        snack slots). For main meals, anchors-only: never offers a single
+        ingredient/soup/fruit as the replacement for a lunch or dinner."""
+        pool = self._ranked_swap_pool(
+            meal_slot, goal_tags, diet_tags, living_situation, budget_tier,
+            disease_tags, allergens, exclude_names, profile, subgoal_tag, season_tag,
         )
-        ids = {i for i in ids if _norm(self.by_id[i]["name"]) not in exclude_lc}
-        if not ids:
-            ids = self._pipeline_ids(
-                disease_tags=disease_tags, allergens=allergens, diet_tags=diet_tags,
-                goal_tags=[], subgoal_tag=None, profile=None,
-                budget_tier=None, living_tag=None, meal_tag=None, season_tag=None,
-            )
-            ids = {i for i in ids if _norm(self.by_id[i]["name"]) not in exclude_lc}
+        if meal_slot in self._MAIN_SLOTS or meal_slot == "breakfast":
+            anchors = [f for f in pool if self._is_meal_anchor(f, meal_slot)]
+            if anchors:
+                pool = anchors
+        # Never offer two style-variants of the same dish as "alternatives"
+        seen: set[str] = set()
+        out = []
+        for f in pool:
+            base = _base_dish_name(f["name"])
+            if base in seen:
+                continue
+            seen.add(base)
+            out.append(f)
+            if len(out) == top_n:
+                break
+        return out
 
-        scored = [
-            (self._score(self.by_id[i], goal_tags, living_situation, budget_tier, [], 0, profile), i)
-            for i in ids
-        ]
-        scored.sort(key=lambda t: (-t[0], t[1]))
-        return [self.by_id[i] for _, i in scored[:top_n]]
+    def find_swap_combos(
+        self,
+        meal_slot: str,
+        goal_tags: list[str],
+        diet_tags: list[str],
+        living_situation: str | None,
+        budget_tier: str | None,
+        disease_tags: list[str],
+        allergens: set[str],
+        exclude_names: list[str],
+        n_combos: int = 2,
+        profile: dict | None = None,
+        subgoal_tag: str | None = None,
+        season_tag: str | None = None,
+    ) -> list[list[dict]]:
+        """Full-meal swap: each result is a COMPLETE composed meal (e.g.
+        'Paneer Bhurji with Roti + Curd + Salad'), never a lone ingredient.
+        A swap replaces the entire plate — the same way build_week_plan
+        composes one — and every combo passes validate_meal_combo before
+        it's offered. Snack/pre/post slots return single-item combos."""
+        pool = self._ranked_swap_pool(
+            meal_slot, goal_tags, diet_tags, living_situation, budget_tier,
+            disease_tags, allergens, exclude_names, profile, subgoal_tag, season_tag,
+        )
+        if not pool:
+            return []
+        combos: list[list[dict]] = []
+        used_anchor_bases: set[str] = set()
+        for anchor in pool:
+            if len(combos) >= n_combos:
+                break
+            if not self._is_meal_anchor(anchor, meal_slot):
+                continue
+            base = _base_dish_name(anchor["name"])
+            if base in used_anchor_bases:
+                continue
+            sub_pool = [anchor] + [f for f in pool if f["id"] != anchor["id"]]
+            combo = self.build_meal_combo(sub_pool, meal_slot, None)
+            if self.validate_meal_combo(combo, meal_slot):
+                continue  # failed validation — try the next anchor
+            used_anchor_bases.add(base)
+            combos.append(combo)
+        if not combos and pool:
+            # No anchor survived validation (ultra-restrictive filters) —
+            # degrade to the best single candidates rather than nothing.
+            combos = [[f] for f in pool[:n_combos]]
+        return combos
 
 
 # ── Profile/lifestyle string -> engine tag normalization ───────────────────

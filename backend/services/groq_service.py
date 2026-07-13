@@ -2007,12 +2007,14 @@ def _meal_slot_from_name(meal_name: str, meal_time: str = "") -> str:
     return "evening_snack"
 
 
-def _apply_engine_swap(structured: dict | None, candidates: list[dict]) -> dict[str, Any]:
+def _apply_engine_swap(structured: dict | None, combos: list[list[dict]]) -> dict[str, Any]:
     """Same hallucination firewall as _apply_engine_foods(), for swap-meal:
-    `swap`/`alternative` foods always come from the engine's candidates,
-    never from the LLM. LLM-authored `reason`/`tips` text is kept."""
+    `swap`/`alternative` foods always come from the engine's combos, never
+    from the LLM. Each combo is a COMPLETE composed meal (a main meal swap
+    replaces the entire plate — 'Paneer Bhurji with Roti + Curd', never a
+    lone 'Sweet Corn'). LLM-authored `reason`/`tips` text is kept."""
     structured = structured or {}
-    if not candidates:
+    if not combos:
         # Filters left nothing (extremely restrictive combination of diet +
         # medical + budget + exclusions) — surface that honestly rather than
         # fabricate a food.
@@ -2024,33 +2026,50 @@ def _apply_engine_swap(structured: dict | None, candidates: list[dict]) -> dict[
             "calories_saved": 0,
         }
 
-    def _food_block(food: dict, llm_block: dict) -> dict:
+    def _combo_block(combo: list[dict], llm_block: dict) -> dict:
+        anchor = combo[0]
+        name = " + ".join(f["name"] for f in combo)
         return {
-            "name": (llm_block.get("name") or "").strip() or food["name"],
-            "foods": [food_engine.format_food_line(food)],
-            "calories": food["calories"],
-            "protein_g": food["protein"],
-            "reason": (llm_block.get("reason") or "").strip() or f"{food['name']} — {food['description']}",
-            "food_id": food["id"],
+            "name": (llm_block.get("name") or "").strip() or name,
+            "foods": [food_engine.format_food_line(f) for f in combo],
+            "calories": round(sum(f["calories"] for f in combo)),
+            "protein_g": round(sum(f["protein"] for f in combo), 1),
+            "reason": (llm_block.get("reason") or "").strip() or f"{anchor['name']} — {anchor['description']}",
+            "food_id": anchor["id"],
+            "food_ids": [f["id"] for f in combo],
         }
 
     llm_swap = structured.get("swap") if isinstance(structured.get("swap"), dict) else {}
     llm_alt = structured.get("alternative") if isinstance(structured.get("alternative"), dict) else {}
 
-    primary = candidates[0]
-    result: dict[str, Any] = {
-        "swap": _food_block(primary, llm_swap),
-        "alternative": _food_block(candidates[1], llm_alt) if len(candidates) > 1 else None,
+    return {
+        "swap": _combo_block(combos[0], llm_swap),
+        "alternative": _combo_block(combos[1], llm_alt) if len(combos) > 1 else None,
         "tips": structured.get("tips") if isinstance(structured.get("tips"), list) else [],
         "calories_saved": structured.get("calories_saved") if isinstance(structured.get("calories_saved"), (int, float)) else 0,
     }
-    if len(candidates) > 2:
-        result["more_alternatives"] = [
-            {"food_id": f["id"], "name": f["name"], "foods": [food_engine.format_food_line(f)],
-             "calories": f["calories"], "protein_g": f["protein"]}
-            for f in candidates[2:4]
-        ]
-    return result
+
+
+# The explicit swap reason overrides the (often missing) stored diet_type —
+# "I am vegetarian and need a veg option" is the user's CURRENT constraint
+# and must reach the ENGINE, which actually picks the food. Before this,
+# the reason only reached the LLM prompt, whose food output the firewall
+# discards — so the one component that mattered never heard it.
+_REASON_DIET_PATTERNS: list[tuple[tuple[str, ...], str]] = [
+    (("vegan",), "vegan"),
+    (("jain",), "jain"),
+    (("eggitarian", "eggetarian"), "eggitarian"),
+    (("non-veg", "non veg", "nonveg"), "non_vegetarian"),
+    (("vegetarian", "veg option", "veg only", "pure veg", "no meat", "no chicken", "no fish"), "vegetarian"),
+]
+
+
+def _diet_type_from_reason(reason: str) -> str | None:
+    reason_lc = (reason or "").lower()
+    for keywords, diet in _REASON_DIET_PATTERNS:
+        if any(k in reason_lc for k in keywords):
+            return diet
+    return None
 
 
 async def generate_meal_swap(
@@ -2137,17 +2156,25 @@ You MUST generate a COMPLETELY DIFFERENT meal with different ingredients.
     #    and replaced with these candidates in _apply_engine_swap().
     engine = food_engine.get_engine()
     swap_ctx = _engine_query_context(player_profile, lifestyle_data)
+    reason_diet = _diet_type_from_reason(reason)
+    diet_tags = swap_ctx["diet_tags"]
+    if reason_diet:
+        diet_tags = food_engine.diet_tags_from_lifestyle(reason_diet)
+        print(f"[SWAP ENGINE] diet constraint from reason text: {reason_diet} -> {diet_tags}")
     all_previous_foods = [f for opts in (previous_suggestions or []) for f in opts]
-    exclude_names = list(dict.fromkeys(current_foods + (rejected_foods or []) + all_previous_foods))
-    swap_candidates = engine.find_swap_alternatives(
+    # auto_forbidden goes to the ENGINE too (not just the LLM prompt): a
+    # vegetarian swap must exclude meat at the layer that picks the food.
+    exclude_names = list(dict.fromkeys(current_foods + (rejected_foods or []) + all_previous_foods + auto_forbidden))
+    swap_combos = engine.find_swap_combos(
         meal_slot=_meal_slot_from_name(meal_name, meal_time),
-        goal_tags=swap_ctx["goal_tags"], diet_tags=swap_ctx["diet_tags"],
+        goal_tags=swap_ctx["goal_tags"], diet_tags=diet_tags,
         living_situation=swap_ctx["living_tag"], budget_tier=swap_ctx["budget_tier"],
         disease_tags=swap_ctx["disease_tags"], allergens=swap_ctx["allergens"],
-        exclude_names=exclude_names, top_n=4,
+        exclude_names=exclude_names, n_combos=2,
         profile=swap_ctx["profile"], subgoal_tag=swap_ctx["subgoal_tag"], season_tag=swap_ctx["season_tag"],
     )
-    print(f"[SWAP ENGINE] {len(swap_candidates)} candidate(s): {[c['name'] for c in swap_candidates]}")
+    print(f"[SWAP ENGINE] {len(swap_combos)} combo(s): "
+          f"{[' + '.join(f['name'] for f in c) for c in swap_combos]}")
 
     meal_name_lc  = meal_name.lower()
     is_main_meal  = any(k in meal_name_lc for k in ("breakfast", "lunch", "dinner"))
@@ -2184,13 +2211,17 @@ NUTRITION KNOWLEDGE BASE (use this to inform your suggestion):
 """
 
     engine_candidates_block = (
-        "PRE-SELECTED REPLACEMENT FOODS (from the ZITLAS verified database — choose your `swap` "
-        "from the first one and your `alternative` from the second; do not invent any other food):\n"
+        "PRE-SELECTED REPLACEMENT MEALS (from the ZITLAS verified database — your `swap` is "
+        "meal 1 and your `alternative` is meal 2; write names/reasons for these exact meals, "
+        "do not invent any other food):\n"
         + "\n".join(
-            f"  {i+1}. {c['name']} ({c['serving_size']}, {c['calories']} kcal, {c['protein']}g protein)"
-            for i, c in enumerate(swap_candidates)
+            f"  {i+1}. " + " + ".join(
+                f"{f['name']} ({f['serving_size']}, {f['calories']} kcal, {f['protein']}g protein)"
+                for f in combo
+            )
+            for i, combo in enumerate(swap_combos)
         )
-        if swap_candidates else
+        if swap_combos else
         "No safe replacement exists in the database for this combination of diet/budget/medical "
         "restrictions — say so honestly in `tips` instead of inventing a food."
     )
@@ -2229,7 +2260,7 @@ above. Do not restate calories/protein yourself — those are filled in automati
     )
 
     llm_structured = _extract_json(result["reply"])
-    result["structured"] = _apply_engine_swap(llm_structured, swap_candidates)
+    result["structured"] = _apply_engine_swap(llm_structured, swap_combos)
     return result
 
 

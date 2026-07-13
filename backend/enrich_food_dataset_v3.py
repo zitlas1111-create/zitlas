@@ -255,6 +255,77 @@ def _derive_budget_tier_detailed(budget_category: str, category: str) -> str:
 
 
 # ══════════════════════════════════════════════════════════════════════════
+# MEAL ROLE (powers the Meal Validation Engine in food_engine.py)
+# Classifies what a record IS on a plate: a full meal, a main-course
+# component, a side, or a single ingredient. This is what stops "Sweet Corn
+# (Raw)" from ever being served as someone's entire dinner — category-level
+# mealSuitable tags say corn CAN appear at dinner (true, as a side), but
+# only meal_role says whether it can BE the dinner.
+# ══════════════════════════════════════════════════════════════════════════
+
+# Name patterns that mark a dish as a self-contained full meal (protein +
+# carb together on one plate). " with " catches the dataset's hundreds of
+# "X with Rice"/"Roti with Y" composites.
+_COMPLETE_MEAL_NAME_KW = (
+    " with ", "khichdi", "biryani", "pulao", "thali", "chawal", "pongal",
+    "curd rice", "sambar rice", "rasam rice", "lemon rice", "coconut rice",
+    "dal rice", "rajma rice", "chole bhature", "pav bhaji", "dal dhokli",
+    "misal pav", "sadya", "jadoh", "sawhchiar", "bisi bele bath",
+    "meal", "combo", "bowl",
+)
+# Single-ingredient markers: produce sold/eaten as-is, not a prepared dish.
+_SINGLE_INGREDIENT_NAME_KW = ("(raw)", "(sliced)", "(cooked)", "(boiled)", "(roasted)")
+
+_CATEGORY_MEAL_ROLE: dict[str, str] = {
+    "Fruits": "fruit", "Beverages": "beverage", "Protein Supplements": "supplement",
+    "Sports Nutrition Foods": "supplement", "Desserts & Sweets": "dessert",
+    "Salads and Soups": "soup_salad", "Snacks": "snack_item",
+    "Street Foods": "snack_item", "Fast Foods": "snack_item",
+    "Vegetables": "vegetable", "Dairy Products": "dairy",
+    "Eggs": "protein_source", "Chicken Dishes": "protein_source",
+    "Fish & Seafood": "protein_source", "Mutton & Meat": "protein_source",
+    "Vegetarian Protein Sources": "protein_source",
+    "Indian Breakfast": "breakfast_dish",
+}
+# Categories whose items are plausibly a whole lunch/dinner plate when the
+# name/macros agree (the composite check above still wins when it matches).
+_MAIN_MEAL_CATEGORIES = {
+    "Indian Lunch", "Indian Dinner", "Hostel Foods", "Restaurant Foods",
+    "North Indian Foods", "South Indian Foods", "Maharashtrian Foods",
+    "Gujarati Foods", "Punjabi Foods", "Healthy Recipes",
+    "International Foods", "Weight Loss Foods", "Weight Gain Foods",
+}
+_PLAIN_CARB_NAME_KW = ("plain rice", "steamed rice", "brown rice", "jeera rice",
+                       "roti", "chapati", "phulka", "bhakri", "naan", "bread", "paratha")
+
+
+def _derive_meal_role(record: dict, name_lc: str) -> str:
+    category = record.get("category", "")
+    if any(kw in name_lc for kw in _COMPLETE_MEAL_NAME_KW):
+        return "complete_meal"
+    if any(kw in name_lc for kw in _SINGLE_INGREDIENT_NAME_KW):
+        return "single_ingredient"
+    if category in _CATEGORY_MEAL_ROLE:
+        return _CATEGORY_MEAL_ROLE[category]
+    if any(kw in name_lc for kw in _PLAIN_CARB_NAME_KW):
+        # Plain roti/rice/paratha WITHOUT a "with X" pairing — a carb base
+        # someone builds a meal around, not the meal itself.
+        return "carb_source"
+    if category in _MAIN_MEAL_CATEGORIES:
+        # A named prepared dish from a main-meal category: a whole plate if
+        # its macros look like one (enough calories + some protein + carbs),
+        # otherwise a main-course component (e.g. a sabzi/curry alone).
+        if record["calories"] >= 220 and record["protein"] >= 7 and record["carbs"] >= 22:
+            return "complete_meal"
+        return "side_dish"
+    return "side_dish"
+
+
+def _derive_complete_meal(meal_role: str) -> bool:
+    return meal_role == "complete_meal"
+
+
+# ══════════════════════════════════════════════════════════════════════════
 # LIFE-STAGE "FRIENDLY" HEURISTICS (lifestyle suitability, NOT a medical
 # claim — the authoritative medical-safety layer remains v1's
 # diseaseSuitable / services/medical_conditions.py, both untouched)
@@ -330,6 +401,8 @@ def enrich_food_v3(food: dict) -> dict[str, Any]:
     out["kidney_friendly"] = bool(disease.get("Kidney Disease", True))
     out.update(_derive_life_stage_friendly(out, name_lc))
     out["budget_tier_detailed"] = _derive_budget_tier_detailed(out.get("budgetCategory", "Medium"), out.get("category", ""))
+    out["meal_role"] = _derive_meal_role(out, name_lc)
+    out["complete_meal"] = _derive_complete_meal(out["meal_role"])
     return out
 
 

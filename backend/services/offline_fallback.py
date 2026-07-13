@@ -731,34 +731,34 @@ def meal_swap(
     for prev in (previous_suggestions or []):
         rejected.update(f.lower() for f in prev)
 
-    from services.groq_service import _meal_slot_from_name  # substring-based; robust to arbitrary user-facing meal names
+    from services.groq_service import _meal_slot_from_name, _diet_type_from_reason  # substring-based; robust to arbitrary user-facing meal names
 
     engine = food_engine.get_engine()
     ctx = _engine_context(player_profile, ld)
+    # An explicit diet constraint in the swap reason ("I am vegetarian")
+    # overrides the stored diet_type — same rule as the online path.
+    reason_diet = _diet_type_from_reason(reason)
+    diet_tags = food_engine.diet_tags_from_lifestyle(reason_diet) if reason_diet else ctx["diet_tags"]
     slot = _meal_slot_from_name(meal_name, meal_time)
     exclude_names = list(current_foods) + list(rejected)
-    candidates = engine.find_swap_alternatives(
-        meal_slot=slot, goal_tags=ctx["goal_tags"], diet_tags=ctx["diet_tags"],
+    combos = engine.find_swap_combos(
+        meal_slot=slot, goal_tags=ctx["goal_tags"], diet_tags=diet_tags,
         living_situation=ctx["living_tag"], budget_tier=ctx["budget_tier"],
         disease_tags=ctx["disease_tags"], allergens=ctx["allergens"],
-        exclude_names=exclude_names, top_n=2,
+        exclude_names=exclude_names, n_combos=2,
     )
 
-    if candidates:
-        primary = candidates[0]
-        swap_block = {
-            "name": f"{meal_name} Alternative", "foods": [food_engine.format_food_line(primary)],
-            "calories": primary["calories"], "protein_g": primary["protein"],
-            "reason": f"A practical replacement that fits your situation ({reason}).",
-        }
-        alt_block = None
-        if len(candidates) > 1:
-            alt = candidates[1]
-            alt_block = {
-                "name": f"{meal_name} Alternative 2", "foods": [food_engine.format_food_line(alt)],
-                "calories": alt["calories"], "protein_g": alt["protein"],
-                "reason": f"Another option that fits your situation ({reason}).",
+    if combos:
+        def _combo_block(combo, label):
+            return {
+                "name": " + ".join(f["name"] for f in combo),
+                "foods": [food_engine.format_food_line(f) for f in combo],
+                "calories": round(sum(f["calories"] for f in combo)),
+                "protein_g": round(sum(f["protein"] for f in combo), 1),
+                "reason": f"{label} that fits your situation ({reason}).",
             }
+        swap_block = _combo_block(combos[0], "A practical replacement")
+        alt_block = _combo_block(combos[1], "Another option") if len(combos) > 1 else None
         print(f"[Offline] meal_swap (engine-sourced): {meal_name} -> {swap_block['foods']}")
         return {"swap": swap_block, "alternative": alt_block, "tips": [], "calories_saved": 0}
 
