@@ -2986,6 +2986,22 @@
         reviewDocs.forEach(function(r) { existing.unshift(r); });
         try { localStorage.setItem('expert_plan_reviews', JSON.stringify(existing)); } catch (_) {}
 
+        /* Active-request anchor — the SAME key diet.js's
+           getCompletedPlanReview() matches on, so the Diet page banner can
+           surface THIS request's completed review (and never a stale one
+           from a different expert). Points at the diet-type doc when the
+           bundle has one, since the Diet page is where it gets consumed. */
+        try {
+          var _anchorDoc = reviewDocs.find(function(r) { return r.reviewType === 'diet'; }) || reviewDocs[0];
+          if (_anchorDoc) {
+            localStorage.setItem('zitlas_review_request', JSON.stringify({
+              id: _anchorDoc.id, expertId: coach.id,
+              planId: localStorage.getItem('zitlas_plan_id') || null,
+              status: 'pending',
+            }));
+          }
+        } catch (_) {}
+
         /* Supersede the same stale pendings IN FIRESTORE too. Previously
            only the localStorage copy was pruned — the old pending document
            stayed 'pending' in Firestore forever, which is exactly how
@@ -3150,15 +3166,20 @@
                 var isInProgress  = newRaw  === 'in_progress' || newRaw  === 'expert_reviewing';
                 var justAccepted  = prevRaw === 'pending' && isInProgress;
 
+                /* Deduped via the same localStorage flags review-sync.js
+                   uses — the diet/dashboard pages run their own listener
+                   now, and the same milestone must never notify twice. */
                 if (typeof ZitlasNotify !== 'undefined' && prevRaw) {
-                  if (justAccepted) {
+                  if (justAccepted && !localStorage.getItem('zitlas_review_note_' + data.id + '_accepted')) {
+                    try { localStorage.setItem('zitlas_review_note_' + data.id + '_accepted', new Date().toISOString()); } catch (_) {}
                     ZitlasNotify.send(_reviewUid, {
                       title: '👨‍⚕️ ' + (data.expertName || 'Expert') + ' accepted your review request',
                       message: 'They’re now reviewing your ' + (data.reviewType || 'plan') + '.',
                       category: 'review', type: 'review_accepted',
                       action: 'expert_profile', actionId: data.expertId,
                     });
-                  } else if (justCompleted) {
+                  } else if (justCompleted && !localStorage.getItem('zitlas_review_note_' + data.id + '_completed')) {
+                    try { localStorage.setItem('zitlas_review_note_' + data.id + '_completed', new Date().toISOString()); } catch (_) {}
                     ZitlasNotify.send(_reviewUid, {
                       title: '⭐ ' + (data.expertName || 'Expert') + ' completed your review',
                       message: 'Open their profile to see the changes.',

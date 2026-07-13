@@ -2072,9 +2072,12 @@
        plan below the moment its snapshot arrives (no refresh needed). */
     initCoachDietMode();
 
-    /* Real-time listener: expert saves a review → show banner without refresh */
-    window.addEventListener('storage', function (e) {
-      if (e.key !== 'expert_plan_reviews') return;
+    /* Real-time refresh when an expert's completed review reaches this
+       device. Two triggers for the same handler:
+         - 'zitlas-review-updated'  (review-sync.js merged fresh Firestore
+           docs IN THIS TAB — storage events never fire in the writing tab)
+         - 'storage'                (another tab wrote expert_plan_reviews) */
+    function _onReviewsUpdated() {
       var updated = getCompletedPlanReview();
       if (!updated || !updated.reviewedDietPlan || !updated.reviewedDietPlan.days) return;
       /* Already showing this review */
@@ -2091,6 +2094,10 @@
         showExpertReviewBanner(updated);
       }
       showToast('👨‍⚕️ Your nutritionist has reviewed your plan!', 4000);
+    }
+    window.addEventListener('zitlas-review-updated', _onReviewsUpdated);
+    window.addEventListener('storage', function (e) {
+      if (e.key === 'expert_plan_reviews') _onReviewsUpdated();
     });
 
     /* Load persisted food restrictions */
