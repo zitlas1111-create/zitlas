@@ -232,18 +232,18 @@ img { display: block; max-width: 100%; }
 
 /* Name / role */
 .cp-hero-name {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   font-size: 1.45rem;
   font-weight: 800;
   color: var(--text);
-  text-align: center;
   line-height: 1.2;
   margin-top: 4px;
 }
-.cp-hero-name #coachNameBadge {
-  display: inline-flex;
-  vertical-align: middle;
-  margin-left: 6px;
-}
+.cp-hero-name #coachName { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-hero-name #coachNameBadge { flex-shrink: 0; display: inline-flex; }
 #coachVerifiedCaption:empty { display: none; }
 #coachVerifiedCaption { text-align: center; }
 .cp-hero-role {
@@ -1368,7 +1368,7 @@ img { display: block; max-width: 100%; }
   flex-shrink: 0;
 }
 .zc-hdr-info { flex: 1; min-width: 0; }
-.zc-hdr-name-row { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.zc-hdr-name-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .zc-hdr-name {
   font-size: .9rem; font-weight: 700;
   color: var(--text); display: block;

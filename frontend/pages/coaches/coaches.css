@@ -452,7 +452,7 @@ html, body {
 .nutri-name-row {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
 }
 .nutri-name {
   font-size: .98rem;

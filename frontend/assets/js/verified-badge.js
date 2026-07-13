@@ -33,7 +33,7 @@
     professional: {
       label: 'Verified Expert',
       tooltipTitle: 'Verified by ZITLAS',
-      tooltipBody: 'Professional identity and certificates verified.',
+      tooltipBody: 'Identity and professional certificates verified.',
     },
     // Future tiers — e.g.:
     // gold:    { label: 'Gold Verified',   tooltipTitle: 'Gold Verified — Top Rated', tooltipBody: '...' },

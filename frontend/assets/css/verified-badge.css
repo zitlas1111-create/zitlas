@@ -29,12 +29,19 @@
   pointer-events: none; /* clicks go to the wrapper, which owns the tooltip/sheet */
 }
 
-/* Size variants (spec: listing 16-18px, profile 20-24px, chat/review 16px) */
+/* Size variants — mobile-first base size, bumped up on desktop. Every
+   variant stays within "mobile 16-18px / desktop 18-20px" regardless of
+   which surface it's on (chat/review sit at the low end of each range,
+   the name-badge and profile header at the high end). Never tinted —
+   no filter, no fill/stroke color override, the PNG's own colors render
+   as-is. */
 .zv-badge--sm { width: 16px; height: 16px; }
-.zv-badge--md { width: 18px; height: 18px; }
-.zv-badge--lg { width: 24px; height: 24px; }
-@media (max-width: 480px) {
-  .zv-badge--lg { width: 20px; height: 20px; } /* profile header, small phones */
+.zv-badge--md { width: 17px; height: 17px; }
+.zv-badge--lg { width: 18px; height: 18px; }
+@media (min-width: 768px) {
+  .zv-badge--sm { width: 18px; height: 18px; }
+  .zv-badge--md { width: 19px; height: 19px; }
+  .zv-badge--lg { width: 20px; height: 20px; }
 }
 
 /* "Verified by ZITLAS" caption under the profile-header name */
