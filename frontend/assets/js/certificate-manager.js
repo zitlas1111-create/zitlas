@@ -67,37 +67,56 @@
   function _uploadToStorage(expertId, file) {
     var s = storage();
     if (!s) return Promise.reject(new Error('Cloud storage is unavailable on this page — please reload and try again.'));
+    /* Fail FAST. The SDK's default retry window is ~2 minutes, which is why
+       a non-provisioned bucket left the UI stuck on a spinner for two full
+       minutes before erroring. 25s is plenty for a real upload and turns a
+       dead-bucket failure into a prompt, clear error instead of a hang. */
+    try { s.setMaxUploadRetryTime(25000); s.setMaxOperationRetryTime(25000); } catch (_) {}
     var extMatch = /\.([a-z0-9]+)$/i.exec(file.name || '');
     var ext = extMatch ? extMatch[1].toLowerCase() : 'jpg';
     var path = 'certificates/' + expertId + '/' + newId() + '.' + ext;
     var ref = s.ref(path);
-    console.log('[CERT] uploading to Firebase Storage ->', path, '(' + file.size + ' bytes)');
+    console.log('[CERT] STEP 3 firebase upload started -> ' + path + ' (' + file.size + ' bytes)');
     return ref.put(file, { contentType: file.type || undefined })
-      .then(function (snapshot) { return snapshot.ref.getDownloadURL(); })
+      .then(function (snapshot) {
+        console.log('[CERT] STEP 4 firebase upload success — fetching downloadURL');
+        return snapshot.ref.getDownloadURL();
+      })
       .then(function (url) {
-        console.log('[CERT] stored, storageProvider=firebase-storage path=' + path + ' url=' + url);
+        console.log('[CERT] STEP 4b downloadURL obtained — storageProvider=firebase-storage path=' + path + ' url=' + url);
         return { url: url, path: path };
       })
       .catch(function (e) {
         /* A bucket that has never been provisioned in the Firebase Console
            (Storage > Get Started was never clicked for this project)
-           surfaces as a generic network failure here, not a clean
-           "permission denied" — the diagnostic below is what actually
-           told us that during development, so surface it to whoever's
-           debugging a failed upload instead of a bare SDK error code. */
-        console.error('[CERT] Firebase Storage upload failed — code=' + e.code + ' message=' + e.message +
-                       '. If this is storage/retry-limit-exceeded or a network error, check that Cloud ' +
-                       'Storage is enabled for this Firebase project (Console -> Storage -> Get Started) ' +
-                       'and that its rules allow authenticated writes to certificates/**.');
-        throw new Error('Could not upload the certificate file. Please try again in a moment.');
+           surfaces as storage/retry-limit-exceeded or a generic network
+           failure here, not a clean "permission denied". Log the raw code
+           for debugging, and surface a phase-specific message so the UI
+           never sits silently on a spinner. */
+        console.error('[CERT] STEP 3/4 FAILED — code=' + (e && e.code) + ' message=' + (e && e.message) +
+                       '. If this is storage/retry-limit-exceeded or a network error, Cloud Storage is ' +
+                       'likely NOT enabled for this project (Firebase Console -> Storage -> Get Started), ' +
+                       'or its rules block authenticated writes to certificates/**.');
+        var friendly = (e && e.code === 'storage/unauthorized')
+          ? 'Upload blocked by storage security rules. Please contact support.'
+          : 'Could not upload the certificate — cloud storage is unavailable right now. Please try again shortly.';
+        throw new Error(friendly);
       });
   }
 
-  /* ── Upload + AI verification (backend), then permanent storage ── */
-  function uploadAndVerify(expertId, file) {
+  /* ── Upload + AI verification (backend), then permanent storage ──
+     onPhase(phaseKey) is an optional callback the caller uses to advance
+     its own progress UI: 'verifying' -> 'uploading'. Every async boundary
+     also logs a STEP marker so the whole pipeline is traceable in the
+     console (STEP 1/2 here, STEP 3/4 in _uploadToStorage, STEP 5/6 at the
+     saveCertificate call site, STEP 7 when the caller resets its UI). */
+  function uploadAndVerify(expertId, file, onPhase) {
+    function phase(p) { try { if (onPhase) onPhase(p); } catch (_) {} }
     var fd = new FormData();
     fd.append('expertId', expertId);
     fd.append('file', file);
+    phase('verifying');
+    console.log('[CERT] STEP 1 verify started — ' + (file.name || '(unnamed)') + ' ' + file.type + ' ' + file.size + 'B');
     return fetch('/api/certificates/verify', { method: 'POST', body: fd })
       .then(function (r) {
         if (!r.ok) return r.json().catch(function () { return null; }).then(function (e) {
@@ -106,7 +125,10 @@
         return r.json();
       })
       .then(function (result) {
-        if (!result.accepted) return result;
+        console.log('[CERT] STEP 2 verify success — accepted=' + result.accepted +
+                    ' status=' + result.verificationStatus + ' score=' + result.verificationScore);
+        if (!result.accepted) return result;  // rejected by AI — no upload, no storage write
+        phase('uploading');
         return _uploadToStorage(expertId, file).then(function (stored) {
           result.certificateUrl = stored.url;
           result.storagePath = stored.path;

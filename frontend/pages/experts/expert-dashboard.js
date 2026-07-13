@@ -2887,31 +2887,45 @@ function initCertificateUpload(expert) {
 
     btn.disabled = true;
     if (prog) prog.classList.add('show');
-    if (progText) progText.textContent = 'Analyzing certificate…';
+    function setPhaseText(t) { if (progText) progText.textContent = t; }
+    setPhaseText('Analyzing certificate…');
 
-    console.log('[CERT] uploading', file.name, file.type, file.size + 'B');
-    ZitlasCertificates.uploadAndVerify(expertId, file)
+    console.log('[CERT] STEP 0 file selected —', file.name, file.type, file.size + 'B');
+    /* onPhase advances the spinner label so it never stays on "Analyzing…"
+       through the (potentially slow) storage upload — the exact symptom
+       that made this look hung. */
+    ZitlasCertificates.uploadAndVerify(expertId, file, function (phaseKey) {
+      if (phaseKey === 'uploading') setPhaseText('Uploading certificate…');
+      else setPhaseText('Analyzing certificate…');
+    })
       .then(function (result) {
         if (!result.accepted) {
           console.warn('[CERT] rejected by AI:', result.reason);
           ZitlasCertificates.toast('❌ ' + result.reason);
           return;
         }
-        console.log('[CERT] AI accepted', result);
+        setPhaseText('Saving…');
+        console.log('[CERT] STEP 5 firestore write started');
         return ZitlasCertificates.saveCertificate(expertId, _currentExpert && _currentExpert.name, result)
           .then(function () {
+            console.log('[CERT] STEP 6 firestore write success');
             ZitlasCertificates.toast(result.verificationStatus === 'verified'
               ? '✅ Certificate verified! Your Verified Expert badge is now live.'
               : '📋 Certificate uploaded — pending manual review (AI confidence ' + result.verificationScore + '%).');
           });
       })
       .catch(function (err) {
-        console.error('[CERT] upload failed', err);
-        ZitlasCertificates.toast(err && err.message ? err.message : 'Could not verify certificate — please try again.');
+        /* Every await in the chain funnels here — the message is already
+           phase-specific (verify vs upload vs save), so the expert sees
+           WHAT failed instead of a spinner that never resolves. */
+        console.error('[CERT] pipeline failed at some step:', err);
+        ZitlasCertificates.toast(err && err.message ? err.message : 'Could not process the certificate — please try again.');
       })
       .then(function () {
+        console.log('[CERT] STEP 7 UI reset — spinner cleared');
         btn.disabled = false;
         if (prog) prog.classList.remove('show');
+        setPhaseText('Analyzing certificate…'); // reset label for next attempt
       });
   });
 }
