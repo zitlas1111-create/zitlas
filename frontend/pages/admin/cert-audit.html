@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>ZITLAS — Certificate Storage Audit</title>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <script src="../../assets/js/firebase-config.js?v=20260715"></script>
+  <script src="../../assets/js/certificate-manager.js?v=20260715"></script>
+  <style>
+    :root { --ok:#137a3f; --bad:#b3261e; --warn:#b35900; --line:rgba(30,41,59,0.1); }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+           background:#f4f7ed; color:#1E293B; padding:20px; }
+    h1 { font-size:1.25rem; margin:0 0 4px; }
+    .sub { color:#64748B; font-size:.85rem; margin:0 0 16px; line-height:1.5; }
+    .toolbar { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px; }
+    button { border:none; border-radius:10px; padding:10px 16px; font-weight:700; font-size:.85rem; cursor:pointer; }
+    .btn-primary { background:linear-gradient(135deg,#FFA940,#FF7A00); color:#fff; }
+    .btn-ghost { background:rgba(30,41,59,0.06); color:#1E293B; }
+    .btn-danger { background:rgba(179,38,30,0.1); color:var(--bad); }
+    .summary { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
+    .stat { background:#fff; border:1px solid var(--line); border-radius:12px; padding:10px 16px; min-width:120px; }
+    .stat b { display:block; font-size:1.4rem; }
+    .stat span { font-size:.72rem; color:#64748B; text-transform:uppercase; letter-spacing:.04em; }
+    .card { background:#fff; border:1px solid var(--line); border-radius:14px; padding:14px 16px; margin-bottom:10px; }
+    .card.bad { border-color:rgba(179,38,30,0.35); }
+    .card.ok  { border-color:rgba(19,122,63,0.35); }
+    .row { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; }
+    .cname { font-weight:800; font-size:.95rem; }
+    .cmeta { font-size:.75rem; color:#64748B; margin-top:2px; word-break:break-all; }
+    .pill { flex-shrink:0; padding:4px 10px; border-radius:999px; font-size:.68rem; font-weight:800; white-space:nowrap; }
+    .pill.ok  { background:rgba(19,122,63,0.12); color:var(--ok); }
+    .pill.bad { background:rgba(179,38,30,0.1); color:var(--bad); }
+    .card-actions { margin-top:10px; display:flex; gap:8px; }
+    .empty { text-align:center; color:#64748B; padding:40px; }
+    #storageBanner { border-radius:12px; padding:12px 16px; margin-bottom:16px; font-size:.85rem; line-height:1.55; }
+    #storageBanner.off { background:rgba(179,38,30,0.08); border:1px solid rgba(179,38,30,0.3); color:var(--bad); }
+    #storageBanner.on  { background:rgba(19,122,63,0.08); border:1px solid rgba(19,122,63,0.3); color:var(--ok); }
+    code { background:rgba(30,41,59,0.07); padding:1px 5px; border-radius:5px; font-size:.8em; }
+  </style>
+</head>
+<body>
+  <h1>Certificate Storage Audit</h1>
+  <p class="sub">
+    One-off admin tool. Lists every <code>expert_certificates</code> document, classifies its
+    <code>certificateUrl</code>, and lets you reconcile dead legacy records. Runs entirely in the browser
+    against Firestore (this backend has no Admin SDK — same architecture as every other write in ZITLAS).
+    <strong>It cannot restore lost files</strong> — legacy <code>/uploads/…</code> files were on Render's
+    ephemeral disk and are gone; "reconcile" means removing the dead record so the expert can re-upload cleanly
+    and their Verified badge reflects reality.
+  </p>
+
+  <div id="storageBanner">Checking Firebase Storage…</div>
+
+  <div class="toolbar">
+    <button class="btn-primary" id="btnAudit">Re-run Audit</button>
+    <button class="btn-danger" id="btnDeleteAllDead">Delete ALL dead legacy records</button>
+  </div>
+
+  <div class="summary" id="summary"></div>
+  <div id="list"><div class="empty">Loading…</div></div>
+
+  <script>
+  (function () {
+    'use strict';
+    function $(id) { return document.getElementById(id); }
+    function classify(url) {
+      if (!url) return { kind: 'missing', ok: false, label: 'NO URL' };
+      if (url.indexOf('firebasestorage.googleapis.com') !== -1) return { kind: 'firebase', ok: true, label: 'FIREBASE STORAGE' };
+      if (url.indexOf('/uploads/') !== -1) return { kind: 'legacy', ok: false, label: 'LEGACY /uploads — DEAD' };
+      return { kind: 'other', ok: true, label: 'EXTERNAL URL' };
+    }
+
+    var _docs = [];
+
+    function db() { return (typeof ZitlasDB !== 'undefined') ? ZitlasDB : null; }
+
+    function probeStorage() {
+      var banner = $('storageBanner');
+      var bucket = (firebase.app().options.storageBucket) || 'zitlas-b8677.firebasestorage.app';
+      fetch('https://firebasestorage.googleapis.com/v0/b/' + bucket + '/o?maxResults=1')
+        .then(function (r) {
+          if (r.status === 401 || r.status === 403) {
+            banner.className = 'on';
+            banner.innerHTML = '✅ Firebase Storage bucket <code>' + bucket + '</code> exists (rules are enforcing auth — that is expected). New uploads can work.';
+          } else if (r.status === 404) {
+            banner.className = 'off';
+            banner.innerHTML = '⛔ Firebase Storage is NOT enabled for this project (bucket <code>' + bucket +
+              '</code> returns 404). New certificate uploads will FAIL until you open Firebase Console → Storage → Get Started, ' +
+              'then set rules allowing authenticated writes to <code>certificates/**</code>. This is a one-time manual step.';
+          } else {
+            banner.className = 'on';
+            banner.innerHTML = 'Storage probe returned HTTP ' + r.status + ' for <code>' + bucket + '</code>.';
+          }
+        })
+        .catch(function (e) {
+          banner.className = 'off';
+          banner.innerHTML = '⛔ Storage probe failed: ' + e.message;
+        });
+    }
+
+    function render() {
+      var list = $('list');
+      if (!_docs.length) { list.innerHTML = '<div class="empty">No certificate documents found.</div>'; $('summary').innerHTML = ''; return; }
+
+      var fb = 0, legacy = 0, verified = 0;
+      _docs.forEach(function (d) {
+        var c = classify(d.certificateUrl);
+        if (c.kind === 'firebase') fb++;
+        if (c.kind === 'legacy') legacy++;
+        if (d.verificationStatus === 'verified') verified++;
+      });
+      $('summary').innerHTML =
+        '<div class="stat"><b>' + _docs.length + '</b><span>Total certs</span></div>' +
+        '<div class="stat"><b style="color:var(--ok)">' + fb + '</b><span>Firebase (live)</span></div>' +
+        '<div class="stat"><b style="color:var(--bad)">' + legacy + '</b><span>Legacy (dead)</span></div>' +
+        '<div class="stat"><b>' + verified + '</b><span>Verified status</span></div>';
+
+      list.innerHTML = _docs.map(function (d) {
+        var c = classify(d.certificateUrl);
+        return '<div class="card ' + (c.ok ? 'ok' : 'bad') + '">' +
+          '<div class="row">' +
+            '<div>' +
+              '<div class="cname">' + esc(d.certificateName || 'Certificate') + '</div>' +
+              '<div class="cmeta">certId: ' + esc(d.docId) + '</div>' +
+              '<div class="cmeta">expert: ' + esc(d.expertName || d.expertId) + ' (' + esc(d.expertId) + ')</div>' +
+              '<div class="cmeta">status: ' + esc(d.verificationStatus || '—') + ' · storageProvider: ' + esc(String(d.storageProvider)) + '</div>' +
+              '<div class="cmeta">url: ' + esc(d.certificateUrl || '(none)') + '</div>' +
+            '</div>' +
+            '<span class="pill ' + (c.ok ? 'ok' : 'bad') + '">' + c.label + '</span>' +
+          '</div>' +
+          (!c.ok
+            ? '<div class="card-actions"><button class="btn-danger" data-del="' + esc(d.docId) + '" data-expert="' + esc(d.expertId) + '">Delete dead record</button></div>'
+            : '') +
+          '</div>';
+      }).join('');
+
+      list.querySelectorAll('[data-del]').forEach(function (btn) {
+        btn.addEventListener('click', function () { deleteDoc(btn.dataset.del, btn.dataset.expert); });
+      });
+    }
+
+    function esc(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    }
+
+    function deleteDoc(docId, expertId) {
+      if (!confirm('Delete certificate record ' + docId + '?\n\nThe underlying file is already gone — this only removes the dead Firestore record so the expert can re-upload cleanly. Their Verified badge will be recomputed from any remaining live certificates.')) return;
+      var d = db(); if (!d) { alert('Database unavailable'); return; }
+      d.collection('expert_certificates').doc(docId).delete()
+        .then(function () {
+          console.log('[CERT AUDIT] deleted', docId);
+          if (typeof ZitlasCertificates !== 'undefined' && expertId) return ZitlasCertificates.recomputeVerifiedFlag(expertId);
+        })
+        .then(function () { audit(); })
+        .catch(function (e) { alert('Delete failed: ' + e.message); });
+    }
+
+    function deleteAllDead() {
+      var dead = _docs.filter(function (d) { return !classify(d.certificateUrl).ok; });
+      if (!dead.length) { alert('No dead legacy records to delete.'); return; }
+      if (!confirm('Delete ALL ' + dead.length + ' dead legacy certificate record(s)?\n\nFiles are already gone; this reconciles Firestore so affected experts can re-upload. Verified badges are recomputed afterward.')) return;
+      var d = db(); if (!d) { alert('Database unavailable'); return; }
+      var experts = {};
+      Promise.all(dead.map(function (rec) {
+        experts[rec.expertId] = true;
+        return d.collection('expert_certificates').doc(rec.docId).delete();
+      }))
+        .then(function () {
+          if (typeof ZitlasCertificates === 'undefined') return;
+          return Promise.all(Object.keys(experts).map(function (eid) { return ZitlasCertificates.recomputeVerifiedFlag(eid); }));
+        })
+        .then(function () { console.log('[CERT AUDIT] bulk delete complete'); audit(); })
+        .catch(function (e) { alert('Bulk delete failed: ' + e.message); });
+    }
+
+    function audit() {
+      var d = db();
+      if (!d) { $('list').innerHTML = '<div class="empty">Firestore unavailable.</div>'; return; }
+      $('list').innerHTML = '<div class="empty">Loading…</div>';
+      d.collection('expert_certificates').get().then(function (snap) {
+        _docs = snap.docs.map(function (x) {
+          var v = x.data();
+          return {
+            docId: x.id, certId: v.certId || x.id, expertId: v.expertId || '', expertName: v.expertName || '',
+            certificateName: v.certificateName || '', verificationStatus: v.verificationStatus || '',
+            storageProvider: (v.storageProvider === undefined ? null : v.storageProvider),
+            certificateUrl: v.certificateUrl || '',
+          };
+        });
+        console.log('[CERT AUDIT] loaded', _docs.length, 'certificate docs', _docs);
+        render();
+      }).catch(function (e) { $('list').innerHTML = '<div class="empty">Query failed: ' + esc(e.message) + '</div>'; });
+    }
+
+    $('btnAudit').addEventListener('click', audit);
+    $('btnDeleteAllDead').addEventListener('click', deleteAllDead);
+    probeStorage();
+    audit();
+  })();
+  </script>
+</body>
+</html>
