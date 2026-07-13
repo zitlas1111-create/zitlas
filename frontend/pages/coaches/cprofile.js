@@ -4222,6 +4222,13 @@
         var btn = document.getElementById('verifyPlanBtn');
         if (btn) btn.click();
       }, 450);
+    } else if (action === 'coach') {
+      /* From the Experts listing's "Personal Coach" button — same deep-
+         link pattern as action=ask/verify above. */
+      setTimeout(function() {
+        var btn = document.getElementById('personalCoachBtn');
+        if (btn) btn.click();
+      }, 450);
     }
 
     requestAnimationFrame(function() { initScrollAnimations(); });

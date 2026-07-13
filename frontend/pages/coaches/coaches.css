@@ -499,7 +499,8 @@ html, body {
   color: var(--yellow);
 }
 
-/* Fee row */
+/* Fee row (legacy — kept only for the empty-state "Become an Expert" link
+   and any code path that hasn't been migrated to .nutri-pricing-row) */
 .nutri-fee-row {
   display: flex;
   align-items: center;
@@ -523,7 +524,7 @@ html, body {
   color: var(--text-muted);
 }
 
-/* Ask Nutritionist button */
+/* Ask Nutritionist button (legacy — empty-state "Become an Expert" link) */
 .ask-btn {
   display: flex;
   align-items: center;
@@ -542,6 +543,123 @@ html, body {
 }
 .ask-btn:hover { background: var(--primary-dark); transform: scale(1.02); }
 .ask-btn:active { transform: scale(0.98); }
+
+/* ─── Dual pricing (Priority 2: review price vs coaching price must never
+   be a single ambiguous line) ──────────────────────────────────────── */
+.nutri-pricing-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.price-chip {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+}
+.price-chip-label {
+  font-size: .66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.price-chip-value {
+  font-size: .95rem;
+  font-weight: 800;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  white-space: nowrap;
+}
+.price-chip-value small {
+  font-size: .68rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+/* Review is the primary reason athletes land on this page — give it the
+   brand color; coaching (a bigger, separate commitment) stays neutral so
+   the two are never mistaken for the same thing at a glance. */
+.price-chip--review { border-color: rgba(var(--primary-rgb),.35); }
+.price-chip--review .price-chip-value { color: var(--primary); }
+.price-chip--coaching .price-chip-value { color: var(--text); }
+
+/* ─── Card action rows: Request Review (own row, most prominent — this
+   page is mainly used for diet review) then Personal Coach + Chat on a
+   second row. Two rows instead of cramming three buttons onto one line
+   is deliberate: at a standard 390px phone width, three side-by-side
+   buttons truncated "Personal Coach" to "Personal Coac…". ───────────── */
+.nutri-actions-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.nutri-actions-row--primary { margin-top: 10px; }
+.nutri-action-btn {
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: .78rem;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: filter .15s, transform .1s, background .15s;
+  padding: 10px 12px;
+}
+.nutri-action-btn:active { transform: scale(0.97); }
+.nutri-action-btn--primary {
+  flex: 1;
+  width: 100%;
+  background: var(--primary);
+  color: var(--text-primary);
+}
+.nutri-action-btn--primary:hover { background: var(--primary-dark); }
+.nutri-action-btn--secondary {
+  flex: 1;
+  min-width: 0;
+  background: var(--surface2);
+  border: 1.5px solid var(--border);
+  color: var(--text);
+}
+.nutri-action-btn--secondary:hover { border-color: var(--primary); color: var(--primary); }
+.nutri-action-btn--chat {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface2);
+  border: 1.5px solid var(--border);
+  color: var(--text-muted);
+}
+.nutri-action-btn--chat:hover { border-color: var(--primary); color: var(--primary); }
+
+/* Very narrow phones: stack the price chips too, so "Personal Coaching"'s
+   label never competes for width with its own price. */
+@media (max-width: 360px) {
+  .nutri-pricing-row { flex-direction: column; }
+}
+
+/* Tablet/desktop: this page is a mobile-shell layout by default (full-
+   bleed, bottom nav) — center it into a readable column instead of
+   stretching cards edge-to-edge across a wide viewport. */
+@media (min-width: 720px) {
+  /* .page-title-block sits OUTSIDE <main class="main-content"> in the
+     markup — center both to the same column width so the heading lines
+     up with the search bar/cards below it instead of hugging the true
+     left edge while everything else is inset. */
+  .page-title-block, .main-content { max-width: 720px; margin-left: auto; margin-right: auto; }
+  .nutri-card { padding: 20px; }
+}
 
 /* ─── Empty State ────────────────────────────────────────────────── */
 .empty-state {

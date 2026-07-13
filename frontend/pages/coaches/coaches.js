@@ -37,6 +37,18 @@ function avatarBg(n) {
   return `background:${n.color}22;color:${n.color};`;
 }
 
+/* Mirrors cprofile.js's PRICING_DEFAULTS/_getPricing exactly — experts who
+   haven't opened Pricing & Services yet still show today's fixed defaults,
+   and anyone who HAS customized pricing sees it here too. Kept as its own
+   copy (not a shared import) because this codebase has no build step /
+   module system — every page is a standalone <script>. */
+const PRICING_DEFAULTS = { dietReviewPrice: 49, coachingCompletePrice: 999 };
+
+function reviewPriceFor(pricing) {
+  var v = pricing && pricing.dietReviewPrice;
+  return (v === 0 || (v != null && !isNaN(v))) ? v : PRICING_DEFAULTS.dietReviewPrice;
+}
+
 function renderNutritionistCard(n) {
   /* Apply live profile data for the logged-in expert */
   if (window.ZitlasExpertProfile && n.id === ZitlasExpertProfile.getExpertId()) {
@@ -77,15 +89,38 @@ function renderNutritionistCard(n) {
     <div class="nutri-avail-row">
       <span class="avail-tag ${availClass}">${availText}</span>
     </div>
-    <div class="nutri-fee-row">
-      <div class="fee-info">
-        <span class="fee-amount">₹${n.fee}</span>
-        <span class="fee-duration">/ ${n.duration}</span>
+
+    <!-- Two clearly separate services — never one bare price with no
+         context (Priority 2): this page is mostly used for diet review,
+         and the old single "₹1000 / 60 Min" line was actually the
+         personal-coaching rate, which read as the review price. -->
+    <div class="nutri-pricing-row">
+      <div class="price-chip price-chip--review">
+        <span class="price-chip-label">Diet Review</span>
+        <span class="price-chip-value">₹${n.reviewFee}<small>one-time</small></span>
       </div>
-      <button class="ask-btn" data-id="${n.id}" aria-label="Ask ${n.name}">
-        Ask Expert
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
+      <div class="price-chip price-chip--coaching">
+        <span class="price-chip-label">Coaching</span>
+        <span class="price-chip-value">₹${n.fee}<small>/ ${n.duration}</small></span>
+      </div>
+    </div>
+
+    <!-- Two rows, not one cramped row: "Personal Coach" truncated to
+         "Personal Coac…" when all three actions shared one line even on a
+         standard 390px phone — a full-width primary action plus a second
+         row for coach+chat guarantees no label is ever clipped. -->
+    <div class="nutri-actions-row nutri-actions-row--primary">
+      <button class="nutri-action-btn nutri-action-btn--primary" data-id="${n.id}" data-action="verify" aria-label="Request a diet/workout review from ${n.name}">
+        Request Review
+      </button>
+    </div>
+    <div class="nutri-actions-row">
+      <button class="nutri-action-btn nutri-action-btn--secondary" data-id="${n.id}" data-action="coach" aria-label="Get personal coaching from ${n.name}">
+        Personal Coach
+      </button>
+      <button class="nutri-action-btn nutri-action-btn--chat" data-id="${n.id}" data-action="ask" aria-label="Chat with ${n.name}">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
         </svg>
       </button>
     </div>
@@ -195,6 +230,7 @@ function _mergeLocalExperts() {
       exp:        '1+',
       fee:        0,
       duration:   '20 Min',
+      reviewFee:  reviewPriceFor(e.pricing),
       available:  true,
       specialties:[],
       lang:       ['EN'],
@@ -227,6 +263,7 @@ function loadExpertsFromFirebase() {
           exp:        d.experience       || '1+',
           fee:        parseInt(d.fee, 10) || 0,
           duration:   d.sessionDuration  ? (d.sessionDuration + ' Min') : '20 Min',
+          reviewFee:  reviewPriceFor(d.pricing),
           available:  d.status !== 'offline',
           specialties: Array.isArray(d.specialties) ? d.specialties : [],
           lang:       Array.isArray(d.languages)    ? d.languages   : ['EN'],
@@ -339,6 +376,16 @@ searchClearBtn.addEventListener('click', () => {
 });
 
 coachesList.addEventListener('click', e => {
+  /* Request Review / Personal Coach / Chat — each deep-links into the
+     profile page's EXISTING action handlers (action=verify/coach/ask),
+     so the actual review-request / coaching / chat flows are unchanged;
+     only the entry point moved onto the listing card. */
+  const actionBtn = e.target.closest('.nutri-action-btn');
+  if (actionBtn && actionBtn.dataset.id) {
+    console.log('[EXPERT CARD] action', actionBtn.dataset.action, '->', actionBtn.dataset.id);
+    window.location.href = `cprofile.html?expertId=${actionBtn.dataset.id}&action=${actionBtn.dataset.action}`;
+    return;
+  }
   const askBtn = e.target.closest('.ask-btn');
   /* data-id guard: the empty-state "Become an Expert" <a> reuses the
      .ask-btn class but has no data-id — without the guard this handler

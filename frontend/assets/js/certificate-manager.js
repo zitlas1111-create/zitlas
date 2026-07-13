@@ -155,34 +155,264 @@
     bd.innerHTML = '<div class="cert-modal" id="certModal"></div>';
     document.body.appendChild(bd);
     bd.addEventListener('click', function (e) { if (e.target === bd) closeModal(); });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && bd.classList.contains('open')) closeModal();
+    });
     return bd;
   }
   function closeModal() {
     var bd = document.getElementById('certModalBackdrop');
     if (!bd) return;
-    bd.classList.remove('open');
+    bd.classList.remove('open', 'cert-modal-backdrop--fullscreen');
+    var modal = document.getElementById('certModal');
+    if (modal) modal.classList.remove('cert-modal--viewer', 'cert-modal--fullscreen');
+    if (_zoomPanCleanup) { _zoomPanCleanup(); _zoomPanCleanup = null; }
     setTimeout(function () { bd.style.display = 'none'; }, 200);
   }
   function openModalHtml(html) {
     var bd = ensureModal();
-    document.getElementById('certModal').innerHTML = html;
+    var modal = document.getElementById('certModal');
+    modal.classList.remove('cert-modal--viewer', 'cert-modal--fullscreen');
+    modal.innerHTML = html;
     bd.style.display = 'flex';
     requestAnimationFrame(function () { requestAnimationFrame(function () { bd.classList.add('open'); }); });
+    return modal;
   }
 
-  /* "View Certificate" — shows the uploaded image/PDF full size */
+  /* Every openViewCertificate() call attaches fresh window-level drag
+     listeners (below) for the new image — without tearing down the
+     previous pair first, each certificate viewed in one session would
+     leak another permanent 'mousemove'/'mouseup' listener on `window`
+     (the stage/img-scoped listeners die naturally with their DOM nodes,
+     but window itself never goes away). One module-level cleanup slot,
+     invoked at the top of every new attach, keeps it to at most one. */
+  var _zoomPanCleanup = null;
+
+  /* ── Pan/zoom controller for the certificate image — pinch (touch),
+     mouse-wheel (desktop), double-tap/double-click toggle, and drag-to-pan
+     once zoomed in. No external library — this app has no bundler. ── */
+  function _attachZoomPan(img, stage) {
+    if (_zoomPanCleanup) { _zoomPanCleanup(); _zoomPanCleanup = null; }
+    var scale = 1, tx = 0, ty = 0;
+    var MIN = 1, MAX = 4;
+
+    function clampPan() {
+      if (!stage || !img.naturalWidth) return;
+      var stageRect = stage.getBoundingClientRect();
+      var w = img.clientWidth * scale, h = img.clientHeight * scale;
+      var maxX = Math.max(0, (w - stageRect.width) / 2);
+      var maxY = Math.max(0, (h - stageRect.height) / 2);
+      tx = Math.max(-maxX, Math.min(maxX, tx));
+      ty = Math.max(-maxY, Math.min(maxY, ty));
+    }
+    function render(withTransition) {
+      img.style.transition = withTransition ? 'transform 0.22s ease' : 'none';
+      img.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(' + scale + ')';
+      img.classList.toggle('cert-modal-img--zoomed', scale > 1.01);
+    }
+    function setScale(next, withTransition) {
+      scale = Math.max(MIN, Math.min(MAX, next));
+      if (scale === MIN) { tx = 0; ty = 0; }
+      clampPan();
+      render(withTransition);
+    }
+
+    /* Desktop: mouse-wheel zoom */
+    stage.addEventListener('wheel', function (e) {
+      e.preventDefault();
+      setScale(scale - e.deltaY * 0.0016, false);
+    }, { passive: false });
+
+    /* Double-click (desktop) / double-tap (mobile) toggle */
+    var lastTap = 0;
+    function toggleZoom() {
+      setScale(scale > 1.01 ? 1 : 2.5, true);
+    }
+    img.addEventListener('dblclick', function (e) { e.preventDefault(); toggleZoom(); });
+    img.addEventListener('touchend', function () {
+      var now = Date.now();
+      if (now - lastTap < 320) toggleZoom();
+      lastTap = now;
+    });
+
+    /* Pinch-to-zoom + single-finger pan (touch) */
+    var pinchStartDist = 0, pinchStartScale = 1;
+    var panStartX = 0, panStartY = 0, panOriginX = 0, panOriginY = 0, isPanning = false;
+    function touchDist(t) {
+      var dx = t[0].clientX - t[1].clientX, dy = t[0].clientY - t[1].clientY;
+      return Math.sqrt(dx * dx + dy * dy);
+    }
+    stage.addEventListener('touchstart', function (e) {
+      if (e.touches.length === 2) {
+        pinchStartDist = touchDist(e.touches);
+        pinchStartScale = scale;
+        isPanning = false;
+      } else if (e.touches.length === 1 && scale > 1.01) {
+        isPanning = true;
+        panStartX = e.touches[0].clientX; panStartY = e.touches[0].clientY;
+        panOriginX = tx; panOriginY = ty;
+      }
+    }, { passive: true });
+    stage.addEventListener('touchmove', function (e) {
+      if (e.touches.length === 2 && pinchStartDist) {
+        e.preventDefault();
+        setScale(pinchStartScale * (touchDist(e.touches) / pinchStartDist), false);
+      } else if (isPanning && e.touches.length === 1) {
+        e.preventDefault();
+        tx = panOriginX + (e.touches[0].clientX - panStartX);
+        ty = panOriginY + (e.touches[0].clientY - panStartY);
+        clampPan();
+        render(false);
+      }
+    }, { passive: false });
+    stage.addEventListener('touchend', function (e) {
+      if (e.touches.length === 0) { pinchStartDist = 0; isPanning = false; }
+    });
+
+    /* Desktop: drag-to-pan once zoomed in */
+    var mouseDown = false;
+    img.addEventListener('mousedown', function (e) {
+      if (scale <= 1.01) return;
+      e.preventDefault();
+      mouseDown = true;
+      panStartX = e.clientX; panStartY = e.clientY;
+      panOriginX = tx; panOriginY = ty;
+      img.style.cursor = 'grabbing';
+    });
+    function onMouseMove(e) {
+      if (!mouseDown) return;
+      tx = panOriginX + (e.clientX - panStartX);
+      ty = panOriginY + (e.clientY - panStartY);
+      clampPan();
+      render(false);
+    }
+    function onMouseUp() {
+      mouseDown = false;
+      img.style.cursor = scale > 1.01 ? 'grab' : 'zoom-in';
+    }
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    _zoomPanCleanup = function () {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    render(false);
+  }
+
+  /* ── Download: fetch as a blob so the browser saves the file instead of
+     navigating to it (works for cross-origin Firebase Storage URLs too);
+     falls back to opening the URL in a new tab if the fetch itself fails
+     (e.g. no CORS on an older upload) rather than doing nothing. ── */
+  function _downloadFile(url, suggestedName) {
+    fetch(url).then(function (r) {
+      if (!r.ok) throw new Error('fetch failed');
+      return r.blob();
+    }).then(function (blob) {
+      var objectUrl = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = objectUrl; a.download = suggestedName || 'certificate';
+      document.body.appendChild(a); a.click();
+      document.body.removeChild(a);
+      setTimeout(function () { URL.revokeObjectURL(objectUrl); }, 4000);
+    }).catch(function () {
+      window.open(url, '_blank', 'noopener');
+    });
+  }
+
+  function _fileExtFromUrl(url, fileType) {
+    if ((fileType || '').indexOf('pdf') !== -1) return 'pdf';
+    var m = /\.(jpe?g|png|webp|gif)($|\?)/i.exec(url || '');
+    return m ? m[1].toLowerCase() : 'jpg';
+  }
+
+  /* "View Certificate" — a professional, Drive/WhatsApp-style viewer:
+     always-visible close button, loading spinner, error state with retry,
+     pinch/wheel/double-tap zoom, drag-to-pan, download, and full-screen. */
   function openViewCertificate(cert) {
     var isPdf = (cert.fileType || '').indexOf('pdf') !== -1 || /\.pdf($|\?)/i.test(cert.certificateUrl || '');
-    openModalHtml(
-      '<p class="cert-modal-title">📄 ' + esc(cert.certificateName || 'Certificate') + '</p>' +
-      '<p class="cert-modal-sub">' + esc(cert.issuingOrganization || '') + '</p>' +
-      (isPdf
-        ? '<p class="cert-modal-sub">This certificate was uploaded as a PDF.</p>' +
-          '<a class="cert-view-btn" style="display:block;text-decoration:none" href="' + esc(cert.certificateUrl) + '" target="_blank" rel="noopener">Open PDF in new tab</a>'
-        : '<img class="cert-modal-img" src="' + esc(cert.certificateUrl) + '" alt="Certificate">') +
-      '<button class="cert-modal-close" id="certModalCloseBtn">Close</button>'
+    var downloadName = (cert.certificateName || 'certificate').replace(/[^a-z0-9\- ]/gi, '').trim() || 'certificate';
+    downloadName += '.' + _fileExtFromUrl(cert.certificateUrl, cert.fileType);
+
+    var modal = openModalHtml(
+      '<div class="cert-viewer">' +
+        '<div class="cert-viewer-header">' +
+          '<div class="cert-viewer-titles">' +
+            '<p class="cert-modal-title">📄 ' + esc(cert.certificateName || 'Certificate') + '</p>' +
+            '<p class="cert-modal-sub">' + esc(cert.issuingOrganization || '') + '</p>' +
+          '</div>' +
+          '<button class="cert-viewer-close" id="certViewerCloseBtn" aria-label="Close">' +
+            '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+          '</button>' +
+        '</div>' +
+        '<div class="cert-viewer-stage" id="certViewerStage">' +
+          (isPdf
+            ? '<div class="cert-viewer-pdf">' +
+                '<span class="cert-viewer-pdf-icon">📄</span>' +
+                '<p class="cert-modal-sub">This certificate was uploaded as a PDF and can\'t be previewed inline.</p>' +
+                '<a class="cert-viewer-action cert-viewer-action--primary" href="' + esc(cert.certificateUrl) + '" target="_blank" rel="noopener">Open PDF in New Tab</a>' +
+              '</div>'
+            : '<div class="cert-viewer-loading" id="certViewerLoading"><span class="cert-spinner cert-spinner--lg"></span><span>Loading certificate…</span></div>' +
+              '<div class="cert-viewer-error" id="certViewerError" style="display:none">' +
+                '<span class="cert-viewer-error-icon">⚠️</span>' +
+                '<p>Couldn\'t load this certificate.</p>' +
+                '<button class="cert-viewer-action" id="certViewerRetryBtn">Try Again</button>' +
+              '</div>' +
+              '<img class="cert-modal-img" id="certViewerImg" alt="Certificate" draggable="false" style="opacity:0">'
+          ) +
+        '</div>' +
+        '<div class="cert-viewer-footer">' +
+          '<button class="cert-viewer-action" id="certDownloadBtn">⬇ Download Certificate</button>' +
+          (isPdf ? '' : '<button class="cert-viewer-action" id="certFullscreenBtn">⤢ Full Screen</button>') +
+        '</div>' +
+      '</div>'
     );
-    document.getElementById('certModalCloseBtn').addEventListener('click', closeModal);
+    modal.classList.add('cert-modal--viewer');
+
+    document.getElementById('certViewerCloseBtn').addEventListener('click', closeModal);
+    var downloadBtn = document.getElementById('certDownloadBtn');
+    if (downloadBtn) downloadBtn.addEventListener('click', function () {
+      _downloadFile(cert.certificateUrl, downloadName);
+    });
+    var fsBtn = document.getElementById('certFullscreenBtn');
+    if (fsBtn) fsBtn.addEventListener('click', function () {
+      var isFs = modal.classList.toggle('cert-modal--fullscreen');
+      var bd = document.getElementById('certModalBackdrop');
+      if (bd) bd.classList.toggle('cert-modal-backdrop--fullscreen', isFs);
+      fsBtn.innerHTML = isFs ? '⤡ Exit Full Screen' : '⤢ Full Screen';
+    });
+
+    if (isPdf) return; // no image stage to wire up
+
+    var imgEl     = document.getElementById('certViewerImg');
+    var loadingEl = document.getElementById('certViewerLoading');
+    var errorEl   = document.getElementById('certViewerError');
+    var stageEl   = document.getElementById('certViewerStage');
+
+    function loadImage(bust) {
+      loadingEl.style.display = 'flex';
+      errorEl.style.display = 'none';
+      imgEl.style.opacity = '0';
+      imgEl.onload = function () {
+        loadingEl.style.display = 'none';
+        imgEl.style.opacity = '1';
+        imgEl.style.cursor = 'zoom-in';
+        _attachZoomPan(imgEl, stageEl);
+      };
+      imgEl.onerror = function () {
+        loadingEl.style.display = 'none';
+        errorEl.style.display = 'flex';
+      };
+      /* Cache-bust only on retry, so a transient network blip doesn't keep
+         resolving to the browser's already-failed cache entry — the
+         normal path still benefits from the browser cache. */
+      imgEl.src = bust
+        ? cert.certificateUrl + (cert.certificateUrl.indexOf('?') === -1 ? '?' : '&') + '_r=' + Date.now()
+        : cert.certificateUrl;
+    }
+    var retryBtn = document.getElementById('certViewerRetryBtn');
+    if (retryBtn) retryBtn.addEventListener('click', function () { loadImage(true); });
+    loadImage(false);
   }
 
   /* "ZITLAS Verification" — tapped from the Verified Expert badge */
