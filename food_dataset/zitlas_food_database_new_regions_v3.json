@@ -1,0 +1,142 @@
+[
+  {
+    "id": 4501, "name": "Dalma", "category": "Vegetarian Protein Sources", "type": "Vegetarian",
+    "serving_size": "1 bowl (200 g)", "calories": 175, "protein": 9.0, "carbs": 24.0, "fat": 4.5,
+    "fiber": 6.0, "sugar": 3.0, "sodium": 320, "allergens": ["None"],
+    "goals": ["General Fitness", "Weight Loss"],
+    "description": "Dalma – An Odia lentil and vegetable stew tempered with panch phoron, a daily household dish across Odisha."
+  },
+  {
+    "id": 4502, "name": "Chhena Poda", "category": "Desserts & Sweets", "type": "Vegetarian",
+    "serving_size": "1 piece (80 g)", "calories": 220, "protein": 6.0, "carbs": 28.0, "fat": 9.0,
+    "fiber": 0.5, "sugar": 22.0, "sodium": 90, "allergens": ["Milk"],
+    "goals": ["General Fitness"],
+    "description": "Chhena Poda – A baked Odia cottage-cheese dessert, traditionally made for festivals and celebrations."
+  },
+  {
+    "id": 4503, "name": "Khar", "category": "Vegetables", "type": "Vegetarian",
+    "serving_size": "1 bowl (180 g)", "calories": 130, "protein": 4.5, "carbs": 17.0, "fat": 4.5,
+    "fiber": 4.0, "sugar": 3.0, "sodium": 260, "allergens": ["None"],
+    "goals": ["General Fitness", "Weight Loss"],
+    "description": "Khar – A traditional Assamese alkaline preparation of raw papaya and pulses, eaten as a first course in Assamese meals."
+  },
+  {
+    "id": 4504, "name": "Masor Tenga", "category": "Fish & Seafood", "type": "Non-Vegetarian",
+    "serving_size": "1 bowl (220 g)", "calories": 205, "protein": 19.0, "carbs": 8.0, "fat": 9.0,
+    "fiber": 1.5, "sugar": 2.0, "sodium": 380, "allergens": ["Shellfish/Fish"],
+    "goals": ["Muscle Building", "General Fitness"],
+    "description": "Masor Tenga – A light, tangy Assamese fish curry made with tomato or lemon souring, a daily household staple in Assam."
+  },
+  {
+    "id": 4505, "name": "Chila", "category": "Indian Breakfast", "type": "Vegetarian",
+    "serving_size": "2 pieces (150 g)", "calories": 190, "protein": 6.5, "carbs": 32.0, "fat": 4.0,
+    "fiber": 2.5, "sugar": 2.0, "sodium": 240, "allergens": ["None"],
+    "goals": ["General Fitness"],
+    "description": "Chila – A savoury rice-and-lentil pancake popular as a breakfast dish across Chhattisgarh."
+  },
+  {
+    "id": 4506, "name": "Bafauri", "category": "Snacks", "type": "Vegetarian",
+    "serving_size": "4 pieces (120 g)", "calories": 175, "protein": 7.0, "carbs": 22.0, "fat": 5.5,
+    "fiber": 4.5, "sugar": 1.5, "sodium": 300, "allergens": ["None"],
+    "goals": ["General Fitness"],
+    "description": "Bafauri – Steamed Chhattisgarhi lentil dumplings, a common everyday snack tempered with mustard seeds."
+  },
+  {
+    "id": 4507, "name": "Kafuli", "category": "Vegetables", "type": "Vegetarian",
+    "serving_size": "1 bowl (200 g)", "calories": 140, "protein": 5.5, "carbs": 14.0, "fat": 6.5,
+    "fiber": 4.0, "sugar": 3.0, "sodium": 280, "allergens": ["Milk"],
+    "goals": ["General Fitness", "Weight Loss"],
+    "description": "Kafuli – A Kumaoni Uttarakhand curry of spinach and local leafy greens, eaten as a daily household dish in the hills."
+  },
+  {
+    "id": 4508, "name": "Jhangora Kheer", "category": "Desserts & Sweets", "type": "Vegetarian",
+    "serving_size": "1 bowl (180 g)", "calories": 210, "protein": 5.0, "carbs": 32.0, "fat": 6.0,
+    "fiber": 1.5, "sugar": 18.0, "sodium": 85, "allergens": ["Milk"],
+    "goals": ["General Fitness"],
+    "description": "Jhangora Kheer – A barnyard-millet pudding from Uttarakhand, eaten as a regular dessert rather than only on festivals."
+  },
+  {
+    "id": 4509, "name": "Chicken Jadoh", "category": "Chicken Dishes", "type": "Non-Vegetarian",
+    "serving_size": "1 plate (250 g)", "calories": 340, "protein": 22.0, "carbs": 40.0, "fat": 9.0,
+    "fiber": 2.0, "sugar": 1.5, "sodium": 420, "allergens": ["None"],
+    "goals": ["Muscle Building", "General Fitness"],
+    "description": "Chicken Jadoh – A Khasi (Meghalaya) rice dish cooked with chicken and traditional spices, a household lunch staple."
+  },
+  {
+    "id": 4510, "name": "Tungrymbai", "category": "Vegetarian Protein Sources", "type": "Vegetarian",
+    "serving_size": "1 bowl (150 g)", "calories": 160, "protein": 12.0, "carbs": 14.0, "fat": 6.0,
+    "fiber": 5.0, "sugar": 1.0, "sodium": 350, "allergens": ["Soy"],
+    "goals": ["Muscle Building", "General Fitness"],
+    "description": "Tungrymbai – A Khasi (Meghalaya) fermented soybean preparation, a protein-rich household side dish."
+  },
+  {
+    "id": 4511, "name": "Eromba", "category": "Vegetables", "type": "Non-Vegetarian",
+    "serving_size": "1 bowl (200 g)", "calories": 150, "protein": 8.0, "carbs": 16.0, "fat": 5.5,
+    "fiber": 4.5, "sugar": 2.0, "sodium": 340, "allergens": ["Shellfish/Fish"],
+    "goals": ["General Fitness", "Weight Loss"],
+    "description": "Eromba – A Manipuri mashed-vegetable dish with fermented fish, a common household side dish in Manipur."
+  },
+  {
+    "id": 4512, "name": "Singju", "category": "Salads and Soups", "type": "Vegetarian",
+    "serving_size": "1 bowl (180 g)", "calories": 120, "protein": 3.5, "carbs": 18.0, "fat": 4.0,
+    "fiber": 5.0, "sugar": 3.0, "sodium": 220, "allergens": ["None"],
+    "goals": ["Weight Loss", "General Fitness"],
+    "description": "Singju – A Manipuri salad of shredded vegetables tossed with roasted chickpea powder and chillies."
+  },
+  {
+    "id": 4513, "name": "Bai", "category": "Vegetables", "type": "Non-Vegetarian",
+    "serving_size": "1 bowl (200 g)", "calories": 160, "protein": 10.0, "carbs": 15.0, "fat": 6.5,
+    "fiber": 5.0, "sugar": 2.0, "sodium": 300, "allergens": ["None"],
+    "goals": ["General Fitness", "Weight Loss"],
+    "description": "Bai – A Mizo vegetable stew, often cooked with a little meat and bamboo shoot, eaten with rice as a daily meal."
+  },
+  {
+    "id": 4514, "name": "Sawhchiar", "category": "Indian Lunch", "type": "Non-Vegetarian",
+    "serving_size": "1 bowl (250 g)", "calories": 300, "protein": 16.0, "carbs": 38.0, "fat": 8.0,
+    "fiber": 2.0, "sugar": 1.5, "sodium": 380, "allergens": ["None"],
+    "goals": ["General Fitness", "Muscle Building"],
+    "description": "Sawhchiar – A Mizo rice porridge cooked with meat and vegetables, a household comfort meal in Mizoram."
+  },
+  {
+    "id": 4515, "name": "Naga Pork with Bamboo Shoot", "category": "Mutton & Meat", "type": "Non-Vegetarian",
+    "serving_size": "1 bowl (220 g)", "calories": 320, "protein": 24.0, "carbs": 10.0, "fat": 20.0,
+    "fiber": 3.0, "sugar": 1.5, "sodium": 450, "allergens": ["None"],
+    "goals": ["Muscle Building", "General Fitness"],
+    "description": "Naga Pork with Bamboo Shoot – A signature Nagaland dish of pork simmered with fermented bamboo shoot."
+  },
+  {
+    "id": 4516, "name": "Axone Chutney", "category": "Vegetarian Protein Sources", "type": "Vegetarian",
+    "serving_size": "2 tbsp (40 g)", "calories": 60, "protein": 5.0, "carbs": 4.0, "fat": 3.0,
+    "fiber": 1.5, "sugar": 0.5, "sodium": 380, "allergens": ["Soy"],
+    "goals": ["General Fitness"],
+    "description": "Axone Chutney – A pungent Nagaland fermented soybean condiment eaten alongside rice and vegetables."
+  },
+  {
+    "id": 4517, "name": "Mui Borok Chicken", "category": "Chicken Dishes", "type": "Non-Vegetarian",
+    "serving_size": "1 bowl (220 g)", "calories": 280, "protein": 23.0, "carbs": 12.0, "fat": 15.0,
+    "fiber": 2.0, "sugar": 1.5, "sodium": 400, "allergens": ["None"],
+    "goals": ["Muscle Building", "General Fitness"],
+    "description": "Mui Borok Chicken – A traditional Tripuri chicken preparation cooked with minimal oil and local herbs."
+  },
+  {
+    "id": 4518, "name": "Berma Curry", "category": "Vegetables", "type": "Non-Vegetarian",
+    "serving_size": "1 bowl (200 g)", "calories": 145, "protein": 7.0, "carbs": 15.0, "fat": 6.0,
+    "fiber": 4.0, "sugar": 2.0, "sodium": 360, "allergens": ["Shellfish/Fish"],
+    "goals": ["General Fitness"],
+    "description": "Berma Curry – A Tripuri vegetable curry flavoured with fermented fish paste, a household side dish in Tripura."
+  },
+  {
+    "id": 4519, "name": "Thukpa", "category": "Salads and Soups", "type": "Vegetarian",
+    "serving_size": "1 bowl (300 g)", "calories": 220, "protein": 8.0, "carbs": 34.0, "fat": 5.0,
+    "fiber": 3.5, "sugar": 2.0, "sodium": 420, "allergens": ["Gluten"],
+    "goals": ["General Fitness", "Weight Loss"],
+    "description": "Thukpa – A hearty Tibetan-influenced noodle soup popular across Arunachal Pradesh and Sikkim, especially in colder months."
+  },
+  {
+    "id": 4520, "name": "Gundruk Soup", "category": "Salads and Soups", "type": "Vegetarian",
+    "serving_size": "1 bowl (220 g)", "calories": 90, "protein": 3.0, "carbs": 12.0, "fat": 2.5,
+    "fiber": 4.0, "sugar": 1.5, "sodium": 280, "allergens": ["None"],
+    "goals": ["Weight Loss", "General Fitness"],
+    "description": "Gundruk Soup – A fermented leafy-green soup from Sikkim, a light daily household dish in the hills."
+  }
+]

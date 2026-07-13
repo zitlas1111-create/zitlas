@@ -78,6 +78,7 @@ Usage (from backend/ directory):
 from __future__ import annotations
 
 import json
+import re
 import shutil
 from pathlib import Path
 from typing import Any
@@ -89,6 +90,16 @@ _BACKUP = _DST.with_name(_DST.stem + ".pre_v2_backup.json")
 
 def _norm(s: str) -> str:
     return (s or "").strip().lower()
+
+
+def _contains_word(text: str, keyword: str) -> bool:
+    """Word-boundary match (with an optional trailing 's' for plurals like
+    "Devilled Eggs"), not a bare substring check — a plain `kw in text` let
+    short staple keywords like "dal" false-positive inside unrelated names
+    ("Chicken VinDALoo", "DALiya", "Kala Chana SunDAL", "DALma"), wrongly
+    handing them the Dal-staple popularity score. Caught via a v3 spot-check;
+    fixed here since every STAPLE_SCORE_OVERRIDES lookup goes through this."""
+    return re.search(r"\b" + re.escape(keyword) + r"s?\b", text) is not None
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -242,17 +253,17 @@ STAPLE_SCORE_OVERRIDES: dict[str, float] = {
 
 def _find_regional_match(name_lc: str) -> tuple[list[str], str] | None:
     for keyword, states, region in REGIONAL_DISHES:
-        if keyword in name_lc:
+        if _contains_word(name_lc, keyword):
             return states, region
     return None
 
 
 def _is_pan_india(name_lc: str) -> bool:
-    return any(kw in name_lc for kw in PAN_INDIA_KEYWORDS)
+    return any(_contains_word(name_lc, kw) for kw in PAN_INDIA_KEYWORDS)
 
 
 def _is_festival(name_lc: str) -> bool:
-    return any(kw in name_lc for kw in FESTIVAL_KEYWORDS)
+    return any(_contains_word(name_lc, kw) for kw in FESTIVAL_KEYWORDS)
 
 
 def _derive_location_fields(food: dict, name_lc: str) -> dict[str, Any]:
@@ -286,7 +297,7 @@ def _derive_location_fields(food: dict, name_lc: str) -> dict[str, Any]:
 
 def _derive_popularity(food: dict, name_lc: str, is_festival: bool, pan_india: bool, has_regional_origin: bool) -> float:
     for kw, score in STAPLE_SCORE_OVERRIDES.items():
-        if kw in name_lc:
+        if _contains_word(name_lc, kw):
             return float(score)
     if is_festival:
         return 15.0

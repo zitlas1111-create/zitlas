@@ -98,6 +98,21 @@ def _norm(s: str) -> str:
     return (s or "").strip().lower()
 
 
+_TRAILING_PAREN_RE = re.compile(r"\s*\([^()]*\)\s*$")
+
+
+def _base_dish_name(name: str) -> str:
+    """Strip trailing "(...)" style-suffixes ("(Home Style)", "(Restaurant
+    Style)", "(Punjabi)", ...) repeatedly, so "Dal Makhani (Punjabi) (Light
+    / Low-Oil Version)" and "Dal Makhani" collapse to the same base name."""
+    base = name
+    while True:
+        stripped = _TRAILING_PAREN_RE.sub("", base)
+        if stripped == base:
+            return _norm(base)
+        base = stripped
+
+
 class FoodRecommendationEngine:
     def __init__(self, path: Path = _DATASET_PATH):
         raw: list[dict] = json.loads(path.read_text(encoding="utf-8"))
@@ -219,6 +234,7 @@ class FoodRecommendationEngine:
         meal_tag: str | None,
         season_tag: str | None,
         disliked_foods: list[str] | None = None,
+        max_prep_minutes: int | None = None,
     ) -> set[int]:
         profile = profile or {}
         avoid_categories = set(profile.get("avoidCategories") or [])
@@ -259,6 +275,13 @@ class FoodRecommendationEngine:
             ("living", self._idx_living.get(living_tag) if living_tag else None),
             ("meal", self._idx_meal.get(meal_tag) if meal_tag else None),
             ("season", self._idx_season.get(season_tag) if season_tag else None),
+            # STEP 14 (time intelligence): a relaxable preference, not a hard
+            # cut — someone with 10 minutes shouldn't get zero food options
+            # just because everything left in a thin pool takes 15.
+            ("prep_time", (
+                {i for i in self.all_ids if self.by_id[i].get("preparation_time_minutes", 20) <= max_prep_minutes}
+                if max_prep_minutes else None
+            )),
         ]
         active = [(n, s) for n, s in stages if s is not None]
 
@@ -345,6 +368,7 @@ class FoodRecommendationEngine:
         profile: dict | None = None,
         subgoal_tag: str | None = None,
         season_tag: str | None = None,
+        max_prep_minutes: int | None = None,
     ) -> list[dict]:
         """Filter -> score -> rank. Returns up to top_n real dataset foods."""
         meal_tag = _SLOT_TO_MEAL_TAG.get(meal_slot, meal_slot)
@@ -353,6 +377,7 @@ class FoodRecommendationEngine:
             goal_tags=goal_tags, subgoal_tag=subgoal_tag, profile=profile,
             budget_tier=budget_tier, living_tag=living_situation, meal_tag=meal_tag,
             season_tag=season_tag, disliked_foods=disliked_foods,
+            max_prep_minutes=max_prep_minutes,
         )
         if exclude_ids:
             ids -= exclude_ids
@@ -364,6 +389,7 @@ class FoodRecommendationEngine:
                     goal_tags=goal_tags, subgoal_tag=subgoal_tag, profile=profile,
                     budget_tier=budget_tier, living_tag=living_situation, meal_tag=meal_tag,
                     season_tag=season_tag, disliked_foods=disliked_foods,
+                    max_prep_minutes=max_prep_minutes,
                 )
 
         usage_counts = usage_counts or {}
@@ -384,12 +410,24 @@ class FoodRecommendationEngine:
     # automatically as the dataset grows instead of needing a code change.
 
     def foods_by_state(self, state: str, limit: int = 8) -> list[dict]:
-        """Top-N dataset foods whose state_of_origin includes `state`,
-        ranked by popularity_score (falls back to 0 if absent)."""
+        """Top-N DISTINCT dishes whose state_of_origin includes `state`,
+        ranked by popularity_score. Deduplicates "(Home Style)"/"(Restaurant
+        Style)"/"(Street Style)"/"(Hostel Mess Style)" variants of the same
+        dish to ONE entry (its highest-scoring variant) first — otherwise a
+        single very popular pan-India dish with 8 style-variants (e.g. Poha)
+        can fill the entire result and crowd out every other dish the state
+        actually has, which defeats the point of asking "what's eaten here"."""
         ids = self._idx_state.get(state, set())
-        foods = [self.by_id[i] for i in ids]
-        foods.sort(key=lambda f: -(f.get("popularity_score") or 0))
-        return foods[:limit]
+        foods = sorted((self.by_id[i] for i in ids), key=lambda f: -(f.get("popularity_score") or 0))
+        seen_base_names: set[str] = set()
+        deduped = []
+        for f in foods:
+            base = _base_dish_name(f["name"])
+            if base in seen_base_names:
+                continue
+            seen_base_names.add(base)
+            deduped.append(f)
+        return deduped[:limit]
 
     def regional_categories_for_state(self, state: str, limit: int = 6) -> list[str]:
         """Food categories most associated with a state's regional dishes,
@@ -412,6 +450,26 @@ class FoodRecommendationEngine:
 
     # ── Public plan builders ─────────────────────────────────────────────
 
+    # STEP 6 (realistic meal engine): categories that, on their own, are a
+    # snack/side/produce item rather than a full meal — "would a normal
+    # person eat ONLY this for dinner?" is no for all of these. Dinner's
+    # anchor (the combo's first, calorie-anchoring pick) is never chosen
+    # from this list when a real alternative exists in the same ranked pool
+    # — the combo-filler below still runs normally afterward, so a dinner
+    # can still include a side salad/vegetable, just never AS the anchor.
+    _INCOMPLETE_MEAL_CATEGORIES = frozenset({
+        "Vegetables", "Salads and Soups", "Fruits", "Beverages",
+        "Protein Supplements", "Desserts & Sweets",
+    })
+
+    def _pick_anchor(self, pool: list[dict], slot: str) -> dict:
+        if slot != "dinner":
+            return pool[0]
+        for food in pool:
+            if food.get("category") not in self._INCOMPLETE_MEAL_CATEGORIES:
+                return food
+        return pool[0]  # nothing better in this pool — never return an empty meal
+
     def build_week_plan(
         self,
         goal_tags: list[str],
@@ -426,6 +484,7 @@ class FoodRecommendationEngine:
         profile: dict | None = None,
         subgoal_tag: str | None = None,
         season_tag: str | None = None,
+        max_prep_minutes: int | None = None,
     ) -> dict[str, Any]:
         """
         Deterministic 7-day x 5-slot plan sourced entirely from the dataset.
@@ -455,14 +514,18 @@ class FoodRecommendationEngine:
                     favorite_foods=favorite_foods, disliked_foods=disliked_foods,
                     usage_counts=usage_counts, top_n=12,
                     profile=profile, subgoal_tag=subgoal_tag, season_tag=season_tag,
+                    max_prep_minutes=max_prep_minutes,
                 )
                 if not pool:
                     continue
                 slot_target = slot_calorie_cap.get(slot) or (target * _SLOT_CALORIE_WEIGHT.get(slot, 0.2))
-                combo = [pool[0]]
-                combo_ids = {pool[0]["id"]}
-                total_cal = pool[0]["calories"]
-                for food in pool[1:]:
+                anchor = self._pick_anchor(pool, slot)
+                combo = [anchor]
+                combo_ids = {anchor["id"]}
+                total_cal = anchor["calories"]
+                for food in pool:
+                    if food["id"] in combo_ids:
+                        continue
                     if total_cal >= slot_target * 0.85 or len(combo) >= 3:
                         break
                     combo.append(food)
@@ -477,7 +540,47 @@ class FoodRecommendationEngine:
                     "alternatives": [f for f in pool if f["id"] not in combo_ids][:3],
                 }
             days.append({"day": day_name, "meals": day_meals})
-        return {"days": days, "usage_counts": dict(usage_counts)}
+        plan = {"days": days, "usage_counts": dict(usage_counts)}
+        plan["validation"] = self.validate_week_plan(plan, target)
+        if not plan["validation"]["passed"]:
+            print(f"[FOOD ENGINE] Plan validation flagged issues: {plan['validation']['issues']}")
+        return plan
+
+    # STEP 15 (AI validation): a cheap, deterministic post-hoc checklist —
+    # this engine's filter pipeline already structurally prevents most of
+    # the spec's failure modes (medical/diet/budget are hard filters, not
+    # suggestions), so this is a defensive double-check, not a generator.
+    # Never raises — a flagged plan is still returned and logged, since a
+    # rules-based engine re-running the same deterministic pipeline would
+    # just reproduce the same result rather than "regenerate" something new.
+    def validate_week_plan(self, plan: dict, daily_calorie_target: int) -> dict[str, Any]:
+        issues: list[str] = []
+        for day in plan["days"]:
+            day_name = day["day"]
+            day_cal = 0
+            for slot, meal in day["meals"].items():
+                primary = meal.get("primary") or []
+                if not primary:
+                    issues.append(f"{day_name}/{slot}: empty meal")
+                    continue
+                day_cal += sum(f.get("calories", 0) for f in primary)
+                if slot == "dinner" and len(primary) == 1 and \
+                        primary[0].get("category") in self._INCOMPLETE_MEAL_CATEGORIES:
+                    issues.append(f"{day_name}/dinner: single-item incomplete meal ({primary[0]['name']})")
+                for f in primary:
+                    if f.get("festival_food"):
+                        issues.append(f"{day_name}/{slot}: festival food in a regular plan ({f['name']})")
+            if daily_calorie_target and not (0.75 * daily_calorie_target <= day_cal <= 1.25 * daily_calorie_target):
+                issues.append(f"{day_name}: total calories {day_cal} outside ±25% of target {daily_calorie_target}")
+        food_counts: dict[int, int] = defaultdict(int)
+        for day in plan["days"]:
+            for meal in day["meals"].values():
+                for f in meal.get("primary") or []:
+                    food_counts[f["id"]] += 1
+        for fid, count in food_counts.items():
+            if count > 3:
+                issues.append(f"food id={fid} repeated {count}x this week (limit 3)")
+        return {"passed": not issues, "issues": issues}
 
     def find_swap_alternatives(
         self,
