@@ -2,9 +2,23 @@
 ZITLAS — Expert Certificate Verification Route
 
 POST /api/certificates/verify — AI-validates + OCRs an uploaded coaching
-certificate. Only accepted (is_certificate=true) files are saved to disk;
-rejected uploads are discarded immediately, matching the product
-requirement to never persist a non-certificate file.
+certificate. Rejected uploads (is_certificate=false) are discarded
+immediately, matching the product requirement to never persist a
+non-certificate file.
+
+STORAGE: this route does NOT persist the accepted file anywhere — it only
+returns the AI analysis. This backend runs on Render, whose filesystem is
+ephemeral: a previous version of this route wrote accepted files to
+backend/uploads/certificates/ and returned a "/uploads/certificates/..."
+URL, which worked until the next deploy recreated the container from a
+fresh image and silently wiped every file that had been written at
+runtime — every certificate uploaded before a deploy 404s forever after
+it (this is the bug this rewrite fixes). The frontend, which already has
+the original File object and an authenticated Firebase session, now
+uploads it directly to Firebase Storage (permanent, survives deploys) and
+only THEN calls saveCertificate() with the resulting download URL — see
+assets/js/certificate-manager.js's uploadAndVerify(). This route stays
+storage-agnostic on purpose.
 
 This route does NOT touch Firestore — same architecture as every other
 route in this backend. It returns the computed result; the frontend (in the
@@ -13,9 +27,6 @@ and recomputes experts/{uid}.verified. See CLAUDE.md for why: this project
 has no Firebase Admin SDK anywhere in the backend, Firestore is
 frontend-only throughout.
 """
-
-import uuid
-from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
@@ -30,7 +41,6 @@ _ALLOWED_TYPES = {
     "application/pdf": "pdf",
 }
 _MAX_BYTES = 10 * 1024 * 1024  # 10 MB
-_UPLOAD_DIR = Path(__file__).parent.parent / "uploads" / "certificates"
 
 
 @router.post("/verify")
@@ -48,8 +58,9 @@ async def verify_certificate(
     if len(content) > _MAX_BYTES:
         raise HTTPException(status_code=413, detail="File too large (max 10 MB).")
 
-    # PDF -> rasterize page 1 to PNG for the vision model. The ORIGINAL PDF
-    # (not the raster) is what gets saved/served if the upload is accepted.
+    # PDF -> rasterize page 1 to PNG for the vision model only. The
+    # ORIGINAL PDF (not the raster) is what the frontend uploads to
+    # Firebase Storage if this comes back accepted.
     analysis_bytes, analysis_mime = content, file.content_type
     if file.content_type == "application/pdf":
         try:
@@ -81,19 +92,14 @@ async def verify_certificate(
                       or "This doesn't appear to be a professional coaching certificate.",
         })
 
-    # Accepted — now persist the ORIGINAL uploaded file.
-    _UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    ext = _ALLOWED_TYPES[file.content_type]
-    filename = f"{uuid.uuid4().hex}.{ext}"
-    (_UPLOAD_DIR / filename).write_bytes(content)
-    url = f"/uploads/certificates/{filename}"
-    print(f"[CERT VERIFY] saved -> {url}")
-
+    # Accepted — storage is the FRONTEND's job now (Firebase Storage,
+    # permanent). This route intentionally returns no certificateUrl.
     status, score = certificate_verification.compute_status(analysis)
+    print(f"[CERT VERIFY] accepted, status={status} score={score} — "
+          f"frontend will upload to Firebase Storage and persist certificateUrl")
 
     return JSONResponse({
         "accepted": True,
-        "certificateUrl": url,
         "fileType": file.content_type,
         "coachName": analysis.get("coach_name"),
         "certificateName": analysis.get("certificate_name"),

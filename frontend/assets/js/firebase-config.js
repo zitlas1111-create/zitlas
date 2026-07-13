@@ -36,6 +36,13 @@ if (!firebase.apps.length) {
 var ZitlasAuth = firebase.auth();
 var ZitlasDB   = firebase.firestore();
 
+/* Firebase Storage — only defined on pages that also load
+   firebase-storage-compat.js (currently just expert-dashboard.html, the
+   only page that uploads a file). Guarded so every other page — which
+   loads this same firebase-config.js but not the storage SDK — doesn't
+   throw on `firebase.storage` being undefined. */
+var ZitlasStorage = (typeof firebase.storage === 'function') ? firebase.storage() : null;
+
 /* Persist login across tabs and page reloads */
 ZitlasAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
 

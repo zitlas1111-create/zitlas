@@ -9,11 +9,18 @@
  *
  * Firestore: expert_certificates/{certId}
  *   { certId, expertId, expertName, certificateUrl, fileType,
+ *     storagePath, storageProvider ('firebase-storage'),
  *     coachName, certificateName, issuingOrganization, certificateNumber,
  *     issuedDate, expiryDate, verificationScore, verificationStatus
  *       ('verified' | 'pending_review' | 'rejected'),
  *     flags: {...}, analysisNotes,
  *     uploadedAt, reviewedBy, reviewedAt, rejectionReason }
+ *
+ * STORAGE: certificateUrl always points at Firebase Storage (permanent —
+ * survives Render deploys), uploaded client-side in uploadAndVerify()
+ * AFTER the backend's AI step accepts the file. The backend itself never
+ * persists the file (see routes/certificates.py's docstring for the
+ * ephemeral-local-disk bug this replaced).
  *
  * SECURITY NOTE: verificationStatus is only ever set by (a) the AI's own
  * computed result at upload time (backend-computed, client just persists —
@@ -32,6 +39,7 @@
     });
   }
   function db() { return (typeof ZitlasDB !== 'undefined') ? ZitlasDB : null; }
+  function storage() { return (typeof ZitlasStorage !== 'undefined') ? ZitlasStorage : null; }
   function newId() { return 'CERT_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8); }
 
   var _toastEl = null, _toastTimer = null;
@@ -47,7 +55,45 @@
     _toastTimer = setTimeout(function () { _toastEl.classList.remove('show'); }, 3600);
   }
 
-  /* ── Upload + AI verification (backend) ── */
+  /* ── Storage: Firebase Storage, permanent — survives every Render
+     deploy. (The backend's /api/certificates/verify used to write
+     accepted files to a local "uploads/" folder and hand back a
+     "/uploads/..." URL; that folder lives on Render's EPHEMERAL
+     filesystem and is wiped on every deploy, so every certificate
+     uploaded before a deploy 404'd forever after it — this replaces
+     that with real permanent storage.) Runs only after the backend's AI
+     step has already accepted the file, so nothing is ever stored here
+     that failed verification. */
+  function _uploadToStorage(expertId, file) {
+    var s = storage();
+    if (!s) return Promise.reject(new Error('Cloud storage is unavailable on this page — please reload and try again.'));
+    var extMatch = /\.([a-z0-9]+)$/i.exec(file.name || '');
+    var ext = extMatch ? extMatch[1].toLowerCase() : 'jpg';
+    var path = 'certificates/' + expertId + '/' + newId() + '.' + ext;
+    var ref = s.ref(path);
+    console.log('[CERT] uploading to Firebase Storage ->', path, '(' + file.size + ' bytes)');
+    return ref.put(file, { contentType: file.type || undefined })
+      .then(function (snapshot) { return snapshot.ref.getDownloadURL(); })
+      .then(function (url) {
+        console.log('[CERT] stored, storageProvider=firebase-storage path=' + path + ' url=' + url);
+        return { url: url, path: path };
+      })
+      .catch(function (e) {
+        /* A bucket that has never been provisioned in the Firebase Console
+           (Storage > Get Started was never clicked for this project)
+           surfaces as a generic network failure here, not a clean
+           "permission denied" — the diagnostic below is what actually
+           told us that during development, so surface it to whoever's
+           debugging a failed upload instead of a bare SDK error code. */
+        console.error('[CERT] Firebase Storage upload failed — code=' + e.code + ' message=' + e.message +
+                       '. If this is storage/retry-limit-exceeded or a network error, check that Cloud ' +
+                       'Storage is enabled for this Firebase project (Console -> Storage -> Get Started) ' +
+                       'and that its rules allow authenticated writes to certificates/**.');
+        throw new Error('Could not upload the certificate file. Please try again in a moment.');
+      });
+  }
+
+  /* ── Upload + AI verification (backend), then permanent storage ── */
   function uploadAndVerify(expertId, file) {
     var fd = new FormData();
     fd.append('expertId', expertId);
@@ -58,6 +104,15 @@
           throw new Error((e && e.detail) || ('Verification failed (' + r.status + ')'));
         });
         return r.json();
+      })
+      .then(function (result) {
+        if (!result.accepted) return result;
+        return _uploadToStorage(expertId, file).then(function (stored) {
+          result.certificateUrl = stored.url;
+          result.storagePath = stored.path;
+          result.storageProvider = 'firebase-storage';
+          return result;
+        });
       });
   }
 
@@ -69,6 +124,8 @@
     var doc = {
       certId: id, expertId: expertId, expertName: expertName || 'Expert',
       certificateUrl: result.certificateUrl, fileType: result.fileType,
+      storagePath: result.storagePath || null,
+      storageProvider: result.storageProvider || null,
       coachName: result.coachName, certificateName: result.certificateName,
       issuingOrganization: result.issuingOrganization,
       certificateNumber: result.certificateNumber,
@@ -79,7 +136,8 @@
       uploadedAt: new Date().toISOString(),
       reviewedBy: null, reviewedAt: null, rejectionReason: null,
     };
-    console.log('[CERT] saving', doc);
+    console.log('[CERT] saving certId=' + id + ' firestorePath=expert_certificates/' + id +
+                ' certificateUrl=' + doc.certificateUrl + ' storageProvider=' + doc.storageProvider);
     return d.collection('expert_certificates').doc(id).set(doc)
       .then(function () { return recomputeVerifiedFlag(expertId); })
       .then(function () { return doc; });
@@ -336,39 +394,16 @@
     render(false);
   }
 
-  /* ── Download: fetch as a blob so the browser saves the file instead of
-     navigating to it (works for cross-origin Firebase Storage URLs too);
-     falls back to opening the URL in a new tab if the fetch itself fails
-     (e.g. no CORS on an older upload) rather than doing nothing. ── */
-  function _downloadFile(url, suggestedName) {
-    fetch(url).then(function (r) {
-      if (!r.ok) throw new Error('fetch failed');
-      return r.blob();
-    }).then(function (blob) {
-      var objectUrl = URL.createObjectURL(blob);
-      var a = document.createElement('a');
-      a.href = objectUrl; a.download = suggestedName || 'certificate';
-      document.body.appendChild(a); a.click();
-      document.body.removeChild(a);
-      setTimeout(function () { URL.revokeObjectURL(objectUrl); }, 4000);
-    }).catch(function () {
-      window.open(url, '_blank', 'noopener');
-    });
-  }
-
-  function _fileExtFromUrl(url, fileType) {
-    if ((fileType || '').indexOf('pdf') !== -1) return 'pdf';
-    var m = /\.(jpe?g|png|webp|gif)($|\?)/i.exec(url || '');
-    return m ? m[1].toLowerCase() : 'jpg';
-  }
-
-  /* "View Certificate" — a professional, Drive/WhatsApp-style viewer:
+  /* "View Certificate" — a professional, LinkedIn/Practo-style viewer:
      always-visible close button, loading spinner, error state with retry,
-     pinch/wheel/double-tap zoom, drag-to-pan, download, and full-screen. */
+     pinch/wheel/double-tap zoom, drag-to-pan, and full-screen. No download
+     — certificates are viewable, not exportable, by product decision. */
   function openViewCertificate(cert) {
     var isPdf = (cert.fileType || '').indexOf('pdf') !== -1 || /\.pdf($|\?)/i.test(cert.certificateUrl || '');
-    var downloadName = (cert.certificateName || 'certificate').replace(/[^a-z0-9\- ]/gi, '').trim() || 'certificate';
-    downloadName += '.' + _fileExtFromUrl(cert.certificateUrl, cert.fileType);
+    console.log('[CERT VIEW] certId=' + (cert.certId || '(none)') +
+                ' firestorePath=' + (cert.certId ? 'expert_certificates/' + cert.certId : '(unknown)') +
+                ' url=' + (cert.certificateUrl || '(missing)') +
+                ' storageProvider=' + (cert.storageProvider || '(unknown — likely a pre-migration /uploads/ record)'));
 
     var modal = openModalHtml(
       '<div class="cert-viewer">' +
@@ -388,63 +423,73 @@
                 '<p class="cert-modal-sub">This certificate was uploaded as a PDF and can\'t be previewed inline.</p>' +
                 '<a class="cert-viewer-action cert-viewer-action--primary" href="' + esc(cert.certificateUrl) + '" target="_blank" rel="noopener">Open PDF in New Tab</a>' +
               '</div>'
-            : '<div class="cert-viewer-loading" id="certViewerLoading"><span class="cert-spinner cert-spinner--lg"></span><span>Loading certificate…</span></div>' +
+            : '<div class="cert-viewer-loading" id="certViewerLoading"><span class="cert-spinner cert-spinner--lg"></span><span>Loading certificate...</span></div>' +
               '<div class="cert-viewer-error" id="certViewerError" style="display:none">' +
                 '<span class="cert-viewer-error-icon">⚠️</span>' +
-                '<p>Couldn\'t load this certificate.</p>' +
+                '<p id="certViewerErrorText">Certificate unavailable.</p>' +
                 '<button class="cert-viewer-action" id="certViewerRetryBtn">Try Again</button>' +
               '</div>' +
               '<img class="cert-modal-img" id="certViewerImg" alt="Certificate" draggable="false" style="opacity:0">'
           ) +
         '</div>' +
         '<div class="cert-viewer-footer">' +
-          '<button class="cert-viewer-action" id="certDownloadBtn">⬇ Download Certificate</button>' +
-          (isPdf ? '' : '<button class="cert-viewer-action" id="certFullscreenBtn">⤢ Full Screen</button>') +
+          (isPdf ? '' : '<button class="cert-viewer-action cert-viewer-action--primary" id="certFullscreenBtn">⤢ View Full Screen</button>') +
         '</div>' +
       '</div>'
     );
     modal.classList.add('cert-modal--viewer');
 
     document.getElementById('certViewerCloseBtn').addEventListener('click', closeModal);
-    var downloadBtn = document.getElementById('certDownloadBtn');
-    if (downloadBtn) downloadBtn.addEventListener('click', function () {
-      _downloadFile(cert.certificateUrl, downloadName);
-    });
     var fsBtn = document.getElementById('certFullscreenBtn');
     if (fsBtn) fsBtn.addEventListener('click', function () {
       var isFs = modal.classList.toggle('cert-modal--fullscreen');
       var bd = document.getElementById('certModalBackdrop');
       if (bd) bd.classList.toggle('cert-modal-backdrop--fullscreen', isFs);
-      fsBtn.innerHTML = isFs ? '⤡ Exit Full Screen' : '⤢ Full Screen';
+      fsBtn.innerHTML = isFs ? '⤡ Exit Full Screen' : '⤢ View Full Screen';
     });
 
     if (isPdf) return; // no image stage to wire up
 
-    var imgEl     = document.getElementById('certViewerImg');
-    var loadingEl = document.getElementById('certViewerLoading');
-    var errorEl   = document.getElementById('certViewerError');
-    var stageEl   = document.getElementById('certViewerStage');
+    var imgEl      = document.getElementById('certViewerImg');
+    var loadingEl  = document.getElementById('certViewerLoading');
+    var errorEl    = document.getElementById('certViewerError');
+    var errorTextEl = document.getElementById('certViewerErrorText');
+    var stageEl    = document.getElementById('certViewerStage');
+
+    function showError(reason) {
+      loadingEl.style.display = 'none';
+      errorEl.style.display = 'flex';
+      errorTextEl.textContent = 'Certificate unavailable.';
+      console.error('[CERT VIEW] failed to load — url=' + (cert.certificateUrl || '(missing)') + ' reason=' + reason);
+    }
 
     function loadImage(bust) {
       loadingEl.style.display = 'flex';
       errorEl.style.display = 'none';
       imgEl.style.opacity = '0';
-      imgEl.onload = function () {
-        loadingEl.style.display = 'none';
-        imgEl.style.opacity = '1';
-        imgEl.style.cursor = 'zoom-in';
-        _attachZoomPan(imgEl, stageEl);
-      };
-      imgEl.onerror = function () {
-        loadingEl.style.display = 'none';
-        errorEl.style.display = 'flex';
-      };
-      /* Cache-bust only on retry, so a transient network blip doesn't keep
-         resolving to the browser's already-failed cache entry — the
-         normal path still benefits from the browser cache. */
-      imgEl.src = bust
+
+      if (!cert.certificateUrl) { showError('no certificateUrl on this record'); return; }
+
+      /* STEP 3: validate the URL exists BEFORE trying to render it, and
+         log the exact HTTP status — a bare <img onerror> can't tell us
+         WHY it failed (404 vs CORS vs network), which this fetch does. */
+      var checkUrl = bust
         ? cert.certificateUrl + (cert.certificateUrl.indexOf('?') === -1 ? '?' : '&') + '_r=' + Date.now()
         : cert.certificateUrl;
+      fetch(checkUrl, { method: 'GET', cache: bust ? 'no-store' : 'default' })
+        .then(function (r) {
+          console.log('[CERT VIEW] existence check -> status=' + r.status + ' url=' + checkUrl);
+          if (!r.ok) { showError('HTTP ' + r.status); return; }
+          imgEl.onload = function () {
+            loadingEl.style.display = 'none';
+            imgEl.style.opacity = '1';
+            imgEl.style.cursor = 'zoom-in';
+            _attachZoomPan(imgEl, stageEl);
+          };
+          imgEl.onerror = function () { showError('image decode failed after a 200 response'); };
+          imgEl.src = checkUrl;
+        })
+        .catch(function (e) { showError('fetch threw: ' + e.message); });
     }
     var retryBtn = document.getElementById('certViewerRetryBtn');
     if (retryBtn) retryBtn.addEventListener('click', function () { loadImage(true); });
