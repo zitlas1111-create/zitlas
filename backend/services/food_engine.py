@@ -115,6 +115,13 @@ class FoodRecommendationEngine:
         self._idx_availability: dict[str, set[int]] = defaultdict(set)
         self._idx_disease_unsafe: dict[str, set[int]] = defaultdict(set)  # tag -> ids UNSAFE for it
         self._idx_allergen: dict[str, set[int]] = defaultdict(set)
+        # STEP 11 (geo enrichment, enrich_food_dataset_v2.py): index the
+        # new state_of_origin/region fields the same way as every other
+        # tag — this is what lets location_food_engine.py derive its
+        # regional boost straight from the dataset instead of a hand-typed
+        # dish list, and stays correct automatically as the dataset grows.
+        self._idx_state: dict[str, set[int]] = defaultdict(set)
+        self._idx_region: dict[str, set[int]] = defaultdict(set)
 
         for f in raw:
             fid = f["id"]
@@ -139,6 +146,9 @@ class FoodRecommendationEngine:
             for allergen in f.get("allergens", []):
                 if allergen and allergen != "None":
                     self._idx_allergen[allergen].add(fid)
+            for state in f.get("state_of_origin", []):
+                self._idx_state[state].add(fid)
+            self._idx_region[f.get("region", "Pan-India")].add(fid)
 
         print(f"[FOOD ENGINE] Loaded {len(raw)} foods, indexes built "
               f"(meal:{len(self._idx_meal)} goal:{len(self._idx_goal)} "
@@ -278,6 +288,14 @@ class FoodRecommendationEngine:
         medical_component = 1.0  # already hard-filtered; anything left passed every check
 
         avail_component = 1.0 if (living_tag and living_tag in food.get("livingSuitable", [])) else 0.6
+        # STEP 7/9 (geo enrichment): blend in the dataset's own popularity/
+        # availability signal ("would a normal person actually eat this
+        # today?") — folded into the existing Availability bucket, same
+        # convention as every other profile-rule bonus above, so the
+        # documented 40/25/15/10/5/5 weight formula never changes shape.
+        pop_avail = food.get("availability_score")
+        if pop_avail is not None:
+            avail_component = min(1.0, avail_component * 0.5 + (pop_avail / 100.0) * 0.5)
 
         if budget_tier:
             diff = _BUDGET_RANK.get(food.get("budgetCategory", "Medium"), 1) - _BUDGET_RANK.get(budget_tier, 1)
@@ -357,6 +375,40 @@ class FoodRecommendationEngine:
         ]
         scored.sort(key=lambda t: (-t[0], t[1]))
         return [self.by_id[i] for _, i in scored[:top_n]]
+
+    # ── Location-aware queries (STEP 11: data-driven regional boost) ──────
+    # These replace the earlier hand-typed dish-list approach in
+    # location_food_engine.py — the dataset's own state_of_origin/region/
+    # popularity_score fields (enrich_food_dataset_v2.py) are now the single
+    # source of truth for "what's eaten in this state", so coverage grows
+    # automatically as the dataset grows instead of needing a code change.
+
+    def foods_by_state(self, state: str, limit: int = 8) -> list[dict]:
+        """Top-N dataset foods whose state_of_origin includes `state`,
+        ranked by popularity_score (falls back to 0 if absent)."""
+        ids = self._idx_state.get(state, set())
+        foods = [self.by_id[i] for i in ids]
+        foods.sort(key=lambda f: -(f.get("popularity_score") or 0))
+        return foods[:limit]
+
+    def regional_categories_for_state(self, state: str, limit: int = 6) -> list[str]:
+        """Food categories most associated with a state's regional dishes,
+        ordered by how many of that state's foods fall in each category."""
+        ids = self._idx_state.get(state, set())
+        counts: dict[str, int] = defaultdict(int)
+        for i in ids:
+            cat = self.by_id[i].get("category")
+            if cat:
+                counts[cat] += 1
+        return [c for c, _ in sorted(counts.items(), key=lambda kv: -kv[1])[:limit]]
+
+    def foods_by_region(self, region: str, limit: int = 8) -> list[dict]:
+        """Top-N foods for a broader region label (North/South/East/West/
+        Pan-India), ranked by popularity_score."""
+        ids = self._idx_region.get(region, set())
+        foods = [self.by_id[i] for i in ids]
+        foods.sort(key=lambda f: -(f.get("popularity_score") or 0))
+        return foods[:limit]
 
     # ── Public plan builders ─────────────────────────────────────────────
 
