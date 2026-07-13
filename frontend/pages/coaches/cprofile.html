@@ -19,7 +19,9 @@
   <link rel="stylesheet" href="../../assets/css/coaching-workspace.css?v=20260705b" />
   <link rel="stylesheet" href="../../assets/css/zino.css?v=20260706" />
   <link rel="stylesheet" href="../../assets/css/certificates.css?v=20260713" />
+  <link rel="stylesheet" href="../../assets/css/verified-badge.css?v=20260713" />
   <script src="../../assets/js/firebase-config.js"></script>
+  <script src="../../assets/js/verified-badge.js?v=20260713"></script>
   <script src="../../assets/js/notification-center.js?v=20260706"></script>
   <script src="../../assets/js/webrtc-call.js"></script>
   <script src="../../assets/js/call-ui.js"></script>
@@ -80,7 +82,11 @@
     </div>
 
     <!-- Name + role -->
-    <h1 class="cp-hero-name" id="coachName">—</h1>
+    <h1 class="cp-hero-name">
+      <span id="coachName">—</span>
+      <span id="coachNameBadge"></span>
+    </h1>
+    <div id="coachVerifiedCaption"></div>
     <p class="cp-hero-role" id="coachRole">—</p>
 
     <!-- Rating row -->
@@ -496,7 +502,9 @@
     </button>
     <div class="zc-hdr-av" id="chatHdrAvatar">E</div>
     <div class="zc-hdr-info">
-      <span class="zc-hdr-name" id="chatHdrName">Expert</span>
+      <div class="zc-hdr-name-row">
+        <span class="zc-hdr-name" id="chatHdrName">Expert</span><span id="chatHdrBadge"></span>
+      </div>
       <span class="zc-hdr-status">
         <span class="zc-hdr-online"></span>
         <span id="chatHdrRole">Coach</span>

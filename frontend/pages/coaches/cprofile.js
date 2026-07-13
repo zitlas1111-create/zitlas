@@ -368,9 +368,24 @@
       }
     }
 
-    /* Verified Expert badge — real, driven by experts/{id}.verified (only
-       true once at least one certificate passes AI verification or admin
-       approval). Never hardcoded. */
+    /* Verified Expert badge — real, driven by experts/{id}.verification
+       (only true once at least one certificate passes AI verification or
+       admin approval). Never hardcoded. Two surfaces:
+       - #coachNameBadge, right next to the name — the standard ZitlasBadge
+         (hover tooltip on desktop, tap bottom-sheet on mobile), same
+         component every other page uses.
+       - #cpVerifiedBadge, the pill lower in the hero — the pre-existing,
+         richer "tap for full verification details" CTA (cert score, org,
+         issue date, cert number), kept as-is since it already does more
+         than the generic bottom sheet. */
+    var nameBadgeEl = document.getElementById('coachNameBadge');
+    var captionEl   = document.getElementById('coachVerifiedCaption');
+    if (nameBadgeEl && typeof ZitlasBadge !== 'undefined') {
+      nameBadgeEl.innerHTML = ZitlasBadge.render(coach, { size: 'lg' });
+    }
+    if (captionEl && typeof ZitlasBadge !== 'undefined') {
+      captionEl.innerHTML = ZitlasBadge.renderCaption(coach);
+    }
     var verifiedBadge = document.getElementById('cpVerifiedBadge');
     if (verifiedBadge) {
       verifiedBadge.style.display = coach.verified ? '' : 'none';
@@ -408,6 +423,8 @@
     /* Chat overlay header */
     setText('chatHdrName', coach.name);
     setText('chatHdrRole', coach.role);
+    var chatBadgeEl = document.getElementById('chatHdrBadge');
+    if (chatBadgeEl && typeof ZitlasBadge !== 'undefined') chatBadgeEl.innerHTML = ZitlasBadge.render(coach, { size: 'sm' });
     var av = document.getElementById('chatHdrAvatar');
     if (av) av.textContent = (coach.name || 'E').split(' ').map(function(w) { return w[0] || ''; }).join('').slice(0, 2).toUpperCase();
   }
@@ -1057,6 +1074,7 @@
       athleteName: rel.athleteName || getAthleteName(),
       coachId:     rel.coachId,
       coachName:   rel.coachName || (coach && coach.name) || 'Coach',
+      coachVerification: (typeof ZitlasBadge !== 'undefined') ? ZitlasBadge.normalize(coach) : null,
       planType:    rel.planType || 'complete',
       planLabel:   rel.planLabel || 'Personal Coaching',
       startDate:   rel.startDate,
@@ -4260,6 +4278,7 @@
       reviews:      Array.isArray(d.clientReviews) ? d.clientReviews : [],
       gallery:      Array.isArray(d.gallery) ? d.gallery : [],
       verified:     d.verified === true,
+      verification: d.verification || null,
       pricing:      d.pricing || null,
     };
   }

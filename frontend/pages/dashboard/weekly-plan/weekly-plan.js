@@ -154,9 +154,19 @@
       banner.style.margin = '0 0 12px';
       content.insertBefore(banner, content.firstChild);
     }
-    banner.innerHTML = _pcRel.status === 'active'
-      ? '👨‍🏫 Training managed by <b>&nbsp;' + (_pcPlanDoc.coachName || 'your coach') + '</b>&nbsp;— updates appear here instantly.'
-      : '👨‍🏫 Coaching ended — you’re keeping your coach’s last training plan.';
+    var coachName = escHtml(_pcPlanDoc.coachName || 'your coach');
+    function paint(verification) {
+      var badge = (typeof ZitlasBadge !== 'undefined') ? ZitlasBadge.render(verification, { size: 'sm' }) : '';
+      banner.innerHTML = _pcRel.status === 'active'
+        ? (badge
+            ? '👨‍🏫 Your Verified Coach: <b>&nbsp;' + coachName + '</b>' + badge + '&nbsp;— updates appear here instantly.'
+            : '👨‍🏫 Training managed by <b>&nbsp;' + coachName + '</b>&nbsp;— updates appear here instantly.')
+        : '👨‍🏫 Coaching ended — you’re keeping your coach’s last training plan.';
+    }
+    paint(null);
+    if (typeof ZitlasBadge !== 'undefined' && _pcRel.coachId) {
+      ZitlasBadge.fetchVerification(_pcRel.coachId).then(paint);
+    }
   }
 
   /* ══════════════════════════════════════════
@@ -352,6 +362,7 @@
             reviewedAt: er.reviewedAt
               ? new Date(er.reviewedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
               : '',
+            expertId: er.expertId || null,
           };
           console.log('[WeeklyPlan] Loading EXPERT-REVIEWED plan —', normalizeWorkoutDays(er.modifiedWorkoutPlan).length, 'days | reviewer:', expertMeta.reviewedBy);
           const _origForDiff = originalWp && (originalWp.originalWorkoutPlan || originalWp.currentWorkoutPlan)
@@ -490,6 +501,20 @@
     renderAnalysis(plan);
     renderDayList(plan);
     renderWeeklyReview(plan);
+
+    /* Every ".wp-expert-badge" div (one per reviewed day) names the SAME
+       single reviewer in this legacy one-expert-per-plan system — resolve
+       their verification once and append the badge to all of them. */
+    var expertId = plan._expertMeta && plan._expertMeta.expertId;
+    if (expertId && typeof ZitlasBadge !== 'undefined') {
+      ZitlasBadge.fetchVerification(expertId).then(function (v) {
+        var badgeHtml = ZitlasBadge.render(v, { size: 'sm' });
+        if (!badgeHtml) return;
+        document.querySelectorAll('.wp-expert-badge').forEach(function (b) {
+          b.insertAdjacentHTML('beforeend', badgeHtml);
+        });
+      });
+    }
   }
 
   /* ── PLAN CONTEXT BAR ── */

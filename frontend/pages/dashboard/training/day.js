@@ -736,7 +736,7 @@
         '<span class="tp-expert-banner-icon">✓</span>' +
         '<div class="tp-expert-banner-text">' +
           '<span class="tp-expert-banner-name">' + bannerLabel +
-            (reviewedAt ? ' · ' + reviewedAt : '') + '</span>' +
+            (reviewedAt ? ' · ' + reviewedAt : '') + '<span class="tp-expert-banner-badge"></span></span>' +
           (expertNote ? '<span class="tp-expert-banner-note">' + escHtml(expertNote) + '</span>' : '') +
         '</div>';
       /* Insert before tpWhyText / tpCoachesTip area */
@@ -746,6 +746,16 @@
         timeGrid.parentNode.insertBefore(banner, timeGrid.nextSibling);
       } else if (content) {
         content.insertBefore(banner, content.firstChild);
+      }
+      /* expertId only exists on the legacy zitlas_expert_review path — the
+         newer per-day modification system (isNewModificationSystem) never
+         captured one, so there's nothing reliable to resolve a badge
+         against there; it simply stays badge-less rather than guessing. */
+      if (expertReview.expertId && typeof ZitlasBadge !== 'undefined') {
+        ZitlasBadge.fetchVerification(expertReview.expertId).then(function (v) {
+          var badgeEl = banner.querySelector('.tp-expert-banner-badge');
+          if (badgeEl) badgeEl.innerHTML = ZitlasBadge.render(v, { size: 'sm' });
+        });
       }
     }
 

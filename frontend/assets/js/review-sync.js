@@ -145,6 +145,7 @@
                            ' page to see and accept the changes.',
                   category: 'review', type: 'review_completed', priority: 'high',
                   action: (data.reviewType === 'workout') ? 'training' : 'diet',
+                  expertId: data.expertId,
                 });
               });
             } else if (prev === 'pending' && (next === 'in_progress' || next === 'expert_reviewing')) {
@@ -154,6 +155,7 @@
                   message: 'They’re now reviewing your ' + (data.reviewType || 'plan') + '.',
                   category: 'review', type: 'review_accepted',
                   action: 'expert_profile', actionId: data.expertId,
+                  expertId: data.expertId,
                 });
               });
             }

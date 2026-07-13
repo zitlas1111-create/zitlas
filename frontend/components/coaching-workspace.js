@@ -203,7 +203,9 @@
           '</button>' +
           '<div class="cw-avatar" id="cwAvatar">A</div>' +
           '<div class="cw-hdr-info">' +
-            '<span class="cw-hdr-name" id="cwName">—</span>' +
+            '<div class="cw-hdr-name-row">' +
+              '<span class="cw-hdr-name" id="cwName">—</span><span id="cwNameBadge"></span>' +
+            '</div>' +
             '<span class="cw-hdr-sub"><span class="cw-live-dot"></span><span id="cwSubline">Active coaching</span></span>' +
           '</div>' +
           '<span class="cw-plan-chip" id="cwPlanChip">—</span>' +
@@ -492,6 +494,15 @@
     if (!S.opts) return;
     var showName = S.opts.role === 'coach' ? (S.opts.athleteName || 'Athlete') : (S.opts.coachName || 'Coach');
     $('cwName').textContent = showName;
+    /* Only the athlete's view of their COACH can show the badge — a
+       coach viewing their athlete never sees one (athletes aren't
+       verified experts). S.opts.coachVerification is passed in by the
+       opener (cprofile.js), same shape as everywhere else. */
+    var nameBadgeEl = $('cwNameBadge');
+    if (nameBadgeEl) {
+      nameBadgeEl.innerHTML = (S.opts.role !== 'coach' && typeof ZitlasBadge !== 'undefined')
+        ? ZitlasBadge.render(S.opts.coachVerification, { size: 'sm' }) : '';
+    }
     $('cwAvatar').textContent = showName.split(/\s+/).map(function (w) { return w[0] || ''; })
       .slice(0, 2).join('').toUpperCase() || 'A';
     $('cwPlanChip').textContent = S.opts.planLabel || S.opts.planType || 'Coaching';

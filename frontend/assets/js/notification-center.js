@@ -84,6 +84,11 @@
       icon: opts.icon || meta.icon,
       type: opts.type || null,
       action: opts.action || null, actionId: opts.actionId || null,
+      /* Optional — lets notifications.js show the ZITLAS Verified badge
+         next to an expert's name in the notification (e.g. "reviewed by
+         <Name> [badge]"). Absent on every call site that doesn't pass it,
+         same as every other optional field here. */
+      expertId: opts.expertId || null,
       isRead: false,
       priority: opts.priority || meta.priority,
       createdAt: new Date().toISOString(),

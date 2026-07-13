@@ -72,9 +72,7 @@ function renderNutritionistCard(n) {
   <div class="nutri-body">
     <div class="nutri-name-row">
       <span class="nutri-name">${n.name}</span>
-      ${n.verified ? `<svg class="verified-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-label="Verified expert">
-        <polyline points="20 6 9 17 4 12"/>
-      </svg>` : ''}
+      ${window.ZitlasBadge ? ZitlasBadge.render(n, { size: 'md' }) : ''}
     </div>
     <span class="nutri-role">${n.role}</span>
     <div class="nutri-rating-row">
@@ -234,6 +232,8 @@ function _mergeLocalExperts() {
       available:  true,
       specialties:[],
       lang:       ['EN'],
+      verified:     e.verified === true,
+      verification: e.verification || null,
     });
   });
 }
@@ -268,6 +268,7 @@ function loadExpertsFromFirebase() {
           specialties: Array.isArray(d.specialties) ? d.specialties : [],
           lang:       Array.isArray(d.languages)    ? d.languages   : ['EN'],
           verified:   d.verified === true,
+          verification: d.verification || null, // ZitlasBadge.render() falls back to .verified if this is absent
         });
       });
       /* Firestore is the single source of truth for the expert list.

@@ -8,7 +8,9 @@
   <link rel="stylesheet" href="../../assets/css/theme.css" />
   <link rel="stylesheet" href="../../assets/css/coaching-workspace.css?v=20260705b" />
   <link rel="stylesheet" href="../../assets/css/zino.css?v=20260706" />
+  <link rel="stylesheet" href="../../assets/css/verified-badge.css?v=20260713" />
   <script src="../../assets/js/i18n.js"></script>
+  <script src="../../assets/js/verified-badge.js?v=20260713"></script>
   <!-- Firebase: needed for Personal Coaching mode (coach-managed diet, realtime) -->
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
@@ -65,7 +67,9 @@
           <span class="er-banner-icon">👨‍⚕️</span>
           <div class="er-banner-text">
             <span class="er-banner-title">Your nutritionist updated your plan</span>
-            <span class="er-banner-sub" id="erBannerSub"></span>
+            <span class="er-banner-sub-row">
+              <span class="er-banner-sub" id="erBannerSub"></span><span id="erBannerBadge"></span>
+            </span>
           </div>
         </div>
         <div class="er-banner-btns">
@@ -149,7 +153,9 @@
           <span class="vn-verified-icon">✅</span>
           <div class="vn-verified-text">
             <span class="vn-verified-title">Expert Verified Plan</span>
-            <a href="#" class="vn-verified-link" id="vnVerifiedLink">View Expert</a>
+            <span class="vn-verified-link-row">
+              <a href="#" class="vn-verified-link" id="vnVerifiedLink">View Expert</a><span id="vnVerifiedBadge"></span>
+            </span>
           </div>
           <span class="vn-verified-chip">Certified</span>
         </div>
@@ -181,7 +187,7 @@
         <!-- Expert plan attribution (shown when planSource === 'expert') -->
         <div class="expert-plan-info" id="expertPlanInfo" style="display:none">
           <span class="epi-label">Reviewed by:</span>
-          <span class="epi-name" id="epiName">—</span>
+          <span class="epi-name" id="epiName">—</span><span id="epiNameBadge"></span>
           <span class="epi-sep">·</span>
           <span class="epi-label">On:</span>
           <span class="epi-date" id="epiDate">—</span>

@@ -1,0 +1,163 @@
+/*!
+ * ZITLAS — Verified Expert Badge (assets/css/verified-badge.css)
+ * Pairs with assets/js/verified-badge.js. Prefix: zv-.
+ */
+
+.zv-badge-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  vertical-align: middle;
+  line-height: 0;
+  cursor: pointer;
+  outline: none;
+  /* Fade-in + scale 0.95->1.0 ONCE on mount — no loop, no glow, no blink. */
+  animation: zvEnter 0.32s ease-out both;
+}
+@keyframes zvEnter {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.zv-badge-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none; /* clicks go to the wrapper, which owns the tooltip/sheet */
+}
+
+/* Size variants (spec: listing 16-18px, profile 20-24px, chat/review 16px) */
+.zv-badge--sm { width: 16px; height: 16px; }
+.zv-badge--md { width: 18px; height: 18px; }
+.zv-badge--lg { width: 24px; height: 24px; }
+@media (max-width: 480px) {
+  .zv-badge--lg { width: 20px; height: 20px; } /* profile header, small phones */
+}
+
+/* "Verified by ZITLAS" caption under the profile-header name */
+.zv-caption {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--success, #578A2C);
+  margin-top: 2px;
+}
+
+/* ── Desktop hover/focus tooltip (pure CSS — no JS needed) ── */
+.zv-tooltip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  width: max-content;
+  max-width: 220px;
+  background: rgba(20,20,24,0.96);
+  color: #fff;
+  border-radius: 10px;
+  padding: 8px 11px;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: center;
+  white-space: normal;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  z-index: 400;
+}
+.zv-tooltip b { display: block; font-size: 12px; margin-bottom: 2px; }
+/* Flip below the badge when there isn't room above (e.g. the first card
+   on a listing page) — toggled by verified-badge.js's positionTooltip(),
+   which measures actual viewport space rather than guessing. */
+.zv-tooltip--below {
+  bottom: auto;
+  top: calc(100% + 8px);
+  transform: translateX(-50%) translateY(-4px);
+}
+@media (hover: hover) and (pointer: fine) {
+  .zv-badge-wrap:hover .zv-tooltip--below,
+  .zv-badge-wrap:focus-visible .zv-tooltip--below {
+    transform: translateX(-50%) translateY(0);
+  }
+}
+.zv-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%; left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: rgba(20,20,24,0.96);
+}
+.zv-tooltip--below::after {
+  top: auto; bottom: 100%;
+  border-top-color: transparent;
+  border-bottom-color: rgba(20,20,24,0.96);
+}
+@media (hover: hover) and (pointer: fine) {
+  .zv-badge-wrap:hover .zv-tooltip,
+  .zv-badge-wrap:focus-visible .zv-tooltip {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+/* ── Mobile bottom sheet ── */
+.zv-sheet-backdrop {
+  position: fixed; inset: 0; z-index: 12300;
+  background: rgba(15,15,20,0.55);
+  display: none; align-items: flex-end; justify-content: center;
+  opacity: 0; transition: opacity 0.22s ease;
+}
+.zv-sheet-backdrop.open { opacity: 1; }
+.zv-sheet {
+  background: var(--bg-card-light, #fff);
+  border-radius: 22px 22px 0 0;
+  width: 100%; max-width: 480px;
+  padding: 10px 22px calc(22px + env(safe-area-inset-bottom, 0px));
+  text-align: center;
+  transform: translateY(100%);
+  transition: transform 0.26s cubic-bezier(.32,.72,0,1);
+  box-shadow: 0 -20px 60px rgba(0,0,0,0.3);
+}
+.zv-sheet-backdrop.open .zv-sheet { transform: translateY(0); }
+.zv-sheet-handle {
+  width: 36px; height: 4px; border-radius: 3px;
+  background: rgba(30,41,59,0.15);
+  margin: 6px auto 14px;
+}
+.zv-sheet-badge { margin-bottom: 8px; }
+.zv-sheet-badge img { width: 48px; height: 48px; object-fit: contain; }
+.zv-sheet-title {
+  font-size: 17px; font-weight: 800; color: var(--text-primary, #1E293B);
+  margin-bottom: 14px;
+}
+.zv-sheet-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 4px; text-align: left;
+  font-size: 13.5px; font-weight: 600; color: var(--text-primary, #1E293B);
+  border-bottom: 1px solid rgba(30,41,59,0.06);
+}
+.zv-sheet-row:last-of-type { border-bottom: none; }
+.zv-sheet-check {
+  width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
+  background: rgba(107,165,57,0.14); color: #578A2C;
+  display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800;
+}
+.zv-sheet-caption {
+  margin-top: 14px; font-size: 13px; font-weight: 800; color: var(--success, #578A2C);
+}
+.zv-sheet-desc {
+  margin-top: 4px; font-size: 12.5px; color: var(--text-muted, #64748B); line-height: 1.5;
+}
+.zv-sheet-close {
+  width: 100%; margin-top: 18px; padding: 13px; border-radius: 14px;
+  background: rgba(30,41,59,0.06); border: none; cursor: pointer;
+  font-size: 14px; font-weight: 700; color: var(--text-primary, #1E293B);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zv-badge-wrap { animation: none; }
+  .zv-sheet-backdrop, .zv-sheet, .zv-tooltip { transition: none; }
+}

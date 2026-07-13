@@ -69,17 +69,19 @@
     });
     main.innerHTML = html;
     wireCards();
+    _fillNotificationBadges();
   }
 
   function buildCard(n) {
     var priorityCls = n.priority === 'critical' ? ' nc-priority-critical' : n.priority === 'high' ? ' nc-priority-high' : '';
+    var titleBadge = n.expertId ? '<span class="nc-item-badge" data-expert-id="' + esc(n.expertId) + '"></span>' : '';
     return (
       '<div class="nc-item-wrap" data-ntf-wrap="' + esc(n.notificationId) + '">' +
         '<div class="nc-item-delete-bg">Delete</div>' +
         '<div class="nc-item' + (n.isRead ? '' : ' nc-item--unread') + priorityCls + '" data-ntf="' + esc(n.notificationId) + '">' +
           '<div class="nc-item-icon">' + esc(n.icon || '🔔') + '</div>' +
           '<div class="nc-item-body">' +
-            '<div class="nc-item-title">' + esc(n.title) + '</div>' +
+            '<div class="nc-item-title-row"><div class="nc-item-title">' + esc(n.title) + '</div>' + titleBadge + '</div>' +
             (n.message ? '<div class="nc-item-msg">' + esc(n.message) + '</div>' : '') +
             '<div class="nc-item-time">' + esc(timeAgo(n.createdAt)) + '</div>' +
           '</div>' +
@@ -87,6 +89,23 @@
         '</div>' +
       '</div>'
     );
+  }
+
+  /* Batches the badge lookups: one fetch per distinct expertId on screen,
+     no matter how many notifications mention them. */
+  function _fillNotificationBadges() {
+    if (typeof ZitlasBadge === 'undefined') return;
+    var seen = {};
+    document.querySelectorAll('.nc-item-badge[data-expert-id]').forEach(function (el) {
+      var id = el.dataset.expertId;
+      if (!id || seen[id]) return;
+      seen[id] = true;
+      ZitlasBadge.fetchVerification(id).then(function (v) {
+        var html = ZitlasBadge.render(v, { size: 'sm' });
+        if (!html) return;
+        document.querySelectorAll('.nc-item-badge[data-expert-id="' + id + '"]').forEach(function (b) { b.innerHTML = html; });
+      });
+    });
   }
 
   /* Swipe-to-delete via pointer events; tap (no meaningful drag) opens it. */

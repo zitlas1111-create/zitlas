@@ -342,6 +342,18 @@
       .replace(/"/g, '&quot;');
   }
 
+  /* Fills an empty sibling <span id="elId"> with the reviewing/coaching
+     expert's ZitlasBadge, once their verification status resolves.
+     Shared by every "Reviewed by <name>" surface on this page so they
+     don't each re-implement the same fetch-then-render dance. */
+  function _paintExpertBadge(elId, expertId, size) {
+    var el = document.getElementById(elId);
+    if (!el || typeof ZitlasBadge === 'undefined' || !expertId) return;
+    ZitlasBadge.fetchVerification(expertId).then(function (v) {
+      el.innerHTML = ZitlasBadge.render(v, { size: size || 'sm' });
+    });
+  }
+
   /* ══════════════════════════════════════════
      SVG RING ANIMATION
   ══════════════════════════════════════════ */
@@ -425,6 +437,7 @@
         if (dateEl && activePlanReview.reviewedAt) {
           dateEl.textContent = new Date(activePlanReview.reviewedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
         }
+        _paintExpertBadge('epiNameBadge', activePlanReview.expertId);
       }
     } else if (expertReview && expertReview.status === 'APPROVED') {
       if (aiBadge) aiBadge.style.display = 'none';
@@ -1538,6 +1551,7 @@
     if (link && review.expertId) {
       link.textContent = 'Verified by ' + (review.reviewedBy || 'Expert');
       link.href = '../coaches/cprofile.html?id=' + review.expertId;
+      _paintExpertBadge('vnVerifiedBadge', review.expertId);
     }
     banner.style.display = 'flex';
   }
@@ -1658,9 +1672,19 @@
       banner.style.margin = '0 16px 12px';
       mealList.parentNode.insertBefore(banner, mealList);
     }
-    banner.innerHTML = _pcRel.status === 'active'
-      ? '👨‍🏫 Diet managed by <b>&nbsp;' + (_pcPlanDoc.coachName || 'your coach') + '</b>&nbsp;— swaps use your coach’s options only.'
-      : '👨‍🏫 Coaching ended — you’re keeping your coach’s last diet plan.';
+    var coachName = esc(_pcPlanDoc.coachName || 'your coach');
+    function paint(verification) {
+      var badge = (typeof ZitlasBadge !== 'undefined') ? ZitlasBadge.render(verification, { size: 'sm' }) : '';
+      banner.innerHTML = _pcRel.status === 'active'
+        ? (badge
+            ? '👨‍🏫 Your Verified Coach: <b>&nbsp;' + coachName + '</b>' + badge + '&nbsp;— swaps use your coach’s options only.'
+            : '👨‍🏫 Diet managed by <b>&nbsp;' + coachName + '</b>&nbsp;— swaps use your coach’s options only.')
+        : '👨‍🏫 Coaching ended — you’re keeping your coach’s last diet plan.';
+    }
+    paint(null);
+    if (typeof ZitlasBadge !== 'undefined' && _pcRel.coachId) {
+      ZitlasBadge.fetchVerification(_pcRel.coachId).then(paint);
+    }
   }
 
   /* Coach-option picker (replaces the AI swap flow in coach mode).
@@ -2657,6 +2681,7 @@
           ? ' · ' + new Date(review.reviewedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
           : '');
     }
+    _paintExpertBadge('erBannerBadge', review.expertId);
     banner.style.display = 'flex';
     /* Wire interactions here so the button is always ready immediately after the banner appears,
        regardless of which code path called showExpertReviewBanner. */

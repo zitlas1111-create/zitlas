@@ -85,14 +85,50 @@
       .then(function () { return doc; });
   }
 
-  /* ── Keeps experts/{uid}.verified in sync with "at least one verified cert" ── */
+  /* ── SINGLE SOURCE OF TRUTH for the ZITLAS Verified Expert badge ──
+     Writes experts/{uid}.verification, the one object every surface that
+     shows a badge (listing, profile, chat, coach banners, review banners,
+     notifications) reads from — never re-derived client-side elsewhere.
+
+     Eligibility (all four collapse into one real signal today): identity
+     verified + at least one certificate uploaded + certificate approved
+     by admin + verificationStatus === 'verified'. This codebase has no
+     separate identity/KYC step — admin approval of an uploaded certificate
+     IS the manual human check that confirms both the document AND the
+     person behind it, so "identity verified" and "certificate verified"
+     are the same event here, not two independently-tracked booleans. If
+     a real separate identity-check pipeline is added later, this is the
+     one function that would gain a second condition.
+
+     verificationLevel is a plain string key into ZitlasBadge's LEVELS
+     config (assets/js/verified-badge.js) — future badge tiers (gold/
+     elite/medical/founder) are new config entries there, not new fields
+     or branches here or in any UI. Only one level exists today. */
   function recomputeVerifiedFlag(expertId) {
     var d = db();
     if (!d) return Promise.resolve();
     return d.collection('expert_certificates').where('expertId', '==', expertId).get()
       .then(function (snap) {
-        var anyVerified = snap.docs.some(function (x) { return x.data().verificationStatus === 'verified'; });
-        return d.collection('experts').doc(expertId).set({ verified: anyVerified }, { merge: true });
+        var verifiedCerts = snap.docs.map(function (x) { return x.data(); })
+          .filter(function (c) { return c.verificationStatus === 'verified'; });
+        var isVerified = verifiedCerts.length > 0;
+        var verifiedAt = null;
+        if (isVerified) {
+          verifiedAt = verifiedCerts
+            .map(function (c) { return c.reviewedAt || c.uploadedAt; })
+            .filter(Boolean)
+            .sort()[0] || null; // earliest verification event, not the latest cert added
+        }
+        var verification = {
+          isVerified: isVerified,
+          verificationLevel: isVerified ? 'professional' : null,
+          verifiedAt: verifiedAt,
+          verifiedCertificates: verifiedCerts.length,
+        };
+        return d.collection('experts').doc(expertId).set({
+          verification: verification,
+          verified: isVerified, // legacy flat flag — kept in sync for any reader not yet migrated to .verification
+        }, { merge: true });
       })
       .catch(function (e) { console.warn('[CERT] recomputeVerifiedFlag failed', e); });
   }
