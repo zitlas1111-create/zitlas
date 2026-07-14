@@ -42,6 +42,7 @@ from routes import system
 from routes import certificates
 from routes import coaching
 from routes import meal_ai
+from routes import payment
 from services import rag_service
 
 # ── Directory paths ──────────────────────────────────────────────────────────
@@ -107,6 +108,16 @@ async def lifespan(app: FastAPI):
         print(f"[STARTUP] Firestore Admin config check itself failed (non-fatal): {exc}")
 
     try:
+        from services import razorpay_service
+        if razorpay_service.is_configured():
+            print("[STARTUP] Razorpay — CONFIGURED")
+        else:
+            print("[STARTUP] Razorpay — NOT CONFIGURED: set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET — "
+                  "/api/payment/* will fail until this is set")
+    except Exception as exc:
+        print(f"[STARTUP] Razorpay config check itself failed (non-fatal): {exc}")
+
+    try:
         from apscheduler.schedulers.asyncio import AsyncIOScheduler
         from services.coaching_sweep import sweep_expired_relationships, sweep_expired_requests
 
@@ -167,6 +178,7 @@ app.include_router(chat.router,       prefix="/api/chat",       tags=["Chat"])
 app.include_router(certificates.router, prefix="/api/certificates", tags=["Certificates"])
 app.include_router(coaching.router,     prefix="/api/coaching",    tags=["Coaching"])
 app.include_router(meal_ai.router,      prefix="/api/meal",        tags=["Meal AI"])
+app.include_router(payment.router,      prefix="/api/payment",     tags=["Payment"])
 
 # ── Root redirect ────────────────────────────────────────────────────────────
 @app.get("/")

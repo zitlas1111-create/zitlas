@@ -1,0 +1,21 @@
+# Environment / secrets
+.env
+*.env
+*firebase-adminsdk*.json
+*serviceAccountKey*.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Runtime-generated (ephemeral on Render — see backend/routes/certificates.py)
+backend/uploads/
+
+# Node
+node_modules/
+
+# OS
+.DS_Store
+Thumbs.db

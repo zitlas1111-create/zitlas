@@ -61,9 +61,8 @@
 
   var _open         = false;
   var _view         = 'main';    // 'main' | 'transactions' | 'offers' | 'addFunds'
-  var _addStep      = 1;         // 1 = choose amount, 2 = choose payment
+  var _addStep      = 1;         // 1 = choose amount, 2 = confirm & pay (Razorpay's own modal handles method choice)
   var _amt          = 0;
-  var _payMethod    = null;
 
   /* ══════════════════════════════════════════
      CSS
@@ -486,7 +485,7 @@
   }
 
   function renderAddFundsStep1() {
-    _addStep = 1; _amt = 0; _payMethod = null;
+    _addStep = 1; _amt = 0;
     var amounts = [100, 250, 500, 1000, 2000];
     el('zwBody').innerHTML = (
       '<div class="zw-af-body">' +
@@ -529,109 +528,145 @@
     contBtn.addEventListener('click', function() { if (_amt > 0) renderAddFundsStep2(); });
   }
 
+  /* Method selection (UPI / Card / Net Banking) used to be a custom picker
+     here, purely cosmetic — creditFunds() ignored it and credited
+     instantly regardless of what was "chosen". Razorpay's own Standard
+     Checkout modal (opened in creditFunds() below) shows the real method
+     picker with live bank/UPI-app options, so a second, fake one here
+     would just be confusing — this step is now a single confirm-and-pay
+     screen, and method selection happens inside Razorpay's modal. */
   function renderAddFundsStep2() {
-    _addStep = 2; _payMethod = null;
-    var methods = [
-      { id: 'upi',     icon: '📱', name: 'UPI',         sub: 'GPay, PhonePe, Paytm, QR code' },
-      { id: 'credit',  icon: '💳', name: 'Credit Card',  sub: 'Visa, Mastercard, RuPay, Amex' },
-      { id: 'debit',   icon: '🏦', name: 'Debit Card',   sub: 'All Indian bank debit cards'   },
-      { id: 'netbank', icon: '🌐', name: 'Net Banking',  sub: 'HDFC, ICICI, SBI, Axis + more' },
-    ];
-
+    _addStep = 2;
     el('zwBody').innerHTML = (
       '<div class="zw-pay-amt-row">' +
         '<span class="zw-pay-lbl">Adding to wallet</span>' +
         '<span class="zw-pay-val">₹' + Number(_amt).toLocaleString('en-IN') + '</span>' +
       '</div>' +
-      '<div class="zw-pay-methods">' +
-        methods.map(function(m) {
-          return (
-            '<div class="zw-pay-opt" data-pid="' + m.id + '">' +
-              '<div class="zw-pay-ico">' + m.icon + '</div>' +
-              '<div class="zw-pay-inf">' +
-                '<div class="zw-pay-name">' + esc(m.name) + '</div>' +
-                '<div class="zw-pay-sub">' + esc(m.sub) + '</div>' +
-              '</div>' +
-              '<div class="zw-pay-chk"></div>' +
-            '</div>'
-          );
-        }).join('') +
-      '</div>' +
+      '<p class="zw-af-sub">Choose UPI, card, or net banking in the next step — secured by Razorpay.</p>' +
       '<div class="zw-pay-footer">' +
-        '<button class="zw-cta" id="zwPayBtn" disabled>Pay ₹' + Number(_amt).toLocaleString('en-IN') + '</button>' +
+        '<button class="zw-cta" id="zwPayBtn">Pay ₹' + Number(_amt).toLocaleString('en-IN') + '</button>' +
       '</div>'
     );
-
-    el('zwBody').querySelectorAll('.zw-pay-opt').forEach(function(opt) {
-      opt.addEventListener('click', function() {
-        el('zwBody').querySelectorAll('.zw-pay-opt').forEach(function(o) { o.classList.remove('sel'); });
-        opt.classList.add('sel');
-        _payMethod = opt.dataset.pid;
-        el('zwPayBtn').disabled = false;
-      });
-    });
-
-    on('zwPayBtn', 'click', function() {
-      if (_payMethod) creditFunds(_amt, _payMethod);
-    });
+    on('zwPayBtn', 'click', function() { creditFunds(_amt); });
   }
 
   /* ══════════════════════════════════════════
      FUND OPERATIONS
   ══════════════════════════════════════════ */
 
-  /* Recharge — routes through ZitlasPayment.creditWallet(), a Firestore
-     transaction that reads-then-writes the LIVE users/{uid}.wallet
-     document directly. This used to be a local "getWallet().balance +
-     amount" increment persisted only via ZitlasCloudSync.saveCloudOnly(),
-     which (a) silently no-ops on any page that doesn't happen to load
-     cloud-sync.js — true for several pages that DO load this wallet
-     component — and (b) swallowed write failures into a console.warn with
-     no user-facing signal either way. The result was a wallet that could
-     show a healthy balance here while the server-side balance
-     ZitlasPayment.attemptCharge() actually charges against stayed at
-     whatever it last was — confirmed against real production data (0 of 13
-     real users had a wallet field in Firestore before this fix). Every
-     page that loads this component now also loads payment-service.js, so
-     this path is always available — never an optional/best-effort sync. */
-  function creditFunds(amount, method) {
+  /* Recharge — real money via Razorpay Standard Checkout, not a simulated
+     credit. Flow: create-order (backend/routes/payment.py, records the
+     order server-side so /verify has an authoritative amount to trust) ->
+     Razorpay's own hosted checkout modal (checkout.js, loaded on every
+     page that loads this component) -> on success, /verify checks the
+     HMAC-SHA256 signature and ONLY THEN credits the wallet, inside the
+     same kind of Firestore transaction ZitlasPayment.attemptCharge() uses
+     for debits. The wallet is never credited client-side — a
+     man-in-the-browser or a paused debugger session can't fake a credit,
+     because the credit only happens after the backend independently
+     verifies Razorpay's signature. */
+  function creditFunds(amount) {
     var uid = (typeof ZitlasAuth !== 'undefined' && ZitlasAuth.currentUser) ? ZitlasAuth.currentUser.uid : null;
-    if (!uid || typeof ZitlasPayment === 'undefined' || typeof ZitlasPayment.creditWallet !== 'function') {
-      console.error('[WALLET] creditFunds aborted — uid=' + uid + ' ZitlasPayment available=' + (typeof ZitlasPayment !== 'undefined'));
-      toast('❌ Could not add funds — please sign in and try again.');
+    if (!uid || typeof getIdToken !== 'function') {
+      toast('❌ Please sign in and try again.');
       return;
     }
-    var methodLabel = {upi:'UPI',credit:'Credit Card',debit:'Debit Card',netbank:'Net Banking'}[method] || method;
+    if (typeof Razorpay === 'undefined') {
+      console.error('[WALLET] Razorpay checkout.js not loaded');
+      toast('❌ Payment unavailable — please reload the page.');
+      return;
+    }
     var payBtn = el('zwPayBtn');
-    if (payBtn) { payBtn.disabled = true; payBtn.textContent = 'Processing…'; }
+    if (payBtn) { payBtn.disabled = true; payBtn.textContent = 'Starting…'; }
 
-    ZitlasPayment.creditWallet({
-      userId: uid, amount: amount, method: method,
-      description: 'Added Funds via ' + methodLabel,
+    function resetBtn() {
+      if (payBtn) { payBtn.disabled = false; payBtn.textContent = 'Pay ₹' + Number(amount).toLocaleString('en-IN'); }
+    }
+
+    getIdToken().then(function (token) {
+      return fetch('/api/payment/create-order', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: amount }),
+      });
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (data) {
+        return { status: res.status, data: data };
+      });
     }).then(function (result) {
-      if (!result.success) {
-        console.error('[WALLET] recharge failed', result);
-        toast('❌ Could not add funds — please try again.');
-        if (payBtn) { payBtn.disabled = false; payBtn.textContent = 'Pay ₹' + Number(amount).toLocaleString('en-IN'); }
+      if (result.status !== 200) {
+        console.error('[WALLET] create-order failed', result);
+        toast('❌ Could not start payment — please try again.');
+        resetBtn();
+        return;
+      }
+      var order = result.data;
+      var rzp = new Razorpay({
+        key: order.key_id, amount: order.amount, currency: order.currency, order_id: order.order_id,
+        name: 'ZITLAS', description: 'Wallet recharge',
+        handler: function (response) { _verifyAndCreditWallet(response, amount, resetBtn); },
+        modal: { ondismiss: function () { toast('Payment cancelled.'); resetBtn(); } },
+        theme: { color: '#6BA539' },
+      });
+      rzp.on('payment.failed', function (resp) {
+        console.error('[WALLET] razorpay payment.failed', resp && resp.error);
+        toast('❌ Payment failed — ' + ((resp && resp.error && resp.error.description) || 'please try again.'));
+        resetBtn();
+      });
+      if (payBtn) payBtn.textContent = 'Pay ₹' + Number(amount).toLocaleString('en-IN');
+      rzp.open();
+    }).catch(function (e) {
+      console.error('[WALLET] create-order failed', e);
+      toast('❌ Could not start payment — please try again.');
+      resetBtn();
+    });
+  }
+
+  function _verifyAndCreditWallet(razorpayResponse, amount, resetBtn) {
+    var payBtn = el('zwPayBtn');
+    if (payBtn) payBtn.textContent = 'Verifying…';
+
+    getIdToken().then(function (token) {
+      return fetch('/api/payment/verify', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          razorpay_order_id:   razorpayResponse.razorpay_order_id,
+          razorpay_payment_id: razorpayResponse.razorpay_payment_id,
+          razorpay_signature:  razorpayResponse.razorpay_signature,
+        }),
+      });
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (data) {
+        return { status: res.status, data: data };
+      });
+    }).then(function (result) {
+      if (result.status !== 200 || !result.data.success) {
+        console.error('[WALLET] payment verification failed', result);
+        toast('❌ Payment could not be verified — contact support if money was deducted.');
+        resetBtn();
         return;
       }
       /* Sync the LOCAL cache from the CONFIRMED server balance — never a
-         blind increment. This is what makes the wallet page and the
-         payment popup agree: both now ultimately trace back to the same
-         Firestore write, not two independent local computations. */
+         blind increment. Same pattern this file already used for
+         ZitlasPayment.creditWallet()'s result, now fed by a real payment
+         instead of an internal-only credit. */
       var w = getWallet();
-      w.balance     = result.balance;
+      w.balance     = result.data.balance;
       w.total_added = Number(w.total_added || 0) + amount;
       w.transactions.push({
-        id: result.transactionId, type: 'credit', amount: amount,
-        description: 'Added Funds via ' + methodLabel,
-        date: new Date().toISOString(),
+        id: 'txn_' + razorpayResponse.razorpay_payment_id, type: 'credit', amount: amount,
+        description: 'Added Funds via Razorpay', date: new Date().toISOString(),
       });
       saveWallet(w);
       syncBtnLabel(available(w));
       showDot();
       showView('main');
       toast('✅ ' + fmtAmt(amount) + ' added to your wallet!');
+    }).catch(function (e) {
+      console.error('[WALLET] verify request failed', e);
+      toast('❌ Could not verify payment — contact support if money was deducted.');
+      resetBtn();
     });
   }
 
