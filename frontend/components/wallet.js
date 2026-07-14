@@ -21,14 +21,21 @@
         var p = JSON.parse(raw);
         return {
           balance:      Number(p.balance      || 0),
+          /* Locked by an open Personal Coaching reservation (see
+             backend/routes/coaching.py) — cannot be spent elsewhere until
+             the expert accepts (debited), rejects, or the request expires
+             (both release it). Written server-side only. */
+          reserved:     Number(p.reserved     || 0),
           total_added:  Number(p.total_added  || 0),
           total_spent:  Number(p.total_spent  || 0),
           transactions: Array.isArray(p.transactions) ? p.transactions : [],
         };
       }
     } catch (_) {}
-    return { balance: 0, total_added: 0, total_spent: 0, transactions: [] };
+    return { balance: 0, reserved: 0, total_added: 0, total_spent: 0, transactions: [] };
   }
+
+  function available(w) { return Math.max(0, Number(w.balance || 0) - Number(w.reserved || 0)); }
 
   function saveWallet(w) {
     try { localStorage.setItem(KEY, JSON.stringify(w)); } catch (_) {}
@@ -375,14 +382,20 @@
 
     var lastCount = Math.min(recent.length, 3);
 
+    var avail = available(w);
     el('zwBody').innerHTML = (
-      /* Balance */
+      /* Balance — "Available" is the number that's actually spendable;
+         w.balance includes anything locked by an open coaching reservation
+         (see backend/routes/coaching.py), so it's shown separately below,
+         never as the headline figure. */
       '<div class="zw-bal-card">' +
         '<div class="zw-bal-lbl">Available Balance</div>' +
         '<div class="zw-bal-amt"><span class="zw-bal-cur">₹</span>' +
-          '<span id="zwBalAmt">' + Number(w.balance).toLocaleString('en-IN') + '</span>' +
+          '<span id="zwBalAmt">' + Number(avail).toLocaleString('en-IN') + '</span>' +
         '</div>' +
-        '<div class="zw-bal-sub">ZITLAS Wallet · Secure &amp; Instant</div>' +
+        (w.reserved > 0
+          ? '<div class="zw-bal-sub">🔒 ₹' + Number(w.reserved).toLocaleString('en-IN') + ' reserved for a pending coaching request</div>'
+          : '<div class="zw-bal-sub">ZITLAS Wallet · Secure &amp; Instant</div>') +
       '</div>' +
 
       /* Quick Actions */
@@ -396,9 +409,11 @@
       /* Stats */
       '<div class="zw-stitle" style="margin-top:18px">Wallet Usage</div>' +
       '<div class="zw-stats">' +
-        statCard('Added',   fmtAmt(w.total_added),  'g') +
-        statCard('Spent',   fmtAmt(w.total_spent),  'r') +
-        statCard('Balance', fmtAmt(w.balance),       'o') +
+        statCard('Added',    fmtAmt(w.total_added), 'g') +
+        statCard('Spent',    fmtAmt(w.total_spent), 'r') +
+        (w.reserved > 0
+          ? statCard('Reserved', fmtAmt(w.reserved), 'o')
+          : statCard('Balance',  fmtAmt(w.balance),  'o')) +
       '</div>' +
 
       /* Recent Transactions */
@@ -613,7 +628,7 @@
         date: new Date().toISOString(),
       });
       saveWallet(w);
-      syncBtnLabel(w.balance);
+      syncBtnLabel(available(w));
       showDot();
       showView('main');
       toast('✅ ' + fmtAmt(amount) + ' added to your wallet!');
@@ -628,7 +643,7 @@
      balance write is the bug class this whole file just moved away from. */
   function deductFunds(amount, description) {
     var w = getWallet();
-    if (w.balance < amount) return false;
+    if (available(w) < amount) return false;
     w.balance     -= amount;
     w.total_spent += amount;
     w.transactions.push({
@@ -639,7 +654,7 @@
       date:        new Date().toISOString(),
     });
     saveWallet(w);
-    syncBtnLabel(w.balance);
+    syncBtnLabel(available(w));
     showDot();
     return true;
   }
@@ -759,8 +774,10 @@
     var old = el('zwBtn');
     if (old) { var grp = el('zwBtnGroup'); if (grp) old.remove(); else old.remove(); }
 
-    /* Inject button next to notification/right-side button */
-    var balance = getWallet().balance;
+    /* Inject button next to notification/right-side button — shows what's
+       actually spendable, not the raw balance (which may include a locked
+       coaching reservation). */
+    var balance = available(getWallet());
     var target  = findTarget();
     if (target) {
       /* Wrap wallet button + neighbour in a flex group so header layout stays tidy */
@@ -824,8 +841,10 @@
   ══════════════════════════════════════════ */
 
   window.ZitlasWallet = {
-    getBalance: function()             { return getWallet().balance; },
-    canAfford:  function(n)            { return getWallet().balance >= n; },
+    getBalance: function()             { return getWallet().balance; },       /* total, including reserved */
+    getAvailable: function()           { return available(getWallet()); },    /* actually spendable */
+    getReserved: function()            { return getWallet().reserved; },
+    canAfford:  function(n)            { return available(getWallet()) >= n; },
     deduct:     function(n, desc)      { return deductFunds(n, desc); },
     /* Delegates to the same Firestore-transactional path as the Add Funds
        UI (creditFunds above) — one wallet service, not a second local-only
@@ -841,14 +860,14 @@
           w.balance = result.balance;
           w.total_added = Number(w.total_added || 0) + n;
           w.transactions.push({ id: result.transactionId, type: 'credit', amount: n, description: desc || 'Credit', date: new Date().toISOString() });
-          saveWallet(w); syncBtnLabel(w.balance); showDot();
+          saveWallet(w); syncBtnLabel(available(w)); showDot();
         }
         return result;
       });
     },
     openPanel:  openPanel,
     openAddFunds: function()           { openPanel(); showView('addFunds'); },
-    refresh:    function()             { syncBtnLabel(getWallet().balance); },
+    refresh:    function()             { syncBtnLabel(available(getWallet())); },
   };
 
   /* ══════════════════════════════════════════
@@ -864,9 +883,9 @@
     ZitlasAuth.onAuthStateChanged(function (user) {
       if (!user) return;
       ZitlasCloudSync.hydrateOnLoad(user.uid).then(function () {
-        syncBtnLabel(getWallet().balance);
+        syncBtnLabel(available(getWallet()));
         ZitlasCloudSync.attachRealtime(user.uid, function () {
-          syncBtnLabel(getWallet().balance);
+          syncBtnLabel(available(getWallet()));
         });
       });
     });

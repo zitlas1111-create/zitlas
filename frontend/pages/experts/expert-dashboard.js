@@ -1436,8 +1436,9 @@ function renderCoachingRequests() {
 
   var bucket = _pcRequests.filter(function(r) {
     if (_pcActiveTab === 'pending')   return r.status === 'pending';
-    if (_pcActiveTab === 'active')    return r.status === 'accepted' || r.status === 'active';
-    return r.status === 'declined' || r.status === 'completed' || r.status === 'ended' || r.status === 'withdrawn';
+    if (_pcActiveTab === 'active')    return r.status === 'active';
+    return r.status === 'declined' || r.status === 'expired' || r.status === 'completed' ||
+           r.status === 'ended' || r.status === 'withdrawn';
   });
 
   wrap.querySelectorAll('.pc-req-card').forEach(function(el) { el.remove(); });
@@ -1448,10 +1449,10 @@ function renderCoachingRequests() {
     var name = req.athleteName || 'Athlete';
     var initials = name.split(/\s+/).map(function(w) { return w[0] || ''; }).slice(0, 2).join('').toUpperCase();
     var statusLine =
-      req.status === 'pending'  ? 'Awaiting your response' :
-      req.status === 'accepted' ? 'Accepted — awaiting athlete payment' :
-      req.status === 'active'   ? 'Active coaching client' :
-      req.status === 'declined' ? 'Declined' :
+      req.status === 'pending'  ? '🟢 Payment Reserved — awaiting your response' :
+      req.status === 'active'   ? '✅ Active coaching client' :
+      req.status === 'declined' ? '❌ Declined' :
+      req.status === 'expired'  ? '⌛ Expired — reservation released' :
       req.status === 'ended'    ? 'Coaching ended by athlete' :
       req.status === 'withdrawn'? 'Withdrawn by athlete' : 'Completed';
 
@@ -1479,10 +1480,10 @@ function renderCoachingRequests() {
     var chatBtn    = card.querySelector('.pc-chat');
 
     if (acceptBtn) acceptBtn.addEventListener('click', function() {
-      _pcUpdateRequestStatus(req, 'accepted', 'acceptedAt');
+      _pcUpdateRequestStatus(req, 'accepted');
     });
     if (declineBtn) declineBtn.addEventListener('click', function() {
-      _pcUpdateRequestStatus(req, 'declined', 'declinedAt');
+      _pcUpdateRequestStatus(req, 'declined');
     });
     if (chatBtn) chatBtn.addEventListener('click', function() {
       if (req.status === 'active') {
@@ -1504,21 +1505,42 @@ function renderCoachingRequests() {
   });
 }
 
-function _pcUpdateRequestStatus(req, newStatus, tsField) {
-  if (typeof ZitlasDB === 'undefined') return;
-  console.log('[COACHING]', newStatus, '→ personal_coach_requests/' + req.requestId);
-  var update = { status: newStatus };
-  update[tsField] = new Date().toISOString();
-  ZitlasDB.collection('personal_coach_requests').doc(req.requestId).update(update)
-    .then(function() {
-      edShowToast(newStatus === 'accepted'
-        ? '✅ Request accepted — the athlete will be asked to complete payment.'
-        : 'Request declined.');
-    })
-    .catch(function(err) {
-      console.error('[COACHING] status update failed', err);
-      edShowToast('Could not update the request — please try again.');
+/* Accept/Decline both go through the backend now (backend/routes/coaching.py)
+   instead of a direct Firestore .update() — accepting auto-debits the
+   athlete's reserved amount and activates coaching atomically server-side;
+   declining releases the reservation. Neither is safe to enforce
+   client-side (a spoofed .update() could activate coaching without ever
+   actually charging anyone). */
+function _pcUpdateRequestStatus(req, newStatus) {
+  if (typeof getIdToken !== 'function') { edShowToast('Connection unavailable — please try again.'); return; }
+  var endpoint = newStatus === 'accepted' ? '/api/coaching/accept' : '/api/coaching/reject';
+  console.log('[COACHING]', newStatus, '→', endpoint, req.requestId);
+
+  getIdToken().then(function(token) {
+    return fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requestId: req.requestId }),
     });
+  }).then(function(res) {
+    return res.json().catch(function() { return {}; }).then(function(data) {
+      return { status: res.status, data: data };
+    });
+  }).then(function(result) {
+    if (result.status === 200 && result.data.success) {
+      edShowToast(newStatus === 'accepted'
+        ? '✅ Accepted — payment auto-debited, coaching is now active.'
+        : 'Request declined — reservation released.');
+    } else if (result.status === 409) {
+      edShowToast('This request was already handled.');
+    } else {
+      console.error('[COACHING] status update failed', result);
+      edShowToast('Could not update the request — please try again.');
+    }
+  }).catch(function(err) {
+    console.error('[COACHING] status update failed', err);
+    edShowToast('Could not update the request — please try again.');
+  });
 }
 
 /* ══════════════════════════════════════════════

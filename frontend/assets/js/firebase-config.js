@@ -46,6 +46,17 @@ var ZitlasStorage = (typeof firebase.storage === 'function') ? firebase.storage(
 /* Persist login across tabs and page reloads */
 ZitlasAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
 
+/* Firebase ID token for authenticated backend calls (/api/coaching/*, the
+   first backend routes in this codebase that verify a real caller identity
+   server-side instead of trusting a client-supplied uid). Rejects instead
+   of resolving null so a caller can't silently fetch() with a bad/missing
+   Authorization header. */
+function getIdToken() {
+  return ZitlasAuth.currentUser
+    ? ZitlasAuth.currentUser.getIdToken()
+    : Promise.reject(new Error('not_signed_in'));
+}
+
 /* Diagnostic — confirms every page is talking to the same Firebase app/project.
    Compare projectId across the athlete and expert consoles when debugging sync issues. */
 console.log('[FIREBASE] app options', firebase.app().options);

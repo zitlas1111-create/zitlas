@@ -10,3 +10,5 @@ faiss-cpu
 pymupdf
 email-validator==2.2.0
 psutil
+google-cloud-firestore
+apscheduler

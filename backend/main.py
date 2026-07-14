@@ -40,6 +40,7 @@ from routes import rag
 from routes import review
 from routes import system
 from routes import certificates
+from routes import coaching
 from services import rag_service
 
 # ── Directory paths ──────────────────────────────────────────────────────────
@@ -59,8 +60,19 @@ async def _prewarm_kb(goal: str) -> None:
         print(f"[STARTUP] {goal} KB pre-warm failed (non-fatal): {exc}")
 
 
+# Personal Coaching escrow — releases reservations the expert never
+# responded to within 48h. In-process (not an external cron) by deliberate
+# choice: this backend runs as a single Render free-tier web service with
+# no cron/worker slot; sweeps simply pause while the dyno is asleep on
+# inactivity and catch up on the next wake, which is an accepted tradeoff
+# for this deployment. See services/coaching_sweep.py.
+_coaching_scheduler = None
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global _coaching_scheduler
+
     # Startup: initialize logger + environment only.
     # rag_service.initialize() is now a lightweight no-op that sets _is_ready=True.
     await asyncio.to_thread(rag_service.initialize)
@@ -79,7 +91,24 @@ async def lifespan(app: FastAPI):
     else:
         print("[STARTUP] KB pre-warm disabled (DISABLE_KB_PREWARM=true) — KBs load on first request")
 
+    try:
+        from apscheduler.schedulers.asyncio import AsyncIOScheduler
+        from services.coaching_sweep import sweep_expired_requests
+
+        _coaching_scheduler = AsyncIOScheduler()
+        _coaching_scheduler.add_job(
+            lambda: asyncio.create_task(asyncio.to_thread(sweep_expired_requests)),
+            "interval", minutes=15, id="coaching_sweep",
+        )
+        _coaching_scheduler.start()
+        print("[STARTUP] coaching expiry sweep scheduled (every 15 min)")
+    except Exception as exc:
+        print(f"[STARTUP] coaching sweep scheduler failed to start (non-fatal): {exc}")
+
     yield
+
+    if _coaching_scheduler is not None:
+        _coaching_scheduler.shutdown(wait=False)
 
 
 # ── App ──────────────────────────────────────────────────────────────────────
@@ -114,6 +143,7 @@ app.include_router(review.router,     prefix="/api/review",     tags=["Review"])
 app.include_router(system.router,     prefix="/api/system",     tags=["System"])
 app.include_router(chat.router,       prefix="/api/chat",       tags=["Chat"])
 app.include_router(certificates.router, prefix="/api/certificates", tags=["Certificates"])
+app.include_router(coaching.router,     prefix="/api/coaching",    tags=["Coaching"])
 
 # ── Root redirect ────────────────────────────────────────────────────────────
 @app.get("/")

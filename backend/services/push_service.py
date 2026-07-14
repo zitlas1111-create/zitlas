@@ -6,10 +6,8 @@ users/{uid}.pushTokens (assets/js/push-notifications.js). Uses the FCM
 HTTP v1 API with a Firebase service account — google-auth is already a
 transitive dependency of google-genai, so no new requirements.
 
-Configuration (either one):
-  FIREBASE_SERVICE_ACCOUNT_JSON  — the service-account JSON as an env string
-                                   (recommended on Render: paste the JSON)
-  FIREBASE_SERVICE_ACCOUNT_FILE  — path to the service-account .json file
+Credential loading (env var names, configuration) lives in
+services/google_credentials.py, shared with services/firestore_service.py.
 
 Without credentials every send is a clean no-op that reports
 {"configured": false} — nothing in the app depends on push succeeding.
@@ -19,42 +17,17 @@ accounts -> Generate new private key.
 
 from __future__ import annotations
 
-import json
-import os
 from typing import Any
+
+from services.google_credentials import load_credentials, last_error
 
 _PROJECT_ID = "zitlas-b8677"
 _FCM_URL = f"https://fcm.googleapis.com/v1/projects/{_PROJECT_ID}/messages:send"
 _SCOPE = "https://www.googleapis.com/auth/firebase.messaging"
 
-_credentials = None
-_cred_error: str | None = None
-
 
 def _load_credentials():
-    """Lazy-load and cache service-account credentials. Returns None (and
-    records why) when unconfigured — callers treat that as 'push disabled'."""
-    global _credentials, _cred_error
-    if _credentials is not None or _cred_error is not None:
-        return _credentials
-    try:
-        from google.oauth2 import service_account
-
-        raw = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON")
-        path = os.getenv("FIREBASE_SERVICE_ACCOUNT_FILE")
-        if raw:
-            info = json.loads(raw)
-            _credentials = service_account.Credentials.from_service_account_info(info, scopes=[_SCOPE])
-        elif path and os.path.exists(path):
-            _credentials = service_account.Credentials.from_service_account_file(path, scopes=[_SCOPE])
-        else:
-            _cred_error = ("No FCM credentials: set FIREBASE_SERVICE_ACCOUNT_JSON (the JSON string) "
-                           "or FIREBASE_SERVICE_ACCOUNT_FILE (a path) in the environment.")
-    except Exception as e:  # bad JSON, wrong key type, import failure
-        _cred_error = f"{type(e).__name__}: {e}"
-    if _cred_error:
-        print(f"[PUSH] disabled — {_cred_error}")
-    return _credentials
+    return load_credentials([_SCOPE])
 
 
 def is_configured() -> bool:
@@ -74,7 +47,7 @@ def send_to_token(token: str, title: str, body: str, data: dict[str, str] | None
     Returns {ok, status, detail}; never raises for delivery failures so a
     dead token in a user's list can't break the loop over their devices."""
     if not is_configured():
-        return {"ok": False, "configured": False, "detail": _cred_error}
+        return {"ok": False, "configured": False, "detail": last_error([_SCOPE])}
 
     import requests
 

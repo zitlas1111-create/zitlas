@@ -3790,14 +3790,17 @@
     var _selectedPlan = null;
     var _prevReqStatuses = {}; /* requestId → last seen status (for decline/accept toasts) */
 
+    /* 'accepted' is no longer an observable status — accept debits and
+       activates atomically server-side (routes/coaching.py), so a request
+       goes straight from 'pending' to 'active' with nothing in between. */
     function _openRequestFor(expertId) {
       return _myRequests.find(function(r) {
-        return r.expertId === expertId && (r.status === 'pending' || r.status === 'accepted');
+        return r.expertId === expertId && r.status === 'pending';
       }) || null;
     }
     function _anyOpenRequest() {
       return _myRequests.find(function(r) {
-        return r.status === 'pending' || r.status === 'accepted';
+        return r.status === 'pending';
       }) || null;
     }
 
@@ -3807,11 +3810,10 @@
       var relMine = _coachingIsActive(_myCoaching) && _myCoaching.coachId === coach.id;
       var req     = _openRequestFor(coach.id);
       buttons.forEach(function(btn) {
-        btn.classList.toggle('cp-coach-active', relMine || (req && req.status === 'pending'));
-        if (relMine)                        btn.innerHTML = COACH_SVG + ' Your Coach ✓';
-        else if (req && req.status === 'accepted') btn.innerHTML = COACH_SVG + ' Complete Payment ₹' + req.price;
-        else if (req)                       btn.innerHTML = COACH_SVG + ' Coaching Requested';
-        else                                btn.innerHTML = COACH_SVG + ' Personal Coach';
+        btn.classList.toggle('cp-coach-active', relMine || !!req);
+        if (relMine)      btn.innerHTML = COACH_SVG + ' Your Coach ✓';
+        else if (req)     btn.innerHTML = COACH_SVG + ' 🔒 Payment Reserved';
+        else              btn.innerHTML = COACH_SVG + ' Personal Coach';
       });
       if (endWrap) endWrap.style.display = relMine ? 'block' : 'none';
     }
@@ -3879,7 +3881,6 @@
           return;
         }
         var req = _openRequestFor(coach.id);
-        if (req && req.status === 'accepted') { _payAndActivate(req); return; }
         if (req) { showToast('Your coaching request is awaiting ' + (coach.name || 'the expert') + "'s response."); return; }
         var other = _anyOpenRequest();
         if (other) {
@@ -3890,131 +3891,70 @@
       });
     });
 
-    /* Send Coaching Request — NO payment at this stage */
+    /* Send Coaching Request — reserves (locks) the plan price server-side
+       the instant this is sent (backend/routes/coaching.py POST /request).
+       Nothing is spent until the expert accepts — see accept_request,
+       which auto-debits and activates atomically, no manual payment step.
+       The client-side balance check below is a fast, DISPLAY-ONLY
+       pre-check; the backend re-validates authoritatively inside its own
+       transaction and is the only party that can actually move money. */
     if (sendBtn) {
       sendBtn.addEventListener('click', function() {
         if (!_selectedPlan) return;
-        if (typeof ZitlasDB === 'undefined') { showToast('Connection unavailable — please try again.'); return; }
         var uid = _getMyUserId();
         if (!uid) { showToast('Please sign in first.'); return; }
+        if (typeof getIdToken !== 'function') { showToast('Connection unavailable — please try again.'); return; }
 
         var plan = COACHING_PLANS[_selectedPlan];
-        var request = {
-          requestId:   'PCR_' + Date.now(),
-          athleteId:   uid,
-          athleteName: getAthleteName(),
-          expertId:    coach.id,
-          expertName:  coach.name || 'Expert',
-          planType:    _selectedPlan,
-          planLabel:   plan.label,
-          price:       plan.price,
-          status:      'pending',
-          createdAt:   new Date().toISOString(),
-        };
-        console.log('[COACHING] creating request — personal_coach_requests/' + request.requestId, request);
-
-        sendBtn.disabled = true;
-        sendBtn.textContent = 'Sending…';
-        ZitlasDB.collection('personal_coach_requests').doc(request.requestId).set(request)
-          .then(function() {
-            console.log('[COACHING] request created', request.requestId);
-            closeCoachingSheet();
-            showToast('📨 Coaching request sent to ' + request.expertName + '!');
-          })
-          .catch(function(err) {
-            console.error('[COACHING] request failed', err);
-            showToast('Could not send request — please try again.');
-          })
-          .then(function() {
-            sendBtn.disabled = false;
-            sendBtn.textContent = 'Send Coaching Request';
-          });
-      });
-    }
-
-    /* Payment → activation. Runs only AFTER the expert accepted. Wallet
-       deduction happens here, inside ZitlasPayment.attemptCharge's Firestore
-       transaction (re-checks paymentStatus fresh, so a double-click or a
-       second tab can never charge twice) — never a fake success. */
-    function _payAndActivate(req) {
-      var uid = _getMyUserId();
-      if (!uid || typeof ZitlasPayment === 'undefined' || typeof ZitlasDB === 'undefined') {
-        showToast('Unable to process payment — please try again.');
-        return;
-      }
-      var now     = new Date();
-      var endDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-      var docRef  = ZitlasDB.collection('personal_coaching').doc(uid);
-      var amount  = Number(req.price) || 0;
-
-      ZitlasPayment.attemptCharge({
-        userId: uid, expertId: req.expertId, amount: amount,
-        serviceType: 'coaching', serviceLabel: req.planLabel || 'Personal Coaching', expertName: req.expertName,
-        requestCollection: 'personal_coach_requests', requestId: req.requestId,
-        onSuccessUpdate: { status: 'active', activatedAt: now.toISOString() },
-        notifyUser: {
-          title: '🎉 Coaching started!',
-          message: (req.expertName || 'Your coach') + ' is now your Personal Coach. ₹' + amount + ' has been deducted from your wallet.',
-        },
-        notifyExpert: {
-          title: '🎉 Payment received',
-          message: (req.athleteName || getAthleteName() || 'An athlete') + ' just started coaching with you.',
-        },
-      }).then(function (result) {
-        if (!result.success) {
-          if (result.error === 'insufficient_balance') {
-            ZitlasPayment.showLowBalancePopup({ balance: result.balance, required: result.required, walletDocStatus: result.walletDocStatus });
+        var w = {};
+        try { w = JSON.parse(localStorage.getItem('zitlas_wallet') || '{}') || {}; } catch (_) {}
+        var available = Number(w.balance || 0) - Number(w.reserved || 0);
+        if (available < plan.price) {
+          if (typeof ZitlasPayment !== 'undefined') {
+            ZitlasPayment.showLowBalancePopup({ balance: available, required: plan.price });
           } else {
-            console.error('[COACHING] payment failed', result);
-            showToast('Could not process payment — please try again.');
+            showToast('Insufficient wallet balance — please recharge.');
           }
           return;
         }
 
-        var payload = {
-          coachId:        req.expertId,
-          coachName:      req.expertName,
-          athleteId:      uid,
-          athleteName:    req.athleteName || getAthleteName(),
-          planType:       req.planType,
-          planLabel:      req.planLabel,
-          startDate:      now.toISOString(),
-          endDate:        endDate.toISOString(),
-          status:         'active',
-          subscriptionId: 'sub_' + Date.now(),
-          paymentId:      result.transactionId || 'wallet',
-          fee:            amount,
-          requestId:      req.requestId,
-        };
-        console.log('[COACHING] activating — personal_coaching/' + uid, payload);
+        sendBtn.disabled = true;
+        sendBtn.textContent = 'Sending…';
 
-        ZitlasDB.runTransaction(function(tx) {
-          return tx.get(docRef).then(function(snap) {
-            var rel = snap.exists ? snap.data() : null;
-            if (_coachingIsActive(rel) && rel.coachId !== req.expertId) throw new Error('other_coach_active');
-            tx.set(docRef, payload);
+        getIdToken().then(function(token) {
+          return fetch('/api/coaching/request', {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ expertId: coach.id, planType: _selectedPlan }),
           });
-        }).then(function() {
-          /* Publish this athlete's AI context to the coaching workspace right
-             away so the coach sees profile/metrics/SWOT without waiting for
-             the athlete to open the workspace first. */
-          var ctx = buildContextPackage();
-          try { ctx.goal = JSON.parse(localStorage.getItem('zitlas_goal') || 'null'); } catch(_) {}
-          try { ctx.precautions = JSON.parse(localStorage.getItem('zitlas_precautions') || 'null'); } catch(_) {}
-          return ZitlasDB.collection('coaching_plans').doc(uid).set({
-            athleteId: uid, athleteName: payload.athleteName,
-            coachId: payload.coachId, coachName: payload.coachName,
-            planType: payload.planType,
-            athleteContext: ctx,
-            athleteContextUpdatedAt: new Date().toISOString(),
-          }, { merge: true }).catch(function(e) { console.warn('[COACHING] context publish failed', e); });
-        }).then(function() {
-          showToast('🎉 ' + req.expertName + ' is now your personal coach!');
+        }).then(function(res) {
+          return res.json().catch(function() { return {}; }).then(function(data) {
+            return { status: res.status, data: data };
+          });
+        }).then(function(result) {
+          if (result.status === 200 && result.data.success) {
+            console.log('[COACHING] request reserved — personal_coach_requests/' + result.data.requestId);
+            closeCoachingSheet();
+            showToast('📨 Request sent — ₹' + result.data.amount + ' reserved. You’ll only be charged if ' + (coach.name || 'the expert') + ' accepts.');
+            return;
+          }
+          if (result.status === 402) {
+            var detail = result.data.detail || {};
+            if (typeof ZitlasPayment !== 'undefined') {
+              ZitlasPayment.showLowBalancePopup({ balance: detail.available, required: detail.required });
+            }
+          } else if (result.status === 409) {
+            showToast('You already have an open coaching request.');
+          } else {
+            console.error('[COACHING] request failed', result);
+            showToast('Could not send request — please try again.');
+          }
         }).catch(function(err) {
-          console.error('[COACHING] activation failed:', err && err.message);
-          showToast(err && err.message === 'other_coach_active'
-            ? 'You already have an active coach. One coach at a time.'
-            : 'Payment succeeded but activation failed — please contact support.');
+          console.error('[COACHING] request failed', err);
+          showToast(err && err.message === 'not_signed_in' ? 'Please sign in first.' : 'Could not send request — please try again.');
+        }).then(function() {
+          sendBtn.disabled = false;
+          sendBtn.textContent = 'Send Coaching Request';
         });
       });
     }
@@ -4104,29 +4044,20 @@
             console.log('[COACHING] my requests:', _myRequests.map(function(r) {
               return r.requestId + ':' + r.status;
             }));
-            /* Status-transition toasts (decline / accept notifications) */
+            /* Status-transition toasts. Notification DOCS are now written
+               server-side (backend/routes/coaching.py accept/reject,
+               services/coaching_sweep.py expiry) — this only drives an
+               immediate in-session toast for an athlete already on this
+               page, without sending a second duplicate notification. */
             _myRequests.forEach(function(r) {
               var prev = _prevReqStatuses[r.requestId];
               if (prev && prev !== r.status) {
                 if (r.status === 'declined') {
-                  showToast('Your coaching request was declined.');
-                  if (typeof ZitlasNotify !== 'undefined') {
-                    ZitlasNotify.send(uid, {
-                      title: 'Coaching request declined',
-                      message: (r.expertName || 'The expert') + ' declined your ' + (r.planLabel || 'coaching') + ' request.',
-                      category: 'expert', type: 'coaching_declined', action: 'coaches',
-                    });
-                  }
-                } else if (r.status === 'accepted') {
-                  showToast('✅ ' + (r.expertName || 'The expert') + ' accepted your coaching request! Tap Personal Coach to complete payment.');
-                  if (typeof ZitlasNotify !== 'undefined') {
-                    ZitlasNotify.send(uid, {
-                      title: '🎉 ' + (r.expertName || 'The expert') + ' accepted your request',
-                      message: 'Complete payment to start your ' + (r.planLabel || 'coaching') + ' plan.',
-                      category: 'expert', type: 'coaching_accepted', action: 'expert_profile', actionId: r.expertId,
-                      priority: 'high',
-                    });
-                  }
+                  showToast('Your coaching request was declined. Reserved amount released.');
+                } else if (r.status === 'expired') {
+                  showToast('Your coaching request expired. Reserved amount released.');
+                } else if (r.status === 'active') {
+                  showToast('🎉 ' + (r.expertName || 'The expert') + ' accepted — coaching started!');
                 }
               }
               _prevReqStatuses[r.requestId] = r.status;
