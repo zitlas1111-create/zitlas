@@ -2411,7 +2411,7 @@
         }
         updateVerifyBtnState(coach);
       } else if (result.error === 'insufficient_balance') {
-        ZitlasPayment.showLowBalancePopup({ balance: result.balance, required: result.required });
+        ZitlasPayment.showLowBalancePopup({ balance: result.balance, required: result.required, walletDocStatus: result.walletDocStatus });
       } else {
         console.error('[REVIEW] retry payment failed', result);
         showToast('Could not process payment — please try again.');
@@ -3963,7 +3963,7 @@
       }).then(function (result) {
         if (!result.success) {
           if (result.error === 'insufficient_balance') {
-            ZitlasPayment.showLowBalancePopup({ balance: result.balance, required: result.required });
+            ZitlasPayment.showLowBalancePopup({ balance: result.balance, required: result.required, walletDocStatus: result.walletDocStatus });
           } else {
             console.error('[COACHING] payment failed', result);
             showToast('Could not process payment — please try again.');

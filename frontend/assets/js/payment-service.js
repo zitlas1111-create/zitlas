@@ -85,13 +85,34 @@
           return;
         }
 
+        /* Audit requirement: never silently default to 0 without saying so.
+           userSnap.exists=false or .wallet undefined are DIFFERENT diagnoses
+           from "balance genuinely is 0" — walletDocStatus carries that
+           distinction through to the caller so the UI can say "your wallet
+           hasn't synced yet" instead of implying the athlete has no money. */
+        var walletDocStatus = !userSnap.exists ? 'user_doc_missing'
+                             : !userSnap.data().wallet ? 'wallet_field_missing'
+                             : 'ok';
         var wallet  = (userSnap.exists && userSnap.data().wallet) ? userSnap.data().wallet : _defaultWallet();
         var balance = Number(wallet.balance || 0);
+
+        console.log('[WALLET]');
+        console.log('[WALLET] uid=' + userId);
+        console.log('[WALLET] walletPath=users/' + userId + '.wallet');
+        console.log('[WALLET] documentExists=' + userSnap.exists);
+        console.log('[WALLET] walletFieldStatus=' + walletDocStatus);
+        console.log('[WALLET] rawData=', userSnap.exists ? userSnap.data() : null);
+        console.log('[WALLET] balance=' + balance + ' (typeof stored value=' +
+                    (userSnap.exists && userSnap.data().wallet ? typeof userSnap.data().wallet.balance : 'n/a') + ')');
+        console.log('[WALLET] required=' + amount);
+        console.log('[WALLET] comparison=' + (balance >= amount ? 'SUFFICIENT' : 'INSUFFICIENT') +
+                    ' (balance ' + balance + (balance >= amount ? ' >= ' : ' < ') + amount + ')');
 
         if (amount > 0 && balance < amount) {
           outcome = {
             success: false, error: 'insufficient_balance',
             balance: balance, required: amount, shortfall: amount - balance,
+            walletDocStatus: walletDocStatus,
           };
           // Deliberately does NOT apply onSuccessUpdate — payment failed, so
           // the request must not advance to an active/serving state. `status`
@@ -170,6 +191,88 @@
     });
   }
 
+  /**
+   * creditWallet({ userId, amount, method, description }) -> Promise<{success, balance, transactionId, error?}>
+   *
+   * THE single place money is ADDED to a wallet — the credit-side sibling of
+   * attemptCharge() above. Runs inside the same db.runTransaction() pattern
+   * (atomic read-then-write against the live Firestore balance, never a
+   * blind "local cache + amount" increment), so it is correct regardless of
+   * which page calls it and never depends on cloud-sync.js being loaded.
+   *
+   * ROOT CAUSE THIS REPLACES: wallet.js's old creditFunds() computed
+   * getWallet().balance + amount from localStorage and wrote the result via
+   * ZitlasCloudSync.saveCloudOnly(), which (a) silently no-ops when
+   * cloud-sync.js isn't loaded on the page — true for coaches.html,
+   * cprofile.html, dietitian.html, help-support.html, and membership.html,
+   * confirmed by grepping every page that loads wallet.js — and (b) even
+   * when it IS loaded, swallows any write failure into a console.warn with
+   * no user-facing signal. The result: the Add Funds button could show
+   * "✅ Added to wallet!" while the money never reached the users/{uid}
+   * document that attemptCharge() actually reads at charge time — exactly
+   * the "Wallet page shows a balance, payment popup shows ₹0" symptom this
+   * fixes. Audited live: 0 of 13 real user documents in production had a
+   * wallet field at all before this fix.
+   */
+  function creditWallet(opts) {
+    var db = win.ZitlasDB;
+    if (!db) return Promise.resolve({ success: false, error: 'no_db' });
+    var userId = opts.userId;
+    if (!userId) return Promise.resolve({ success: false, error: 'missing_user' });
+    var amount = Math.max(0, Number(opts.amount) || 0);
+    if (amount <= 0) return Promise.resolve({ success: false, error: 'invalid_amount' });
+
+    var userRef = db.collection('users').doc(userId);
+    var txnId   = _newTxnId();
+    var txnRef  = db.collection('wallet_transactions').doc(txnId);
+    var result  = null;
+
+    return db.runTransaction(function (tx) {
+      return tx.get(userRef).then(function (userSnap) {
+        var wallet       = (userSnap.exists && userSnap.data().wallet) ? userSnap.data().wallet : _defaultWallet();
+        var walletBefore = Number(wallet.balance || 0);
+        var walletAfter  = walletBefore + amount;
+
+        console.log('[WALLET]');
+        console.log('[WALLET] operation=credit (recharge)');
+        console.log('[WALLET] uid=' + userId);
+        console.log('[WALLET] walletPath=users/' + userId + '.wallet');
+        console.log('[WALLET] documentExists=' + userSnap.exists);
+        console.log('[WALLET] rawData(before)=', userSnap.exists ? userSnap.data() : null);
+        console.log('[WALLET] balance(before)=' + walletBefore);
+        console.log('[WALLET] amount=' + amount);
+        console.log('[WALLET] balance(after)=' + walletAfter);
+
+        var newWallet = {
+          balance:      walletAfter,
+          total_added:  Number(wallet.total_added || 0) + amount,
+          total_spent:  Number(wallet.total_spent || 0),
+          transactions: Array.isArray(wallet.transactions) ? wallet.transactions.slice() : [],
+        };
+        newWallet.transactions.push({
+          id: txnId, type: 'credit', amount: amount,
+          description: opts.description || ('Added Funds via ' + (opts.method || 'wallet')),
+          date: new Date().toISOString(),
+        });
+
+        tx.set(userRef, { wallet: newWallet, walletUpdatedAt: new Date().toISOString() }, { merge: true });
+        tx.set(txnRef, {
+          transactionId: txnId, serviceType: 'wallet_recharge', userId: userId,
+          amount: amount, walletBefore: walletBefore, walletAfter: walletAfter,
+          method: opts.method || null, status: 'success', createdAt: new Date().toISOString(),
+        });
+
+        result = { walletBefore: walletBefore, walletAfter: walletAfter };
+      });
+    }).then(function () {
+      return { success: true, transactionId: txnId, balance: result.walletAfter, walletBefore: result.walletBefore };
+    }).catch(function (err) {
+      console.error('[WALLET] creditWallet FAILED — uid=' + userId + ' amount=' + amount +
+                    ' code=' + (err && err.code) + ' message=' + (err && err.message));
+      return { success: false, error: (err && err.message) || 'transaction_failed' };
+    });
+  }
+
   /* ══════════════════════════════════════════
      LOW BALANCE POPUP — shared, self-injecting
   ══════════════════════════════════════════ */
@@ -204,6 +307,13 @@
     var balance   = Number(opts.balance || 0);
     var required  = Number(opts.required || 0);
     var shortfall = Math.max(0, required - balance);
+    /* Audit requirement: never let a ₹0 balance look like "your wallet is
+       empty" when it actually means "your wallet has never synced to the
+       server" — those are different problems with different fixes (the
+       first needs money, the second needs a page reload / re-login). */
+    var syncNote = (opts.walletDocStatus === 'user_doc_missing' || opts.walletDocStatus === 'wallet_field_missing')
+      ? '<p class="zpay-sub" style="color:#B35900;font-weight:700;">⚠️ Your wallet hasn\'t synced to the server yet. If you\'ve added funds before, try reloading this page — your balance shown elsewhere may be a stale local copy.</p>'
+      : '';
 
     var existing = document.getElementById('zpayLowBalanceOverlay');
     if (existing) existing.remove();
@@ -216,6 +326,7 @@
         '<div class="zpay-icon">💰</div>' +
         '<h3 class="zpay-title">Insufficient Wallet Balance</h3>' +
         '<p class="zpay-sub">You need &#8377;' + shortfall.toLocaleString('en-IN') + ' more to start this service.</p>' +
+        syncNote +
         '<div class="zpay-row"><span>Current Balance</span><span>&#8377;' + balance.toLocaleString('en-IN') + '</span></div>' +
         '<div class="zpay-row"><span>Required</span><span>&#8377;' + required.toLocaleString('en-IN') + '</span></div>' +
         '<button class="zpay-btn zpay-btn--primary" id="zpayRechargeBtn" type="button">Recharge Wallet</button>' +
@@ -247,6 +358,7 @@
   win.ZitlasPayment = {
     PLATFORM_FEE_PERCENT: PLATFORM_FEE_PERCENT,
     attemptCharge: attemptCharge,
+    creditWallet: creditWallet,
     showLowBalancePopup: showLowBalancePopup,
   };
 })(window);

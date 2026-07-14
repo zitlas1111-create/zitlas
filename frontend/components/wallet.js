@@ -565,24 +565,67 @@
      FUND OPERATIONS
   ══════════════════════════════════════════ */
 
+  /* Recharge — routes through ZitlasPayment.creditWallet(), a Firestore
+     transaction that reads-then-writes the LIVE users/{uid}.wallet
+     document directly. This used to be a local "getWallet().balance +
+     amount" increment persisted only via ZitlasCloudSync.saveCloudOnly(),
+     which (a) silently no-ops on any page that doesn't happen to load
+     cloud-sync.js — true for several pages that DO load this wallet
+     component — and (b) swallowed write failures into a console.warn with
+     no user-facing signal either way. The result was a wallet that could
+     show a healthy balance here while the server-side balance
+     ZitlasPayment.attemptCharge() actually charges against stayed at
+     whatever it last was — confirmed against real production data (0 of 13
+     real users had a wallet field in Firestore before this fix). Every
+     page that loads this component now also loads payment-service.js, so
+     this path is always available — never an optional/best-effort sync. */
   function creditFunds(amount, method) {
-    var w = getWallet();
-    w.balance     += amount;
-    w.total_added += amount;
-    w.transactions.push({
-      id:          'txn_' + Date.now(),
-      type:        'credit',
-      amount:      amount,
-      description: 'Added Funds via ' + {upi:'UPI',credit:'Credit Card',debit:'Debit Card',netbank:'Net Banking'}[method] || method,
-      date:        new Date().toISOString(),
+    var uid = (typeof ZitlasAuth !== 'undefined' && ZitlasAuth.currentUser) ? ZitlasAuth.currentUser.uid : null;
+    if (!uid || typeof ZitlasPayment === 'undefined' || typeof ZitlasPayment.creditWallet !== 'function') {
+      console.error('[WALLET] creditFunds aborted — uid=' + uid + ' ZitlasPayment available=' + (typeof ZitlasPayment !== 'undefined'));
+      toast('❌ Could not add funds — please sign in and try again.');
+      return;
+    }
+    var methodLabel = {upi:'UPI',credit:'Credit Card',debit:'Debit Card',netbank:'Net Banking'}[method] || method;
+    var payBtn = el('zwPayBtn');
+    if (payBtn) { payBtn.disabled = true; payBtn.textContent = 'Processing…'; }
+
+    ZitlasPayment.creditWallet({
+      userId: uid, amount: amount, method: method,
+      description: 'Added Funds via ' + methodLabel,
+    }).then(function (result) {
+      if (!result.success) {
+        console.error('[WALLET] recharge failed', result);
+        toast('❌ Could not add funds — please try again.');
+        if (payBtn) { payBtn.disabled = false; payBtn.textContent = 'Pay ₹' + Number(amount).toLocaleString('en-IN'); }
+        return;
+      }
+      /* Sync the LOCAL cache from the CONFIRMED server balance — never a
+         blind increment. This is what makes the wallet page and the
+         payment popup agree: both now ultimately trace back to the same
+         Firestore write, not two independent local computations. */
+      var w = getWallet();
+      w.balance     = result.balance;
+      w.total_added = Number(w.total_added || 0) + amount;
+      w.transactions.push({
+        id: result.transactionId, type: 'credit', amount: amount,
+        description: 'Added Funds via ' + methodLabel,
+        date: new Date().toISOString(),
+      });
+      saveWallet(w);
+      syncBtnLabel(w.balance);
+      showDot();
+      showView('main');
+      toast('✅ ' + fmtAmt(amount) + ' added to your wallet!');
     });
-    saveWallet(w);
-    syncBtnLabel(w.balance);
-    showDot();
-    showView('main');
-    toast('✅ ' + fmtAmt(amount) + ' added to your wallet!');
   }
 
+  /* Local-cache-only, synchronous — NOT wired to any real payment flow
+     (grepped: zero callers of ZitlasWallet.deduct anywhere in the project;
+     every real debit goes through ZitlasPayment.attemptCharge()'s Firestore
+     transaction instead). Kept for API compatibility but deliberately not
+     the pattern to copy — see creditFunds() above for why a local-only
+     balance write is the bug class this whole file just moved away from. */
   function deductFunds(amount, description) {
     var w = getWallet();
     if (w.balance < amount) return false;
@@ -784,11 +827,24 @@
     getBalance: function()             { return getWallet().balance; },
     canAfford:  function(n)            { return getWallet().balance >= n; },
     deduct:     function(n, desc)      { return deductFunds(n, desc); },
+    /* Delegates to the same Firestore-transactional path as the Add Funds
+       UI (creditFunds above) — one wallet service, not a second local-only
+       balance computation. Returns the creditWallet() promise so a caller
+       can tell success from failure (the old version couldn't fail loudly
+       even if it wanted to — it only ever touched localStorage). */
     credit:     function(n, desc)      {
-      var w = getWallet();
-      w.balance += n; w.total_added += n;
-      w.transactions.push({ id:'txn_'+Date.now(), type:'credit', amount:n, description: desc||'Credit', date: new Date().toISOString() });
-      saveWallet(w); syncBtnLabel(w.balance); showDot();
+      var uid = (typeof ZitlasAuth !== 'undefined' && ZitlasAuth.currentUser) ? ZitlasAuth.currentUser.uid : null;
+      if (!uid || typeof ZitlasPayment === 'undefined') return Promise.resolve({ success: false, error: 'not_signed_in' });
+      return ZitlasPayment.creditWallet({ userId: uid, amount: n, description: desc || 'Credit' }).then(function (result) {
+        if (result.success) {
+          var w = getWallet();
+          w.balance = result.balance;
+          w.total_added = Number(w.total_added || 0) + n;
+          w.transactions.push({ id: result.transactionId, type: 'credit', amount: n, description: desc || 'Credit', date: new Date().toISOString() });
+          saveWallet(w); syncBtnLabel(w.balance); showDot();
+        }
+        return result;
+      });
     },
     openPanel:  openPanel,
     openAddFunds: function()           { openPanel(); showView('addFunds'); },
