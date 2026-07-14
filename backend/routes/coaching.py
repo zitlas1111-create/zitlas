@@ -154,6 +154,22 @@ async def create_request(body: RequestBody, caller: dict = Depends(verify_fireba
                   f"({[d.id for d in existing]})")
             raise HTTPException(status_code=409, detail="open_request_exists")
 
+        # Active-relationship guard: an athlete already mid-subscription
+        # can't reserve money for (and thus double-book) a second coach.
+        # Checks endDateTs, not just status=='active' — a relationship
+        # whose 30 days have passed but hasn't been swept yet (the sweep
+        # runs every 15 min, see services/coaching_sweep.py) must NOT block
+        # renewal; the athlete shouldn't have to wait on the sweep.
+        rel_snap = db.collection("personal_coaching").document(athlete_uid).get(transaction=tx)
+        if rel_snap.exists:
+            rel_data = rel_snap.to_dict() or {}
+            rel_end = rel_data.get("endDateTs")
+            still_active = rel_data.get("status") == "active" and rel_end is not None and rel_end > now()
+            if still_active:
+                print(f"[COACHING REQUEST] blocked — athlete already has an active "
+                      f"coaching relationship with coachId={rel_data.get('coachId')}")
+                raise HTTPException(status_code=409, detail="active_coaching_exists")
+
         user_snap = user_ref.get(transaction=tx)
         user_data = user_snap.to_dict() if user_snap.exists else {}
         wallet = dict((user_data or {}).get("wallet") or {})
@@ -298,6 +314,13 @@ async def accept_request(body: ActionBody, caller: dict = Depends(verify_firebas
             "athleteId": athlete_uid, "athleteName": req.get("athleteName"),
             "planType": req.get("planType"), "planLabel": req.get("planLabel"),
             "startDate": _now.isoformat(), "endDate": end_date.isoformat(),
+            # endDateTs is a NATIVE Firestore Timestamp (the raw datetime
+            # object, not .isoformat()) — Firestore Security Rules'
+            # request.time is a Timestamp and can't be compared against the
+            # string endDate above. endDate stays for JS `new Date(...)`
+            # parsing (coaching-gate.js and friends); endDateTs exists
+            # purely for rules and this sweep's own query to compare against.
+            "endDateTs": end_date,
             "status": "active", "subscriptionId": "sub_" + str(int(_now.timestamp() * 1000)),
             "paymentId": wallet_txn_id, "fee": amount, "requestId": body.requestId,
         })

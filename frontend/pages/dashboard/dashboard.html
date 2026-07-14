@@ -29,6 +29,7 @@
   <script src="../../assets/js/activity-service.js?v=20260711"></script>
   <script src="../../assets/js/step-sensor.js?v=20260711b"></script>
   <script src="../../assets/js/activity-sync.js?v=20260711b"></script>
+  <script src="../../assets/js/daily-score.js?v=20260719"></script>
 </head>
 <body class="zitlas-premium-bg">
 
@@ -172,6 +173,38 @@
       </div>
       <div id="stepCounterContent">
         <!-- populated by renderStepCounterCard() -->
+      </div>
+    </section>
+
+    <!-- ── DAILY SCORE + TIMELINE ── -->
+    <section class="daily-score-section" id="dailyScoreSection" style="display:none">
+      <div class="section-header">
+        <div class="section-header-left">
+          <div class="widget-badge">🎯</div>
+          <div>
+            <h2 class="section-title">Today's Score</h2>
+            <p class="roadmap-sub">AI + Coach combined</p>
+          </div>
+        </div>
+      </div>
+      <div id="dailyScoreContent">
+        <!-- populated by renderDailyScoreCard() -->
+      </div>
+    </section>
+
+    <!-- ── DAILY WELLNESS (water / sleep / weight) ── -->
+    <section class="wellness-section" id="wellnessSection">
+      <div class="section-header">
+        <div class="section-header-left">
+          <div class="widget-badge">💧</div>
+          <div>
+            <h2 class="section-title">Daily Wellness</h2>
+            <p class="roadmap-sub">Water, sleep &amp; weight</p>
+          </div>
+        </div>
+      </div>
+      <div id="wellnessContent">
+        <!-- populated by renderWellnessCard() -->
       </div>
     </section>
 

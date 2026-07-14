@@ -41,6 +41,7 @@ from routes import review
 from routes import system
 from routes import certificates
 from routes import coaching
+from routes import meal_ai
 from services import rag_service
 
 # ── Directory paths ──────────────────────────────────────────────────────────
@@ -107,15 +108,22 @@ async def lifespan(app: FastAPI):
 
     try:
         from apscheduler.schedulers.asyncio import AsyncIOScheduler
-        from services.coaching_sweep import sweep_expired_requests
+        from services.coaching_sweep import sweep_expired_relationships, sweep_expired_requests
 
         _coaching_scheduler = AsyncIOScheduler()
         _coaching_scheduler.add_job(
             lambda: asyncio.create_task(asyncio.to_thread(sweep_expired_requests)),
             "interval", minutes=15, id="coaching_sweep",
         )
+        # Separate job, same interval — a 30-day expiry window doesn't need
+        # finer granularity than the 48h one, and reusing the interval
+        # avoids standing up a second scheduler for it.
+        _coaching_scheduler.add_job(
+            lambda: asyncio.create_task(asyncio.to_thread(sweep_expired_relationships)),
+            "interval", minutes=15, id="coaching_relationship_sweep",
+        )
         _coaching_scheduler.start()
-        print("[STARTUP] coaching expiry sweep scheduled (every 15 min)")
+        print("[STARTUP] coaching expiry sweeps scheduled (48h requests + 30d relationships, every 15 min)")
     except Exception as exc:
         print(f"[STARTUP] coaching sweep scheduler failed to start (non-fatal): {exc}")
 
@@ -158,6 +166,7 @@ app.include_router(system.router,     prefix="/api/system",     tags=["System"])
 app.include_router(chat.router,       prefix="/api/chat",       tags=["Chat"])
 app.include_router(certificates.router, prefix="/api/certificates", tags=["Certificates"])
 app.include_router(coaching.router,     prefix="/api/coaching",    tags=["Coaching"])
+app.include_router(meal_ai.router,      prefix="/api/meal",        tags=["Meal AI"])
 
 # ── Root redirect ────────────────────────────────────────────────────────────
 @app.get("/")

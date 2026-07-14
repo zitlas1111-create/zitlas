@@ -48,6 +48,8 @@
     mealReqs: [],
     checkins: [],
     reviewDraft: null,   /* { reaction, score, comment } while the review sheet is open */
+    workoutCheckins: [],
+    workoutReviewDraft: null,   /* { score, comment } while the workout review sheet is open */
     chatMsgs: [],
     saving: false,
   };
@@ -218,6 +220,7 @@
         '<button class="cw-tab" data-cw-tab="diet">🥗 Diet<span class="cw-tab-badge" id="cwDietBadge" style="display:none">0</span></button>' +
         '<button class="cw-tab" data-cw-tab="training">💪 Training</button>' +
         '<button class="cw-tab" data-cw-tab="checkins">🍽 Meal Reviews<span class="cw-tab-badge" id="cwCheckinBadge" style="display:none">0</span></button>' +
+        '<button class="cw-tab" data-cw-tab="weekly">📊 Weekly</button>' +
         '<button class="cw-tab" data-cw-tab="chat">💬 Chat</button>' +
       '</nav>' +
       '<main class="cw-body" id="cwBody"></main>';
@@ -371,6 +374,15 @@
         }
         if (S.tab === 'checkins') renderCheckins();
       }, function (e) { console.warn('[CW] meal checkins listener error', e); }));
+
+    S.unsubs.push(d.collection('workout_checkins')
+      .where('athleteId', '==', S.opts.athleteId)
+      .onSnapshot(function (snap) {
+        S.workoutCheckins = snap.docs.map(function (x) { return x.data(); })
+          .filter(function (c) { return c.coachId === S.opts.coachId; })
+          .sort(function (a, b) { return (b.timestamp || '') < (a.timestamp || '') ? -1 : 1; });
+        if (S.tab === 'training' && !S.trainDirty) renderTab();
+      }, function (e) { console.warn('[CW] workout checkins listener error', e); }));
 
     S.unsubs.push(d.collection('chat_rooms').doc(chatId()).collection('messages')
       .orderBy('timestamp')
@@ -542,6 +554,7 @@
     else if (S.tab === 'diet')     renderDiet();
     else if (S.tab === 'training') renderTraining();
     else if (S.tab === 'checkins') renderCheckins();
+    else if (S.tab === 'weekly')   renderWeeklyReview();
     else if (S.tab === 'chat')     renderChatShell();
   }
 
@@ -1223,6 +1236,265 @@
   function renderTraining() {
     if (canEditTraining()) renderTrainingEditor();
     else renderTrainingViewer();
+    _appendWorkoutReviews();
+  }
+
+  /* Workout-day review — parity with the Meal Reviews tab's meal_checkins
+     flow (day.js's "Send Workout to Coach"), appended to whichever
+     Training render ran above rather than a separate nav tab, to keep the
+     workspace's nav simple. */
+  function _appendWorkoutReviews() {
+    var body = $('cwBody');
+    if (!body || !S.workoutCheckins.length) return; /* nothing sent yet — don't clutter the tab */
+
+    var wrap = document.createElement('div');
+    wrap.className = 'cw-workout-reviews';
+    wrap.innerHTML = '<p class="cw-review-sec-title">💪 Workout Check-ins</p>' +
+      S.workoutCheckins.map(function (c) {
+        var statusCls = c.status === 'reviewed' ? 'cw-review-status--done' : 'cw-review-status--pending';
+        var statusTxt = c.status === 'reviewed' ? (c.score != null ? c.score + '/10' : 'Reviewed') : 'Pending';
+        return '<div class="cw-review-card" data-cw-workout-review="' + esc(c.checkinId) + '">' +
+          '<div class="cw-review-info">' +
+            '<span class="cw-review-title">' + esc(c.day) + ' — ' + esc(c.focus || 'Training') + '</span>' +
+            '<span class="cw-review-sub">' + esc(fmtTime(c.timestamp)) + ' · ' + ((c.exercises || []).length) + ' exercises</span>' +
+          '</div>' +
+          '<span class="cw-review-status ' + statusCls + '">' + esc(statusTxt) + '</span>' +
+        '</div>';
+      }).join('');
+    body.appendChild(wrap);
+
+    wrap.querySelectorAll('[data-cw-workout-review]').forEach(function (el) {
+      el.addEventListener('click', function () {
+        var c = S.workoutCheckins.find(function (x) { return x.checkinId === el.dataset.cwWorkoutReview; });
+        if (c) openWorkoutCheckinSheet(c);
+      });
+    });
+  }
+
+  function _exerciseListHtml(exercises) {
+    return '<div class="cw-workout-ex-list">' + (exercises || []).map(function (ex) {
+      var meta = [ex.sets, ex.reps].filter(Boolean).join(' × ');
+      return '<div class="cw-workout-ex-row">' + esc(ex.name || '') +
+        (meta ? ' <span class="cw-workout-ex-meta">' + esc(meta) + '</span>' : '') + '</div>';
+    }).join('') + '</div>';
+  }
+
+  function openWorkoutCheckinSheet(c) {
+    if (S.opts.role === 'coach') openWorkoutReviewSheet(c);
+    else openWorkoutHistorySheet(c);
+  }
+
+  /* Athlete: read-only — see the exercises sent + coach's score/comment */
+  function openWorkoutHistorySheet(c) {
+    var body =
+      '<p class="cw-sheet-title">' + esc(c.day) + ' — ' + esc(c.focus || 'Training') + '</p>' +
+      _exerciseListHtml(c.exercises) +
+      (c.status === 'reviewed'
+        ? '<div class="pc-checkin-feedback">' +
+            (c.score != null ? '<span class="pc-checkin-score">' + esc(c.score) + '/10</span>' : '') +
+            (c.comment ? '<p class="pc-checkin-comment">' + esc(c.comment) + '</p>' : '') +
+          '</div>'
+        : '<div class="pc-checkin-pending">⏳ Waiting for your coach’s review</div>');
+    openSheet(body);
+  }
+
+  /* Coach: score 1-10 (required) + optional comment */
+  function openWorkoutReviewSheet(c) {
+    S.workoutReviewDraft = { score: c.score || null, comment: c.comment || '' };
+    renderWorkoutReviewSheet(c);
+  }
+
+  function renderWorkoutReviewSheet(c) {
+    var d = S.workoutReviewDraft;
+    openSheet(
+      '<p class="cw-sheet-title">' + esc(c.day) + ' — ' + esc(c.athleteName || 'Athlete') + '</p>' +
+      '<p class="cw-sheet-sub">' + esc(c.focus || 'Training') + ' · ' + esc(fmtTime(c.timestamp)) + '</p>' +
+      _exerciseListHtml(c.exercises) +
+      '<span class="cw-score-label">Workout Score (required)</span>' +
+      '<div class="cw-score-grid">' + [1,2,3,4,5,6,7,8,9,10].map(function (n) {
+        return '<button class="cw-score-btn' + (d.score === n ? ' selected' : '') + '" data-cw-wscore="' + n + '">' + n + '</button>';
+      }).join('') + '</div>' +
+      '<textarea class="cw-textarea" id="cwWorkoutReviewComment" rows="2" placeholder="Optional comment">' + esc(d.comment || '') + '</textarea>' +
+      '<div class="cw-save-bar" style="position:static;background:none;padding-top:12px">' +
+        '<button class="cw-save-btn" id="cwWorkoutReviewSave"' + (!d.score ? ' disabled' : '') + '>Save Review</button>' +
+      '</div>'
+    );
+    var sheet = $('cwSheet');
+    sheet.querySelectorAll('[data-cw-wscore]').forEach(function (b) {
+      b.addEventListener('click', function () { S.workoutReviewDraft.score = parseInt(b.dataset.cwWscore, 10); renderWorkoutReviewSheet(c); });
+    });
+    var commentEl = $('cwWorkoutReviewComment');
+    if (commentEl) commentEl.addEventListener('input', function () { S.workoutReviewDraft.comment = commentEl.value; });
+    var saveBtn = $('cwWorkoutReviewSave');
+    if (saveBtn) saveBtn.addEventListener('click', function () { saveWorkoutCheckinReview(c); });
+  }
+
+  function saveWorkoutCheckinReview(c) {
+    var d = db();
+    if (!d || !S.workoutReviewDraft || !S.workoutReviewDraft.score) return;
+    var btn = $('cwWorkoutReviewSave');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+    var now = new Date().toISOString();
+    d.collection('workout_checkins').doc(c.checkinId).update({
+      status: 'reviewed', score: S.workoutReviewDraft.score, comment: S.workoutReviewDraft.comment || null,
+      reviewedAt: now, reviewedBy: S.opts.coachName || 'Coach',
+    }).then(function () {
+      closeSheet();
+      notify(c.athleteId, '💪 Your coach reviewed ' + c.day + "'s workout: " + S.workoutReviewDraft.score + '/10', 'workout_review');
+      toast('✅ Review saved');
+    }).catch(function (e) { console.warn('[CW] workout review save failed', e); toast('Save failed — try again.'); });
+  }
+
+  /* ══════════════════════════════════════════════
+     WEEKLY REVIEW — computed ON-DEMAND when this tab opens (not a
+     precomputed scheduled job): queries the past 7 days of meal_checkins /
+     workout_checkins / users/{athleteId}/activity live, then persists the
+     computed numbers + the coach's written feedback to
+     weekly_reviews/{athleteId}_{weekStartDate} so the feedback survives
+     the coach navigating away. Chosen over a scheduled job because a
+     week's worth of one athlete's data is trivial to query live, it's
+     always fresh, and it avoids a third backend scheduler job.
+     ══════════════════════════════════════════════ */
+  function _weekStartDate() {
+    /* Most recent Sunday, local time — "Every Sunday" per the spec. */
+    var d = new Date();
+    d.setDate(d.getDate() - d.getDay());
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+  function _dateKey(d) {
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
+  function renderWeeklyReview() {
+    var body = $('cwBody');
+    body.innerHTML = '<div class="cw-empty"><span class="cw-empty-icon">📊</span>Loading this week…</div>';
+    var d = db();
+    if (!d) return;
+
+    var weekStart = _weekStartDate();
+    var weekStartKey = _dateKey(weekStart);
+    var weekEnd = new Date(weekStart.getTime() + 7 * 86400000);
+    var docId = S.opts.athleteId + '_' + weekStartKey;
+
+    Promise.all([
+      d.collection('meal_checkins').where('athleteId', '==', S.opts.athleteId).get(),
+      d.collection('workout_checkins').where('athleteId', '==', S.opts.athleteId).get(),
+      d.collection('users').doc(S.opts.athleteId).collection('activity')
+        .where('date', '>=', weekStartKey).where('date', '<', _dateKey(weekEnd)).get(),
+      d.collection('users').doc(S.opts.athleteId).collection('weight_log')
+        .orderBy('date', 'desc').limit(14).get(),
+      d.collection('weekly_reviews').doc(docId).get(),
+    ]).then(function (results) {
+      var mealSnap = results[0], workoutSnap = results[1], activitySnap = results[2],
+          weightSnap = results[3], existingSnap = results[4];
+
+      function inWeek(iso) {
+        if (!iso) return false;
+        var t = new Date(iso);
+        return t >= weekStart && t < weekEnd;
+      }
+
+      var meals = mealSnap.docs.map(function (x) { return x.data(); })
+        .filter(function (c) { return c.coachId === S.opts.coachId && inWeek(c.timestamp); });
+      var workouts = workoutSnap.docs.map(function (x) { return x.data(); })
+        .filter(function (c) { return c.coachId === S.opts.coachId && inWeek(c.timestamp); });
+      var activityDays = activitySnap.docs.map(function (x) { return x.data(); });
+
+      var mealDaysActive = {};
+      meals.forEach(function (c) { mealDaysActive[c.day] = true; });
+      var mealsFollowedPct = Math.round((Object.keys(mealDaysActive).length / 7) * 100);
+
+      var workoutDaysActive = {};
+      workouts.forEach(function (c) { workoutDaysActive[c.day] = true; });
+      activityDays.forEach(function (a) { if (a.workoutCompleted) workoutDaysActive[a.date] = true; });
+      var workoutPct = Math.round((Object.keys(workoutDaysActive).length / 7) * 100);
+
+      var sleepVals = activityDays.map(function (a) { return a.sleepHours; }).filter(function (v) { return v != null; });
+      var sleepAvg = sleepVals.length ? Math.round((sleepVals.reduce(function (a,b) { return a+b; }, 0) / sleepVals.length) * 10) / 10 : null;
+
+      var waterPcts = activityDays.filter(function (a) { return a.waterGoalMl; })
+        .map(function (a) { return Math.min(100, Math.round((a.waterMl / a.waterGoalMl) * 100)); });
+      var waterAvg = waterPcts.length ? Math.round(waterPcts.reduce(function (a,b) { return a+b; }, 0) / waterPcts.length) : null;
+
+      var stepPcts = activityDays.filter(function (a) { return a.goalEffective || a.goal; })
+        .map(function (a) { return Math.min(100, Math.round((a.steps / (a.goalEffective || a.goal)) * 100)); });
+      var stepsAvg = stepPcts.length ? Math.round(stepPcts.reduce(function (a,b) { return a+b; }, 0) / stepPcts.length) : null;
+
+      var weights = weightSnap.docs.map(function (x) { return x.data(); });
+      var weightDelta = null;
+      if (weights.length >= 2) {
+        var latest = weights[0].weightKg;
+        var oldest = weights[weights.length - 1].weightKg;
+        weightDelta = Math.round((latest - oldest) * 10) / 10;
+      }
+
+      var existing = existingSnap.exists ? existingSnap.data() : null;
+
+      _renderWeeklyReviewBody({
+        docId: docId, weekStart: weekStart, weekEnd: new Date(weekEnd.getTime() - 86400000),
+        mealsFollowedPct: mealsFollowedPct, workoutPct: workoutPct,
+        sleepAvg: sleepAvg, waterAvg: waterAvg, stepsAvg: stepsAvg, weightDelta: weightDelta,
+        feedback: existing ? existing.coachFeedback : '',
+      });
+    }).catch(function (e) {
+      console.warn('[CW] weekly review load failed', e);
+      body.innerHTML = '<div class="cw-empty"><span class="cw-empty-icon">⚠️</span>Could not load this week — try again.</div>';
+    });
+  }
+
+  function _renderWeeklyReviewBody(w) {
+    var body = $('cwBody');
+    var fmtRange = w.weekStart.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) + ' – ' +
+      w.weekEnd.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+
+    function stat(label, val, suffix) {
+      return '<div class="cw-week-stat"><span class="cw-week-stat-label">' + esc(label) + '</span>' +
+        '<span class="cw-week-stat-val">' + (val == null ? '—' : esc(val) + (suffix || '')) + '</span></div>';
+    }
+
+    var feedbackBlock = S.opts.role === 'coach'
+      ? '<textarea class="cw-textarea" id="cwWeeklyFeedback" rows="4" placeholder="Write this week\'s feedback for your athlete…">' + esc(w.feedback || '') + '</textarea>' +
+        '<div class="cw-save-bar" style="position:static;background:none;padding-top:10px">' +
+          '<button class="cw-save-btn" id="cwWeeklyFeedbackSave">Save Feedback</button>' +
+        '</div>'
+      : (w.feedback
+          ? '<p class="cw-review-sec-title">Coach Feedback</p><p class="tp-workout-comment">' + esc(w.feedback) + '</p>'
+          : '<div class="cw-empty" style="padding:20px"><span class="cw-empty-icon">📝</span>Your coach hasn\'t written this week\'s feedback yet.</div>');
+
+    body.innerHTML =
+      '<p class="cw-sheet-sub" style="margin:0 0 12px">' + esc(fmtRange) + '</p>' +
+      '<div class="cw-week-stats-grid">' +
+        stat('Meals Followed', w.mealsFollowedPct, '%') +
+        stat('Workout', w.workoutPct, '%') +
+        stat('Sleep', w.sleepAvg, ' hrs') +
+        stat('Water', w.waterAvg, '%') +
+        stat('Steps', w.stepsAvg, '%') +
+        stat('Weight', w.weightDelta == null ? null : (w.weightDelta > 0 ? '+' : '') + w.weightDelta, ' kg') +
+      '</div>' +
+      feedbackBlock;
+
+    var saveBtn = $('cwWeeklyFeedbackSave');
+    if (saveBtn) saveBtn.addEventListener('click', function () { _saveWeeklyFeedback(w.docId); });
+  }
+
+  function _saveWeeklyFeedback(docId) {
+    var d = db();
+    var textEl = $('cwWeeklyFeedback');
+    if (!d || !textEl) return;
+    var btn = $('cwWeeklyFeedbackSave');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+    d.collection('weekly_reviews').doc(docId).set({
+      athleteId: S.opts.athleteId, coachId: S.opts.coachId,
+      coachFeedback: textEl.value, feedbackUpdatedAt: new Date().toISOString(),
+    }, { merge: true }).then(function () {
+      notify(S.opts.athleteId, '📊 Your coach shared this week\'s feedback.', 'weekly_review');
+      toast('✅ Feedback saved');
+    }).catch(function (e) {
+      console.warn('[CW] weekly feedback save failed', e);
+      toast('Save failed — try again.');
+      if (btn) { btn.disabled = false; btn.textContent = 'Save Feedback'; }
+    });
   }
 
   function renderTrainingViewer() {

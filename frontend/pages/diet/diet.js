@@ -665,7 +665,8 @@
                 ${swapSvg}
                 <span class="swap-label">Can't eat<br>this?</span>
               </button>`}
-        </article>` + buildCoachMealRow(meal, dayData.day || dayData.day_type);
+        </article>` + buildCoachMealRow(meal, dayData.day || dayData.day_type)
+                     + buildSnapMealRow(meal, dayData.day || dayData.day_type);
     }).join('');
 
     /* Daily Meal Compliance score — only appears once today has at least
@@ -686,6 +687,7 @@
     /* Re-wire swap buttons for newly rendered cards */
     wireSwapButtons();
     wireCoachCheckinButtons();
+    wireSnapMealButtons();
 
     /* Animate cards in */
     requestAnimationFrame(() => {
@@ -1941,6 +1943,131 @@
       }, function (e) { console.warn('[MEAL CHECKIN] listener error', e); });
   }
 
+  /* ══════════════════════════════════════════
+     STANDALONE AI SNAP MEAL — for athletes WITHOUT an active Personal
+     Coach (mirror image of buildCoachMealRow above: exactly one of the two
+     ever renders per meal, per the AI-only vs Personal-Coaching mode
+     split). Same AI nutrition-estimation call (backend/routes/meal_ai.py)
+     as the coach-checkin flow, but a purely personal log — no coach, no
+     notification, no meal_checkins doc. Firestore:
+     meal_snap_logs/{uid}/{dateKey}/{id} — {imageUrl, calories, protein,
+     carbs, fat, foodRecognition, confidenceScore, loggedAt}.
+  ══════════════════════════════════════════ */
+  var _snapLogs = {}; /* 'day:mealType' -> latest log doc, today only */
+
+  function _snapDateKey() {
+    var d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+  function _snapLogFor(day, mealType) { return _snapLogs[day + ':' + mealType] || null; }
+
+  function _snapAttachListener() {
+    if (_snapAttachListener._attached || typeof ZitlasDB === 'undefined') return;
+    _snapAttachListener._attached = true;
+    var uid = _pcUid();
+    if (!uid) return;
+    ZitlasDB.collection('meal_snap_logs').doc(uid).collection(_snapDateKey())
+      .onSnapshot(function (snap) {
+        var byKey = {};
+        snap.docs.forEach(function (d) {
+          var log = d.data();
+          var key = log.day + ':' + log.mealType;
+          if (!byKey[key] || (log.loggedAt || '') > (byKey[key].loggedAt || '')) byKey[key] = log;
+        });
+        _snapLogs = byKey;
+        console.log('[SNAP MEAL] snapshot —', Object.keys(_snapLogs).length, 'today');
+        renderDay(currentDay);
+      }, function (e) { console.warn('[SNAP MEAL] listener error', e); });
+  }
+
+  function buildSnapMealRow(meal, dayName) {
+    /* Mutually exclusive with buildCoachMealRow — only render the
+       standalone AI-only flow when there's no active coach. */
+    if (typeof ZitlasCoachingGate !== 'undefined' && _pcRel && ZitlasCoachingGate.evaluate(_pcRel).active) return '';
+    if (dayName !== _pcTodayName()) return '';
+    var mealType = (meal.meal_name || 'meal').toLowerCase();
+    var log = _snapLogFor(dayName, mealType);
+
+    if (!log) {
+      return '<div class="meal-coach-row">' +
+        '<button class="cw-meal-btn cw-meal-btn--swap snap-meal-btn" data-snap-meal="' + esc(meal.meal_name || '') + '">📷 Snap Meal</button>' +
+        '</div>';
+    }
+    return '<div class="meal-coach-row meal-coach-row--reviewed">' +
+      '<img class="meal-checkin-thumb" src="' + esc(log.imageUrl) + '" alt="Snapped meal">' +
+      '<div class="meal-checkin-feedback">' +
+        '<span class="meal-checkin-status">' +
+          (log.calories != null
+            ? '🍽 ~' + log.calories + ' kcal · ' + log.protein + 'g protein · ' + log.carbs + 'g carbs · ' + log.fat + 'g fat'
+            : 'Estimating nutrition…') +
+        '</span>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function wireSnapMealButtons() {
+    document.querySelectorAll('[data-snap-meal]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var mealName = btn.dataset.snapMeal;
+        var day = weeklyPlan && weeklyPlan.days && weeklyPlan.days[currentDay];
+        var meals = day && day.meals ? day.meals : [];
+        var meal = meals.find(function (m) { return (m.meal_name || '') === mealName; });
+        if (meal) _snapOpenCamera(meal);
+      });
+    });
+  }
+
+  function _snapOpenCamera(meal) {
+    var input = document.getElementById('snapCameraInput');
+    if (!input) {
+      input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.capture = 'environment';
+      input.id = 'snapCameraInput';
+      input.style.display = 'none';
+      document.body.appendChild(input);
+    }
+    input.onchange = function () {
+      var file = input.files && input.files[0];
+      input.value = '';
+      if (file) _snapSend(file, meal);
+    };
+    input.click();
+  }
+
+  function _snapSend(file, meal) {
+    if (typeof ZitlasChatAttach === 'undefined') { showToast('Upload unavailable — please retry.'); return; }
+    var uid = _pcUid();
+    if (!uid) { showToast('Please sign in first.'); return; }
+    var day = _pcTodayName();
+    var mealType = (meal.meal_name || 'meal').toLowerCase();
+
+    showToast('📷 Analyzing your meal…');
+    Promise.all([ZitlasChatAttach.upload(file), _pcEstimateNutrition(file)]).then(function (results) {
+      var url = results[0];
+      var estimate = results[1];
+      var id = 'MSL_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+      var doc = {
+        id: id, athleteId: uid, day: day, mealType: mealType, mealName: meal.meal_name || 'Meal',
+        imageUrl: url, loggedAt: new Date().toISOString(),
+        calories: estimate ? estimate.estimatedCalories : null,
+        protein:  estimate ? estimate.estimatedProtein  : null,
+        carbs:    estimate ? estimate.estimatedCarbs    : null,
+        fat:      estimate ? estimate.estimatedFat      : null,
+        foodRecognition: estimate ? estimate.foodRecognition : null,
+        confidenceScore: estimate ? estimate.confidenceScore : null,
+      };
+      return ZitlasDB.collection('meal_snap_logs').doc(uid).collection(_snapDateKey()).doc(id).set(doc)
+        .then(function () { return !!estimate; });
+    }).then(function (hadEstimate) {
+      showToast(hadEstimate ? '✅ Meal logged and analyzed.' : '📷 Meal logged — nutrition estimate unavailable.');
+    }).catch(function (e) {
+      console.error('[SNAP MEAL] failed', e);
+      showToast('Could not log meal — try again.');
+    });
+  }
+
   /* Compact per-meal row: camera button (nothing sent yet) OR the photo +
      coach feedback / pending state (already sent). Gated ONLY on an active
      coaching relationship — NOT on the coach having published a diet plan,
@@ -1949,7 +2076,11 @@
      check-ins are a real-time compliance signal, not a historical editor
      (history stays visible via the workspace Meal Reviews tab). */
   function buildCoachMealRow(meal, dayName) {
-    if (!_pcRel || _pcRel.status !== 'active') return '';
+    /* Canonical gate (assets/js/coaching-gate.js) — this used to check
+       _pcRel.status only, which kept "Send Meal to Coach" visible after the
+       relationship's endDate passed but before the backend sweep or a
+       refresh caught up. */
+    if (!_pcRel || typeof ZitlasCoachingGate === 'undefined' || !ZitlasCoachingGate.evaluate(_pcRel).active) return '';
     if (dayName !== _pcTodayName()) return '';
     var mealType = (meal.meal_name || 'meal').toLowerCase();
     var checkin = _pcCheckinFor(dayName, mealType);
@@ -2040,12 +2171,29 @@
     });
   }
 
+  /* AI nutrition estimate (backend/routes/meal_ai.py) runs ALONGSIDE the
+     photo upload — never blocks or fails the checkin send if it errors or
+     times out; the athlete's send is what matters, the estimate is a bonus
+     enrichment of fields meal_checkins already reserved for this. */
+  function _pcEstimateNutrition(file) {
+    if (typeof getIdToken !== 'function') return Promise.resolve(null);
+    return getIdToken().then(function (token) {
+      var fd = new FormData();
+      fd.append('file', file);
+      return fetch('/api/meal/estimate-nutrition', {
+        method: 'POST', headers: { 'Authorization': 'Bearer ' + token }, body: fd,
+      }).then(function (res) { return res.ok ? res.json() : null; });
+    }).catch(function (e) { console.warn('[MEAL CHECKIN] nutrition estimate failed (non-fatal)', e); return null; });
+  }
+
   function _pcSendCheckin(file, meal, previewUrl) {
     var btn = document.getElementById('pcSendCheckin');
     if (btn) { btn.disabled = true; btn.textContent = 'Uploading…'; }
     if (typeof ZitlasChatAttach === 'undefined') { showToast('Upload unavailable — please retry.'); return; }
 
-    ZitlasChatAttach.upload(file).then(function (url) {
+    Promise.all([ZitlasChatAttach.upload(file), _pcEstimateNutrition(file)]).then(function (results) {
+      var url = results[0];
+      var estimate = results[1];
       var uid = _pcUid();
       var athleteName = _pcAthleteName();
       var id = 'MCI_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
@@ -2054,9 +2202,14 @@
         day: _pcTodayName(), mealType: (meal.meal_name || 'meal').toLowerCase(), mealName: meal.meal_name || 'Meal',
         imageUrl: url, timestamp: new Date().toISOString(), status: 'pending',
         reaction: null, score: null, comment: null, reviewedAt: null, reviewedBy: null,
-        /* Reserved for future AI meal recognition — never populated today */
-        estimatedCalories: null, estimatedProtein: null, estimatedCarbs: null, estimatedFat: null,
-        foodRecognition: null, confidenceScore: null,
+        /* Populated when the AI estimate above succeeds; null if it failed
+           or timed out — never blocks the checkin either way. */
+        estimatedCalories: estimate ? estimate.estimatedCalories : null,
+        estimatedProtein:  estimate ? estimate.estimatedProtein  : null,
+        estimatedCarbs:    estimate ? estimate.estimatedCarbs    : null,
+        estimatedFat:      estimate ? estimate.estimatedFat      : null,
+        foodRecognition:   estimate ? estimate.foodRecognition   : null,
+        confidenceScore:   estimate ? estimate.confidenceScore   : null,
       };
       console.log('[MEAL CHECKIN] submitting', doc);
       return ZitlasDB.collection('meal_checkins').doc(id).set(doc).then(function () {
@@ -2107,6 +2260,10 @@
        coach relationship with a published diet exists, it overrides the AI
        plan below the moment its snapshot arrives (no refresh needed). */
     initCoachDietMode();
+    /* Standalone AI Snap Meal — runs for EVERY athlete regardless of
+       coaching status (buildSnapMealRow itself decides whether to render,
+       mutually exclusive with the coach-checkin row above). */
+    _snapAttachListener();
 
     /* Real-time refresh when an expert's completed review reaches this
        device. Two triggers for the same handler:

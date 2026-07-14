@@ -1325,7 +1325,9 @@ function listenForMyAthletes(expert) {
       _applyExpertChatReadOnlyState();
 
       var rels = all.filter(function(r) {
-        return r.status === 'active' && (!r.endDate || new Date(r.endDate) > new Date());
+        return typeof ZitlasCoachingGate !== 'undefined'
+          ? ZitlasCoachingGate.evaluate(r).active
+          : (r.status === 'active' && (!r.endDate || new Date(r.endDate) > new Date()));
       });
       console.log('[COACHING] active athletes:', rels.length);
       renderMyAthletes(rels, expert);
@@ -1346,9 +1348,10 @@ function renderMyAthletes(rels, expert) {
   wrap.querySelectorAll('.ed-athlete-card').forEach(function(el) { el.remove(); });
 
   rels.forEach(function(rel) {
-    var daysLeft = rel.endDate
-      ? Math.max(0, Math.ceil((new Date(rel.endDate) - new Date()) / 86400000))
-      : null;
+    var daysLeft = (typeof ZitlasCoachingGate !== 'undefined')
+      ? ZitlasCoachingGate.evaluate(rel).daysRemaining
+      : (rel.endDate ? Math.max(0, Math.ceil((new Date(rel.endDate) - new Date()) / 86400000)) : null);
+    var lowDays  = daysLeft !== null && daysLeft <= 7;
     var name     = rel.athleteName || 'Athlete';
     var initials = name.split(/\s+/).map(function(w) { return w[0] || ''; }).slice(0, 2).join('').toUpperCase();
 
@@ -1358,9 +1361,10 @@ function renderMyAthletes(rels, expert) {
       '<div class="ed-athlete-av">' + esc(initials) + '</div>' +
       '<div class="ed-athlete-info">' +
         '<span class="ed-athlete-name">' + esc(name) + '</span>' +
-        '<span class="ed-athlete-sub">Coaching since ' +
+        '<span class="ed-athlete-sub' + (lowDays ? ' ed-athlete-sub--warn' : '') + '">' +
+          (lowDays ? '⚠ ' : '') + 'Coaching since ' +
           esc(new Date(rel.startDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })) +
-          (daysLeft !== null ? ' · ' + daysLeft + ' days left' : '') + '</span>' +
+          (daysLeft !== null ? ' · ' + daysLeft + (daysLeft === 1 ? ' day left' : ' days left') : '') + '</span>' +
       '</div>' +
       '<button class="erc-btn erc-btn--primary ed-athlete-chat">Open</button>';
 

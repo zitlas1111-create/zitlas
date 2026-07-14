@@ -295,8 +295,58 @@
     });
   }
 
+  /* ── Water & Sleep logging (Personal Coaching 2.0 — Daily Score/Weekly
+     Review need real hydration/sleep data, which didn't exist anywhere
+     before this). Deliberately additive merge-only writes onto the SAME
+     users/{uid}/activity/{date} day-doc steps already lives on, rather
+     than folding into the step-tracking record/_load/_save/sync machinery
+     above — that machinery has carefully-tuned behavior (reboot detection,
+     anti-cheat cap, day-boundary handling) that a wellness-logging feature
+     has no business touching. Local cache is a lightweight today-only
+     mirror, separate from the 90-day step history model. ── */
+  var WELLNESS_KEY = 'zitlas_wellness_today';
+  var DEFAULT_WATER_GOAL_ML = 2500;
+
+  function _loadWellness() {
+    var w = _load(WELLNESS_KEY, null);
+    if (!w || w.date !== todayStr()) w = { date: todayStr(), waterMl: 0, sleepHours: null };
+    return w;
+  }
+
+  function _syncWellnessToFirestore(w) {
+    if (!_fsReady()) return;
+    ZitlasDB.collection('users').doc(ZitlasAuth.currentUser.uid)
+      .collection('activity').doc(w.date)
+      .set({ date: w.date, waterMl: w.waterMl, waterGoalMl: DEFAULT_WATER_GOAL_ML, sleepHours: w.sleepHours }, { merge: true })
+      .catch(function (e) { console.warn('[ACTIVITY] wellness sync failed:', e && e.code); });
+  }
+
+  function getTodayWellness() {
+    var w = _loadWellness();
+    return { waterMl: w.waterMl, waterGoalMl: DEFAULT_WATER_GOAL_ML, sleepHours: w.sleepHours };
+  }
+
+  function logWater(deltaMl) {
+    var w = _loadWellness();
+    w.waterMl = Math.max(0, (w.waterMl || 0) + (Number(deltaMl) || 0));
+    _save(WELLNESS_KEY, w);
+    _syncWellnessToFirestore(w);
+    return w.waterMl;
+  }
+
+  function logSleep(hours) {
+    var w = _loadWellness();
+    w.sleepHours = Math.max(0, Math.min(24, Number(hours) || 0));
+    _save(WELLNESS_KEY, w);
+    _syncWellnessToFirestore(w);
+    return w.sleepHours;
+  }
+
   win.ZitlasActivity = {
     todayStr:                 todayStr,
+    getTodayWellness:         getTodayWellness,
+    logWater:                 logWater,
+    logSleep:                 logSleep,
     getToday:                 getToday,
     getTodaySteps:            getTodaySteps,
     getTodayDistance:         getTodayDistance,

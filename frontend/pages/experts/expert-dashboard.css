@@ -1100,6 +1100,7 @@ a      { text-decoration: none; color: inherit; }
 .ed-athlete-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .ed-athlete-name { font-size: 14px; font-weight: 800; color: var(--text); }
 .ed-athlete-sub  { font-size: 11.5px; color: var(--text-muted); }
+.ed-athlete-sub--warn { color: #D97706; font-weight: 700; }
 .ed-athlete-chat { flex-shrink: 0; }
 
 /* ══════════════════════════════════════════════

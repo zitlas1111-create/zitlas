@@ -1,17 +1,27 @@
 """
-ZITLAS — Personal Coaching 48h expiry sweep (backend/services/coaching_sweep.py)
+ZITLAS — Personal Coaching expiry sweeps (backend/services/coaching_sweep.py)
 
-Runs periodically (in-process APScheduler job, wired in main.py's lifespan)
-to release reservations for requests the expert never responded to within
-48 hours. Not an HTTP route — called directly by the scheduler, so it must
-never raise on a routine "not configured" condition (mirrors push_service's
-no-op-when-unconfigured pattern, unlike routes/coaching.py's HTTP routes,
-which fail closed with a 503 since a client is actively waiting on those).
+Two INDEPENDENT sweeps, both in-process APScheduler jobs wired in main.py's
+lifespan. Neither is an HTTP route, so neither must ever raise on a routine
+"not configured" condition (mirrors push_service's no-op-when-unconfigured
+pattern, unlike routes/coaching.py's HTTP routes, which fail closed with a
+503 since a client is actively waiting on those):
 
-Each expired request is released in its OWN transaction that re-checks
-status == 'pending' fresh — if the expert accepted or rejected in the same
-window the sweep is scanning, that request is simply skipped (already
-handled, no-op), so there's no race between a human decision and the sweep.
+  sweep_expired_requests()      — 48h PENDING REQUEST expiry. Releases a
+                                   reservation the expert never responded to.
+  sweep_expired_relationships() — 30-day ACTIVE SUBSCRIPTION expiry. Flips
+                                   an active personal_coaching relationship
+                                   to 'expired' once its endDateTs passes.
+
+These are different lifecycle stages of the same feature and must not be
+confused: a request can expire before any coach ever accepts it (this is
+the FIRST sweep); a relationship expires 30 days AFTER a coach already
+accepted and payment was captured (this is the SECOND sweep).
+
+Each item is processed in its OWN transaction that re-checks the relevant
+status fresh — if a human (accept/reject/end) or another sweep pass acted
+on the same doc in the window being scanned, it's simply skipped as a
+no-op, so there's no race between a human decision and the sweep.
 """
 
 from __future__ import annotations
@@ -69,3 +79,59 @@ def sweep_expired_requests() -> int:
     if released:
         print(f"[COACHING SWEEP] released {released} expired reservation(s)")
     return released
+
+
+def _expire_one_relationship(db, rel_ref):
+    @firestore.transactional
+    def _txn(tx):
+        rel_snap = rel_ref.get(transaction=tx)
+        if not rel_snap.exists:
+            return None
+        rel = rel_snap.to_dict()
+        if rel.get("status") != "active":
+            return None  # already expired/ended by something else
+        rel_end = rel.get("endDateTs")
+        if rel_end is None or rel_end > now():
+            return None  # query race (endDateTs moved) — skip, not actually due
+        tx.update(rel_ref, {"status": "expired", "expiredAt": now().isoformat()})
+        return rel
+
+    rel = _txn(db.transaction())
+    if rel is None:
+        return
+    athlete_uid = rel.get("athleteId")
+    coach_id = rel.get("coachId")
+    notify(db, athlete_uid, "Coaching Ended",
+           "Your 30-day Personal Coaching with " + (rel.get("coachName") or "your coach") +
+           " has ended. You're back on the AI-only plan — renew anytime to continue.",
+           category="expert", type="coaching_subscription_expired", action="coaches")
+    notify(db, coach_id, "Coaching Ended",
+           (rel.get("athleteName") or "An athlete") + "'s 30-day coaching subscription has ended.",
+           category="expert", type="coaching_subscription_expired", action="expert_dashboard")
+
+
+def sweep_expired_relationships() -> int:
+    """Returns the number of ACTIVE relationships flipped to 'expired'
+    because their 30-day endDateTs has passed. See module docstring for how
+    this differs from sweep_expired_requests(). Safe to call when Firestore
+    isn't configured."""
+    db = firestore_service.get_client()
+    if db is None:
+        print("[COACHING SWEEP] relationship sweep skipped — Firestore not configured")
+        return 0
+
+    query = db.collection("personal_coaching") \
+              .where(filter=FieldFilter("status", "==", "active")) \
+              .where(filter=FieldFilter("endDateTs", "<=", now()))
+
+    expired = 0
+    for doc in query.stream():
+        try:
+            _expire_one_relationship(db, doc.reference)
+            expired += 1
+        except Exception as e:
+            print(f"[COACHING SWEEP] failed to expire relationship {doc.id}: {type(e).__name__}: {e}")
+
+    if expired:
+        print(f"[COACHING SWEEP] expired {expired} coaching relationship(s) past their 30-day term")
+    return expired

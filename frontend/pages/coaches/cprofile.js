@@ -1060,11 +1060,16 @@
       _pcRelationship.coachId === coach.id && _pcRelationship.status === 'ended');
   }
 
-  /* Active Personal Coaching with THIS coach → chat/coach buttons route into
-     the dedicated Coaching Workspace instead of the normal chat overlay. */
+  /* Active (non-expired) Personal Coaching with THIS coach → chat/coach
+     buttons route into the dedicated Coaching Workspace instead of the
+     normal chat overlay. Uses the canonical gate (assets/js/coaching-gate.js)
+     — this used to check status only, letting an athlete open the paid
+     Workspace after their subscription's endDate passed but before the
+     backend sweep or a refresh caught up. */
   function _coachingWorkspaceFor(coach) {
     return !!(coach && _pcRelationship && window.ZitlasCoachingWorkspace &&
-      _pcRelationship.status === 'active' && _pcRelationship.coachId === coach.id);
+      _pcRelationship.coachId === coach.id &&
+      typeof ZitlasCoachingGate !== 'undefined' && ZitlasCoachingGate.evaluate(_pcRelationship).active);
   }
   function _openCoachingWorkspace(coach, tab) {
     var rel = _pcRelationship;
@@ -3750,9 +3755,11 @@
      a transaction guards against replacing a different coach's active
      subscription. Ended/expired relationships flip status, never delete.
   ══════════════════════════════════════════ */
+  /* Delegates to the canonical gate (assets/js/coaching-gate.js) — kept as
+     a thin wrapper since this name is used at many call sites in this file. */
   function _coachingIsActive(rel) {
-    return !!(rel && rel.status === 'active' &&
-      (!rel.endDate || new Date(rel.endDate) > new Date()));
+    return typeof ZitlasCoachingGate !== 'undefined' ? ZitlasCoachingGate.evaluate(rel).active
+      : !!(rel && rel.status === 'active' && (!rel.endDate || new Date(rel.endDate) > new Date()));
   }
 
   /* Lifecycle: plan sheet → personal_coach_requests doc (pending) →
@@ -3807,15 +3814,35 @@
     var COACH_SVG = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>';
 
     function updateCoachButtons() {
-      var relMine = _coachingIsActive(_myCoaching) && _myCoaching.coachId === coach.id;
-      var req     = _openRequestFor(coach.id);
+      var gate = (typeof ZitlasCoachingGate !== 'undefined')
+        ? ZitlasCoachingGate.evaluate(_myCoaching) : { active: false, expired: false, daysRemaining: null };
+      var relMine    = gate.active && _myCoaching.coachId === coach.id;
+      var expiredMine = gate.expired && _myCoaching && _myCoaching.coachId === coach.id;
+      var req        = _openRequestFor(coach.id);
       buttons.forEach(function(btn) {
         btn.classList.toggle('cp-coach-active', relMine || !!req);
-        if (relMine)      btn.innerHTML = COACH_SVG + ' Your Coach ✓';
-        else if (req)     btn.innerHTML = COACH_SVG + ' 🔒 Payment Reserved';
-        else              btn.innerHTML = COACH_SVG + ' Personal Coach';
+        if (relMine)          btn.innerHTML = COACH_SVG + ' Your Coach ✓';
+        else if (expiredMine) btn.innerHTML = COACH_SVG + ' 🔄 Renew Personal Coach';
+        else if (req)         btn.innerHTML = COACH_SVG + ' 🔒 Payment Reserved';
+        else                  btn.innerHTML = COACH_SVG + ' Personal Coach';
       });
       if (endWrap) endWrap.style.display = relMine ? 'block' : 'none';
+
+      /* <7 days warning + days-remaining, computed once per relationship
+         from the canonical gate — reused for both the athlete-facing
+         banner here and the coach-side roster in expert-dashboard.js. */
+      var expiryWrap = document.getElementById('coachingExpiryWrap');
+      if (expiryWrap) {
+        if (relMine && gate.daysRemaining !== null) {
+          expiryWrap.style.display = '';
+          expiryWrap.innerHTML = gate.daysRemaining <= 7
+            ? '⚠️ Your Personal Coaching expires in ' + gate.daysRemaining + (gate.daysRemaining === 1 ? ' day' : ' days') + '.'
+            : gate.daysRemaining + ' days remaining';
+          expiryWrap.classList.toggle('cp-expiry-warning', gate.daysRemaining <= 7);
+        } else {
+          expiryWrap.style.display = 'none';
+        }
+      }
     }
 
     function showStep(which) {

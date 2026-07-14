@@ -1831,6 +1831,22 @@ img { display: block; max-width: 100%; }
 .cp-withdraw-cancel:active, .cp-withdraw-confirm:active { transform: scale(0.97); }
 
 /* ── End Coaching (active-relationship secondary action) ── */
+.cp-expiry-wrap {
+  display: none;
+  padding: 10px 16px;
+  margin-top: 10px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary, rgba(255,255,255,0.55));
+}
+.cp-expiry-wrap.cp-expiry-warning {
+  color: #D97706;
+  background: rgba(217,119,6,0.1);
+  border: 1px solid rgba(217,119,6,0.3);
+  border-radius: 12px;
+}
+
 .cp-end-coaching-wrap {
   display: none;
   padding: 0 16px;

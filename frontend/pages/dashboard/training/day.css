@@ -781,6 +781,71 @@ body::before {
   font-style: italic;
 }
 
+/* ── Workout Actions (Complete / Send to Coach) ── */
+.tp-workout-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 16px 16px 0;
+  animation: slideUp 0.5s var(--bounce) 0.58s both;
+}
+.tp-workout-btn {
+  width: 100%;
+  padding: 14px;
+  border-radius: var(--radius);
+  font-size: 14px;
+  font-weight: 800;
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.tp-workout-btn--complete { background: var(--fitness, #10B981); color: #fff; }
+.tp-workout-btn--send {
+  background: transparent;
+  border: 1.5px solid var(--accent);
+  color: var(--accent);
+}
+.tp-workout-done, .tp-workout-sent {
+  display: block;
+  text-align: center;
+  padding: 12px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 700;
+  background: var(--card);
+  border: 1px solid var(--border);
+  color: var(--text-sec);
+}
+.tp-workout-comment {
+  margin: 6px 0 0;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+  background: rgba(var(--primary-rgb),0.06);
+  border-radius: 10px;
+}
+.tp-workout-toast {
+  position: fixed;
+  bottom: 90px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 40px;
+  padding: 10px 20px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.22s;
+  white-space: nowrap;
+}
+.tp-workout-toast.on { opacity: 1; }
+
 /* ── CTA ── */
 .tp-cta {
   margin: 24px 16px 0;

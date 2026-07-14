@@ -1566,6 +1566,186 @@
   }
 
   /* ══════════════════════════════════════════
+     DAILY WELLNESS CARD (water / sleep / weight)
+     Water + sleep write through window.ZitlasActivity.logWater/logSleep
+     (assets/js/activity-service.js) — additive merges onto the SAME
+     users/{uid}/activity/{date} day-doc steps already lives on. Weight is
+     genuinely separate (sparser, needs a trend view): a small standalone
+     users/{uid}/weight_log/{date} collection, read/written directly here.
+  ══════════════════════════════════════════ */
+  var _dashWeightHistory = []; /* [{date, weightKg}], most recent first */
+
+  function _dashUid() {
+    return (typeof ZitlasAuth !== 'undefined' && ZitlasAuth.currentUser) ? ZitlasAuth.currentUser.uid : null;
+  }
+
+  function _dashLogWeight(kg) {
+    const uid = _dashUid();
+    if (!uid || typeof ZitlasDB === 'undefined' || !kg) return;
+    const dateKey = window.ZitlasActivity ? window.ZitlasActivity.todayStr() : new Date().toISOString().slice(0, 10);
+    ZitlasDB.collection('users').doc(uid).collection('weight_log').doc(dateKey)
+      .set({ date: dateKey, weightKg: kg, loggedAt: new Date().toISOString() }, { merge: true })
+      .then(() => { showToast('⚖️ Weight logged'); _dashLoadWeightHistory(); })
+      .catch(e => console.warn('[WELLNESS] weight log failed', e));
+  }
+
+  function _dashLoadWeightHistory() {
+    const uid = _dashUid();
+    if (!uid || typeof ZitlasDB === 'undefined') return;
+    ZitlasDB.collection('users').doc(uid).collection('weight_log')
+      .orderBy('date', 'desc').limit(14).get()
+      .then(snap => { _dashWeightHistory = snap.docs.map(d => d.data()); renderWellnessCard(); })
+      .catch(e => console.warn('[WELLNESS] weight history load failed', e));
+  }
+
+  function _dashWeightDeltaHtml() {
+    if (!_dashWeightHistory.length) return '';
+    const latest = _dashWeightHistory[0].weightKg;
+    const weekAgo = _dashWeightHistory.find(w => new Date(w.date) <= new Date(Date.now() - 6 * 86400000));
+    if (!weekAgo || weekAgo.date === _dashWeightHistory[0].date) {
+      return `<p class="wellness-weight-delta">Latest: ${latest} kg</p>`;
+    }
+    const delta = Math.round((latest - weekAgo.weightKg) * 10) / 10;
+    const arrow = delta > 0 ? '▲' : delta < 0 ? '▼' : '–';
+    return `<p class="wellness-weight-delta">${latest} kg <em>${arrow} ${Math.abs(delta)} kg this week</em></p>`;
+  }
+
+  function renderWellnessCard() {
+    const content = document.getElementById('wellnessContent');
+    if (!content) return;
+
+    const w = window.ZitlasActivity ? window.ZitlasActivity.getTodayWellness() : { waterMl: 0, waterGoalMl: 2500, sleepHours: null };
+    const waterPct = Math.min(100, Math.round((w.waterMl / w.waterGoalMl) * 100));
+
+    content.innerHTML = `
+      <div class="wellness-row">
+        <div class="wellness-tile">
+          <span class="wellness-tile-label">💧 Water</span>
+          <span class="wellness-tile-value">${w.waterMl} <em>/ ${w.waterGoalMl} ml</em></span>
+          <div class="wellness-water-bar"><div class="wellness-water-fill" style="width:${waterPct}%"></div></div>
+          <div class="wellness-water-btns">
+            <button class="wellness-water-btn" data-water="250">+250ml</button>
+            <button class="wellness-water-btn" data-water="500">+500ml</button>
+          </div>
+        </div>
+        <div class="wellness-tile">
+          <span class="wellness-tile-label">😴 Sleep</span>
+          <div class="wellness-input-row">
+            <input type="number" id="wellnessSleepInput" class="wellness-input" min="0" max="24" step="0.5"
+                   value="${w.sleepHours != null ? w.sleepHours : ''}" placeholder="hrs">
+            <button class="wellness-save-btn" id="wellnessSleepSave">Save</button>
+          </div>
+        </div>
+        <div class="wellness-tile">
+          <span class="wellness-tile-label">⚖️ Weight</span>
+          <div class="wellness-input-row">
+            <input type="number" id="wellnessWeightInput" class="wellness-input" min="20" max="300" step="0.1" placeholder="kg">
+            <button class="wellness-save-btn" id="wellnessWeightSave">Log</button>
+          </div>
+          ${_dashWeightDeltaHtml()}
+        </div>
+      </div>
+    `;
+
+    content.querySelectorAll('[data-water]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (window.ZitlasActivity) window.ZitlasActivity.logWater(parseInt(btn.dataset.water, 10));
+        renderWellnessCard();
+        renderDailyScoreCard();
+      });
+    });
+    const sleepSave = document.getElementById('wellnessSleepSave');
+    if (sleepSave) sleepSave.addEventListener('click', () => {
+      const v = document.getElementById('wellnessSleepInput').value;
+      if (window.ZitlasActivity && v !== '') {
+        window.ZitlasActivity.logSleep(parseFloat(v));
+        showToast('😴 Sleep logged');
+        renderDailyScoreCard();
+      }
+    });
+    const weightSave = document.getElementById('wellnessWeightSave');
+    if (weightSave) weightSave.addEventListener('click', () => {
+      const v = document.getElementById('wellnessWeightInput').value;
+      if (v) _dashLogWeight(parseFloat(v));
+    });
+  }
+
+  /* ══════════════════════════════════════════
+     DAILY SCORE + TIMELINE
+     Formula lives in assets/js/daily-score.js (pure, independently
+     testable) — this just gathers today's inputs from whatever sources
+     have data (steps/water/sleep are already loaded synchronously via
+     ZitlasActivity; workout completion + meal quality need one-off
+     Firestore reads since they aren't part of the localStorage-cached
+     step model) and renders. Hidden entirely when there's no data at all
+     yet (a brand-new day before anything's logged), rather than showing a
+     misleading "0/100".
+  ══════════════════════════════════════════ */
+  function renderDailyScoreCard() {
+    const section = document.getElementById('dailyScoreSection');
+    const content  = document.getElementById('dailyScoreContent');
+    if (!section || !content || typeof ZitlasDailyScore === 'undefined') return;
+
+    const uid = _dashUid();
+    const wellness = window.ZitlasActivity ? window.ZitlasActivity.getTodayWellness() : { waterMl: 0, waterGoalMl: 2500, sleepHours: null };
+    const steps     = window.zitlasSteps ? (window.zitlasSteps.today_steps || 0) : 0;
+    const stepsGoal = window.zitlasSteps ? (window.zitlasSteps.daily_step_goal || 10000) : 10000;
+
+    const inputs = {
+      steps: steps, stepsGoal: stepsGoal,
+      waterMl: wellness.waterMl, waterGoalMl: wellness.waterGoalMl, sleepHours: wellness.sleepHours,
+      mealScoreAvg: null, workoutCompleted: null,
+    };
+
+    function renderWith(inputs) {
+      const score = ZitlasDailyScore.compute(inputs);
+      if (score.overall == null) { section.style.display = 'none'; return; }
+      section.style.display = '';
+      const sub = score.subScores;
+      const chip = (label, val) => val == null ? '' :
+        `<div class="ds-chip"><span class="ds-chip-label">${label}</span><span class="ds-chip-val">${val}</span></div>`;
+      content.innerHTML = `
+        <div class="ds-card">
+          <div class="ds-overall">
+            <span class="ds-overall-num">${score.overall}</span><span class="ds-overall-max">/100</span>
+          </div>
+          <div class="ds-chips">
+            ${chip('Steps', sub.steps)}
+            ${chip('Hydration', sub.hydration)}
+            ${chip('Meal Quality', sub.mealQuality)}
+            ${chip('Workout', sub.workout)}
+            ${chip('Sleep', sub.sleep)}
+          </div>
+        </div>`;
+    }
+
+    if (!uid || typeof ZitlasDB === 'undefined') { renderWith(inputs); return; }
+
+    const dateKey = window.ZitlasActivity ? window.ZitlasActivity.todayStr() : new Date().toISOString().slice(0, 10);
+    Promise.all([
+      ZitlasDB.collection('users').doc(uid).collection('activity').doc(dateKey).get()
+        .then(snap => snap.exists ? snap.data().workoutCompleted : null).catch(() => null),
+      ZitlasDB.collection('meal_checkins').where('athleteId', '==', uid)
+        .get().then(snap => {
+          /* meal_checkins.day stores a WEEKDAY NAME (Monday, Tuesday, …),
+             not a date — it recurs weekly, so filtering on it alone would
+             match last week's Monday too. Filter by the real timestamp
+             instead, same calendar day as "now". */
+          const todayStr = new Date().toDateString();
+          const reviewed = snap.docs.map(d => d.data())
+            .filter(c => c.status === 'reviewed' && c.score != null &&
+              c.timestamp && new Date(c.timestamp).toDateString() === todayStr);
+          if (!reviewed.length) return null;
+          return reviewed.reduce((s, c) => s + c.score, 0) / reviewed.length;
+        }).catch(() => null),
+    ]).then(([workoutCompleted, mealScoreAvg]) => {
+      inputs.workoutCompleted = workoutCompleted;
+      inputs.mealScoreAvg = mealScoreAvg;
+      renderWith(inputs);
+    });
+  }
+
+  /* ══════════════════════════════════════════
      TODAY'S TRAINING CARD
   ══════════════════════════════════════════ */
   function renderTrainingWidget() {
@@ -1887,6 +2067,9 @@
     safeRun('initViewButtons',      initViewButtons);
     safeRun('renderSwotWidget',       renderSwotWidget);
     safeRun('renderStepCounterCard',  renderStepCounterCard);
+    safeRun('renderWellnessCard',     renderWellnessCard);
+    safeRun('_dashLoadWeightHistory', _dashLoadWeightHistory);
+    safeRun('renderDailyScoreCard',   renderDailyScoreCard);
     loadHealthConnectData();
     safeRun('renderTrainingWidget',   renderTrainingWidget);
     safeRun('initWeeklyPlanModal',  initWeeklyPlanModal);

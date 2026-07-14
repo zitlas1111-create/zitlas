@@ -237,3 +237,78 @@ def test_unauthenticated_request_rejected(app, client):
     app.dependency_overrides.pop(coaching.verify_firebase_token, None)
     r = client.post("/api/coaching/request", json={"expertId": EXPERT_UID, "planType": "diet"})
     assert r.status_code == 401
+
+
+# ── Phase 2: 30-day subscription lifecycle ─────────────────────────────
+
+def test_request_blocked_while_active_relationship_exists(fake_db, app, client):
+    """An athlete already mid-subscription with one coach cannot reserve
+    money for (and thus double-book) a second coach."""
+    _set_wallet(fake_db, ATHLETE_UID, balance=2000)
+    _as(app, ATHLETE_UID)
+    request_id = client.post("/api/coaching/request", json={"expertId": EXPERT_UID, "planType": "diet"}).json()["requestId"]
+    _as(app, EXPERT_UID)
+    client.post("/api/coaching/accept", json={"requestId": request_id})
+
+    fake_db.store["experts/expert_2"] = {"name": "Coach Two", "pricing": {"coachingDietPrice": 499}}
+    _as(app, ATHLETE_UID)
+    r = client.post("/api/coaching/request", json={"expertId": "expert_2", "planType": "diet"})
+    assert r.status_code == 409
+    assert r.json()["detail"] == "active_coaching_exists"
+
+    wallet = fake_db.store[f"users/{ATHLETE_UID}"]["wallet"]
+    assert wallet["reserved"] == 0, "the blocked second request must not reserve anything"
+
+
+def test_request_allowed_once_relationship_past_enddate_even_before_sweep(fake_db, app, client):
+    """Renewal must not require waiting on the 15-min sweep — if endDateTs
+    has already passed, /request must not block even if status still says
+    'active' (the sweep just hasn't caught up yet)."""
+    _set_wallet(fake_db, ATHLETE_UID, balance=2000)
+    _as(app, ATHLETE_UID)
+    request_id = client.post("/api/coaching/request", json={"expertId": EXPERT_UID, "planType": "diet"}).json()["requestId"]
+    _as(app, EXPERT_UID)
+    client.post("/api/coaching/accept", json={"requestId": request_id})
+
+    from datetime import datetime, timedelta, timezone
+    fake_db.store[f"personal_coaching/{ATHLETE_UID}"]["endDateTs"] = datetime.now(timezone.utc) - timedelta(days=1)
+
+    _as(app, ATHLETE_UID)
+    r = client.post("/api/coaching/request", json={"expertId": EXPERT_UID, "planType": "diet"})
+    assert r.status_code == 200, r.text
+
+
+def test_relationship_sweep_expires_past_enddate(fake_db, app, client):
+    _set_wallet(fake_db, ATHLETE_UID, balance=2000)
+    _as(app, ATHLETE_UID)
+    request_id = client.post("/api/coaching/request", json={"expertId": EXPERT_UID, "planType": "diet"}).json()["requestId"]
+    _as(app, EXPERT_UID)
+    client.post("/api/coaching/accept", json={"requestId": request_id})
+
+    from datetime import datetime, timedelta, timezone
+    fake_db.store[f"personal_coaching/{ATHLETE_UID}"]["endDateTs"] = datetime.now(timezone.utc) - timedelta(days=1)
+
+    expired = coaching_sweep.sweep_expired_relationships()
+    assert expired == 1
+
+    rel = fake_db.store[f"personal_coaching/{ATHLETE_UID}"]
+    assert rel["status"] == "expired"
+
+    notifs = [d for p, d in fake_db.store.items() if p.startswith("notifications/")]
+    assert any(n["userId"] == ATHLETE_UID and n["type"] == "coaching_subscription_expired" for n in notifs)
+    assert any(n["userId"] == EXPERT_UID and n["type"] == "coaching_subscription_expired" for n in notifs)
+
+    # Idempotent — running again finds nothing left to expire.
+    assert coaching_sweep.sweep_expired_relationships() == 0
+
+
+def test_relationship_sweep_leaves_unexpired_relationships_alone(fake_db, app, client):
+    _set_wallet(fake_db, ATHLETE_UID, balance=2000)
+    _as(app, ATHLETE_UID)
+    request_id = client.post("/api/coaching/request", json={"expertId": EXPERT_UID, "planType": "diet"}).json()["requestId"]
+    _as(app, EXPERT_UID)
+    client.post("/api/coaching/accept", json={"requestId": request_id})
+
+    expired = coaching_sweep.sweep_expired_relationships()
+    assert expired == 0
+    assert fake_db.store[f"personal_coaching/{ATHLETE_UID}"]["status"] == "active"

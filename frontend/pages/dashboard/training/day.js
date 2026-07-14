@@ -675,6 +675,173 @@
   }
 
   /* ══════════════════════════════════════════
+     WORKOUT COMPLETION + SEND-TO-COACH (parity with diet.js's meal_checkins)
+     No Firestore write of any kind existed in this file before this block —
+     "Completed" elsewhere in this project (weekly-plan.js) was purely
+     calendar-inferred (date < today), never a real athlete action.
+
+     "Complete Workout" writes users/{uid}/activity/{date}.workoutCompleted
+     — extends the SAME daily doc activity-service.js already owns (steps,
+     etc.) rather than a new collection, since it's one boolean for today.
+
+     "Send Workout to Coach" mirrors meal_checkins' exact shape/flow in a
+     new workout_checkins collection — gated on an active (non-expired)
+     Personal Coaching relationship via the canonical gate
+     (assets/js/coaching-gate.js). Unlike diet.js's meal-checkin gate, this
+     is NOT restricted to "today" specifically — day.js is a single-day
+     viewer across two different plan schemas (roadmap vs weekly_plan) with
+     no fully reliable "is this actually today" signal across both, so any
+     viewed day's workout can be marked complete / sent for review.
+  ══════════════════════════════════════════ */
+  var _dtRel = null;          /* personal_coaching/{uid} */
+  var _dtCheckins = {};       /* dayLabel -> latest workout_checkins doc */
+  var _dtActivityToday = null; /* users/{uid}/activity/{today} cache */
+
+  function _dtUid() {
+    try {
+      var fb = JSON.parse(localStorage.getItem('zitlas_firebase_user') || 'null');
+      return fb && fb.uid;
+    } catch (_) { return null; }
+  }
+  function _dtDateKey() {
+    var d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+  function _dtIsCoachActive() {
+    return !!(_dtRel && typeof ZitlasCoachingGate !== 'undefined' && ZitlasCoachingGate.evaluate(_dtRel).active);
+  }
+
+  function _dtInitListeners() {
+    if (_dtInitListeners._attached || typeof ZitlasDB === 'undefined') return;
+    _dtInitListeners._attached = true;
+    var uid = _dtUid();
+    if (!uid) return;
+
+    ZitlasDB.collection('personal_coaching').doc(uid).onSnapshot(function (snap) {
+      _dtRel = snap.exists ? snap.data() : null;
+    }, function (e) { console.warn('[WORKOUT] relationship listener error', e); });
+
+    ZitlasDB.collection('users').doc(uid).collection('activity').doc(_dtDateKey())
+      .onSnapshot(function (snap) {
+        _dtActivityToday = snap.exists ? snap.data() : null;
+        _dtRefreshActionsUI();
+      }, function (e) { console.warn('[WORKOUT] activity listener error', e); });
+
+    ZitlasDB.collection('workout_checkins').where('athleteId', '==', uid)
+      .onSnapshot(function (snap) {
+        _dtCheckins = {};
+        snap.docs.forEach(function (d) {
+          var c = d.data();
+          if (!_dtCheckins[c.day] || (c.timestamp || '') > (_dtCheckins[c.day].timestamp || '')) _dtCheckins[c.day] = c;
+        });
+        _dtRefreshActionsUI();
+      }, function (e) { console.warn('[WORKOUT] checkins listener error', e); });
+  }
+
+  function _dtCompleteWorkout() {
+    var uid = _dtUid();
+    if (!uid || typeof ZitlasDB === 'undefined') return;
+    ZitlasDB.collection('users').doc(uid).collection('activity').doc(_dtDateKey())
+      .set({ date: _dtDateKey(), workoutCompleted: true, workoutCompletedAt: new Date().toISOString() }, { merge: true })
+      .then(function () { _dtToast('✅ Workout marked complete!'); })
+      .catch(function (e) { console.error('[WORKOUT] complete failed', e); _dtToast('Could not save — try again.'); });
+  }
+
+  function _dtSendWorkoutToCoach(day) {
+    var uid = _dtUid();
+    if (!uid || !_dtRel || typeof ZitlasDB === 'undefined') return;
+    var id = 'WCI_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+    var exercises = (day.exercises || []).map(function (ex) {
+      return { name: ex.name, sets: ex.sets || null, reps: ex.reps || ex.reps_or_duration || null };
+    });
+    var doc = {
+      checkinId: id, athleteId: uid, coachId: _dtRel.coachId,
+      day: day.day || ('Day ' + 1), focus: day.focus || day.type || 'Training',
+      exercises: exercises, timestamp: new Date().toISOString(), status: 'pending',
+      reaction: null, score: null, comment: null, reviewedAt: null, reviewedBy: null,
+    };
+    ZitlasDB.collection('workout_checkins').doc(id).set(doc).then(function () {
+      var nid = 'CN_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+      return ZitlasDB.collection('coaching_notifications').doc(nid).set({
+        id: nid, toId: _dtRel.coachId, fromId: uid, fromName: _dtRel.athleteName || 'Athlete',
+        text: '💪 ' + (_dtRel.athleteName || 'Your athlete') + ' sent ' + doc.day + "'s workout for review.",
+        type: 'workout_checkin', createdAt: new Date().toISOString(), read: false,
+      });
+    }).then(function () {
+      if (typeof ZitlasNotify !== 'undefined') {
+        ZitlasNotify.send(_dtRel.coachId, {
+          title: '💪 ' + (_dtRel.athleteName || 'Your athlete') + ' sent a workout',
+          message: doc.day + ' — ' + doc.focus, category: 'training',
+          type: 'workout_checkin', action: 'expert_dashboard',
+        });
+      }
+    }).then(function () {
+      _dtToast('✅ Sent to your coach for review.');
+    }).catch(function (e) {
+      console.error('[WORKOUT] send failed', e);
+      _dtToast('Could not send — try again.');
+    });
+  }
+
+  var _dtToastTimer = null;
+  function _dtToast(msg) {
+    var t = el('tpWorkoutToast');
+    if (!t) {
+      t = document.createElement('div');
+      t.id = 'tpWorkoutToast';
+      t.className = 'tp-workout-toast';
+      document.body.appendChild(t);
+    }
+    t.textContent = msg;
+    t.classList.add('on');
+    clearTimeout(_dtToastTimer);
+    _dtToastTimer = setTimeout(function () { t.classList.remove('on'); }, 3000);
+  }
+
+  /* Re-renders just the actions block in place — called by the listeners
+     above so a completion/checkin made on another tab/device reflects here
+     without a full page re-render. */
+  function _dtRefreshActionsUI() {
+    var wrap = el('tpWorkoutActions');
+    if (wrap) wrap.outerHTML = _dtBuildActionsHtml(_dtCurrentDay);
+    _dtWireActions();
+  }
+
+  var _dtCurrentDay = null;
+
+  function _dtBuildActionsHtml(day) {
+    var completed = !!(_dtActivityToday && _dtActivityToday.workoutCompleted);
+    var checkin = day && _dtCheckins[day.day];
+    var coachActive = _dtIsCoachActive();
+
+    var completeBtn = completed
+      ? '<span class="tp-workout-done">✅ Workout Complete</span>'
+      : '<button class="tp-workout-btn tp-workout-btn--complete" id="tpCompleteWorkoutBtn">✅ Complete Workout</button>';
+
+    var sendBtn = '';
+    if (coachActive) {
+      if (checkin) {
+        var statusText = checkin.status === 'reviewed'
+          ? '✓ Reviewed by coach' + (checkin.score != null ? ' · ' + checkin.score + '/10' : '')
+          : '🔒 Sent — awaiting coach review';
+        sendBtn = '<span class="tp-workout-sent">' + statusText + '</span>' +
+          (checkin.comment ? '<p class="tp-workout-comment">' + escHtml(checkin.comment) + '</p>' : '');
+      } else {
+        sendBtn = '<button class="tp-workout-btn tp-workout-btn--send" id="tpSendWorkoutBtn">📤 Send Workout to Coach</button>';
+      }
+    }
+
+    return '<div class="tp-workout-actions" id="tpWorkoutActions">' + completeBtn + sendBtn + '</div>';
+  }
+
+  function _dtWireActions() {
+    var completeBtn = el('tpCompleteWorkoutBtn');
+    if (completeBtn) completeBtn.addEventListener('click', _dtCompleteWorkout);
+    var sendBtn = el('tpSendWorkoutBtn');
+    if (sendBtn) sendBtn.addEventListener('click', function () { _dtSendWorkoutToCoach(_dtCurrentDay); });
+  }
+
+  /* ══════════════════════════════════════════
      RENDER FITNESS DAY (zitlas_workout_plan schema)
      Handles: { day, type, focus, exercises[],
                 duration_minutes, calories_burned_est,
@@ -861,6 +1028,18 @@
     } else {
       if (tipWrap) tipWrap.style.display = 'none';
     }
+
+    /* ── Workout Actions (Complete / Send to Coach) ── */
+    _dtCurrentDay = day;
+    const existingActions = el('tpWorkoutActions');
+    if (existingActions) existingActions.remove();
+    if (tipWrap && tipWrap.parentNode) {
+      tipWrap.insertAdjacentHTML('afterend', _dtBuildActionsHtml(day));
+    } else if (el('tpContent')) {
+      el('tpContent').insertAdjacentHTML('beforeend', _dtBuildActionsHtml(day));
+    }
+    _dtWireActions();
+    _dtInitListeners();
   }
 
   /* ══════════════════════════════════════════

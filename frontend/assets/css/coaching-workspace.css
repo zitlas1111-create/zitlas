@@ -550,6 +550,20 @@
 }
 .cw-reaction-btn.selected { border-color: #6BA539; background: rgba(107,165,57,0.1); }
 .cw-score-label { font-size: 11px; font-weight: 800; color: var(--text-sec, #94A3B8); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 8px; display: block; }
+.cw-week-stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 16px; }
+.cw-week-stat {
+  background: rgba(30,41,59,0.03); border-radius: 14px; padding: 12px;
+  display: flex; flex-direction: column; gap: 3px;
+}
+.cw-week-stat-label { font-size: 10.5px; font-weight: 700; color: var(--text-sec, #94A3B8); text-transform: uppercase; }
+.cw-week-stat-val { font-size: 18px; font-weight: 900; color: var(--text, #1E293B); }
+.cw-workout-reviews { margin-top: 16px; }
+.cw-workout-ex-list { margin-bottom: 14px; }
+.cw-workout-ex-row {
+  padding: 9px 12px; border-radius: 10px; margin-bottom: 6px;
+  background: rgba(30,41,59,0.03); font-size: 13px; font-weight: 600; color: var(--text, #1E293B);
+}
+.cw-workout-ex-meta { color: var(--text-sec, #94A3B8); font-weight: 500; }
 .cw-score-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 14px; }
 .cw-score-btn {
   padding: 10px 0; border-radius: 11px; cursor: pointer; text-align: center;
