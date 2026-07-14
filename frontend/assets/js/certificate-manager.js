@@ -87,20 +87,60 @@
         return { url: url, path: path };
       })
       .catch(function (e) {
-        /* A bucket that has never been provisioned in the Firebase Console
-           (Storage > Get Started was never clicked for this project)
-           surfaces as storage/retry-limit-exceeded or a generic network
-           failure here, not a clean "permission denied". Log the raw code
-           for debugging, and surface a phase-specific message so the UI
-           never sits silently on a spinner. */
-        console.error('[CERT] STEP 3/4 FAILED — code=' + (e && e.code) + ' message=' + (e && e.message) +
-                       '. If this is storage/retry-limit-exceeded or a network error, Cloud Storage is ' +
-                       'likely NOT enabled for this project (Firebase Console -> Storage -> Get Started), ' +
-                       'or its rules block authenticated writes to certificates/**.');
-        var friendly = (e && e.code === 'storage/unauthorized')
-          ? 'Upload blocked by storage security rules. Please contact support.'
-          : 'Could not upload the certificate — cloud storage is unavailable right now. Please try again shortly.';
-        throw new Error(friendly);
+        /* NEVER swallow this into a generic string without logging the raw
+           SDK error first — that's the one thing that actually tells us
+           WHICH of {bucket missing, rules blocking, Storage not enabled,
+           network} we're looking at. e.code is the Firebase Storage error
+           enum (storage/unauthorized, storage/unauthenticated,
+           storage/object-not-found, storage/retry-limit-exceeded,
+           storage/unknown, ...) — see
+           https://firebase.google.com/docs/storage/web/handle-errors */
+        console.error('[CERT] STEP 3/4 FAILED — raw Firebase error follows:');
+        console.error('[CERT]   code=' + (e && e.code));
+        console.error('[CERT]   message=' + (e && e.message));
+        console.error('[CERT]   serverResponse=' + (e && e.serverResponse));
+        console.error('[CERT]   name=' + (e && e.name));
+        console.error('[CERT]   bucket=' + (s.app && s.app.options && s.app.options.storageBucket));
+        console.error('[CERT]   full error object:', e);
+        console.error('[CERT] Diagnosis: storage/retry-limit-exceeded or a bare network error with no HTTP ' +
+                       'status usually means Cloud Storage was never enabled for this project (Firebase ' +
+                       'Console -> Storage -> Get Started is a one-time step nobody has done yet, confirmed ' +
+                       'separately by both bucket-name candidates 404ing on a raw REST probe). ' +
+                       'storage/unauthorized or storage/unauthenticated means Storage IS enabled but its ' +
+                       'security rules reject this write — that would be a DIFFERENT, easier fix (edit rules).');
+        /* Include the raw code in the user-facing message too (not just the
+           console) — the whole point of this pass is "never show a generic
+           message without the real exception being visible". */
+        var code = (e && e.code) || 'unknown';
+        throw new Error('Could not upload the certificate — cloud storage error [' + code + ']. Please try again shortly.');
+      });
+  }
+
+  /* ── Startup probe: confirms Storage is actually reachable the moment
+     the SDK initializes, not just when an expert happens to upload. Cheap
+     (fails on a nonexistent path either way) and safe (no write). Logs
+     immediately on page load so the diagnosis is visible in the console
+     before anyone touches the upload button. */
+  function _probeStorageOnInit() {
+    var s = storage();
+    if (!s) { console.warn('[CERT] storage probe skipped — ZitlasStorage not initialized on this page (firebase-storage-compat.js not loaded here, or firebase.storage is not a function).'); return; }
+    var bucket = (s.app && s.app.options && s.app.options.storageBucket) || '(unknown)';
+    console.log('[CERT] storage probe — getStorage() returned an instance, bucket=' + bucket);
+    s.ref('_probe/init_check.txt').getDownloadURL()
+      .then(function () {
+        console.log('[CERT] storage probe — unexpected success (a file exists at _probe/init_check.txt); bucket is definitely reachable and authorized.');
+      })
+      .catch(function (e) {
+        if (e && e.code === 'storage/object-not-found') {
+          console.log('[CERT] storage probe — code=storage/object-not-found. This is GOOD: it means the ' +
+                      'bucket exists and rules allowed the read request through to the server, which then ' +
+                      'correctly said "no such file". Uploads should work.');
+        } else {
+          console.error('[CERT] storage probe — code=' + (e && e.code) + ' message=' + (e && e.message) +
+                        '. This is NOT storage/object-not-found, which means we could not even reach the ' +
+                        'bucket to ask about the file. Likely cause: Cloud Storage is not enabled for this ' +
+                        'project, or the bucket name in firebase-config.js (' + bucket + ') is wrong.');
+        }
       });
   }
 
@@ -561,5 +601,12 @@
     openVerificationInfo: openVerificationInfo,
     closeModal: closeModal,
     toast: toast,
+    probeStorage: _probeStorageOnInit, // callable from the console for a fresh check any time
   };
+
+  /* Run once automatically, right when this script loads — so the
+     console shows the storage diagnosis before anyone even opens the
+     upload UI. No-ops harmlessly (with a log line) on pages that don't
+     load firebase-storage-compat.js. */
+  _probeStorageOnInit();
 })(window);
