@@ -68,8 +68,15 @@ async def create_order(body: CreateOrderBody, caller: dict = Depends(verify_fire
 
     amount_paise = int(round(body.amount * 100))
     try:
+        # Razorpay caps `receipt` at 40 chars. A Firebase uid alone is ~28,
+        # so "wallet_<uid>_<ms-timestamp>" (~49) blew past that in
+        # production (see Render logs — BAD_REQUEST_ERROR on every order).
+        # The uid isn't needed here for correctness — razorpay_orders/{id}
+        # already stores it — this is just a merchant-facing label, so a
+        # short timestamp-only receipt is enough. "wallet_" + a 13-digit
+        # ms timestamp is 20 chars, safely under the limit indefinitely.
         order = razorpay_service.create_order(
-            amount_paise, receipt=f"wallet_{uid}_{int(time.time() * 1000)}"
+            amount_paise, receipt=f"wallet_{int(time.time() * 1000)}"
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
