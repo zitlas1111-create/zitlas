@@ -42,6 +42,8 @@ async def verify_firebase_token(authorization: str | None = Header(default=None)
         raise HTTPException(status_code=401, detail="invalid_token")
 
     if not claims or not claims.get("sub"):
+        print(f"[AUTH] token verified but missing 'sub' claim — claims keys={list((claims or {}).keys())}")
         raise HTTPException(status_code=401, detail="invalid_token")
 
+    print(f"[AUTH] token verified OK — uid={claims['sub']}")
     return {"uid": claims["sub"], "email": claims.get("email"), "name": claims.get("name")}

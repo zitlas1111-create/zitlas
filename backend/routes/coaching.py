@@ -41,6 +41,7 @@ and there shouldn't be one.
 from __future__ import annotations
 
 import time
+import traceback
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -76,12 +77,24 @@ PLAN_LABELS = {
 
 
 def _db() -> firestore.Client:
-    db = firestore_service.get_client()
+    """Fail closed — unlike push notifications, a coaching request that
+    "succeeds" without actually reserving money would be a real financial
+    bug, not a degraded-but-harmless feature. Never returns a bare 503: the
+    response body always carries the actual reason from
+    firestore_service.config_error() (missing env var, bad credential JSON,
+    client-construction failure, etc.) or the exact exception if
+    get_client() itself raised unexpectedly."""
+    try:
+        db = firestore_service.get_client()
+    except Exception as e:
+        print(f"[COACHING] firestore_service.get_client() raised unexpectedly: {type(e).__name__}: {e}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=503,
+                             detail=f"coaching_service_unavailable: {type(e).__name__}: {e}")
     if db is None:
-        # Fail closed — unlike push notifications, a coaching request that
-        # "succeeds" without actually reserving money would be a real
-        # financial bug, not a degraded-but-harmless feature.
-        raise HTTPException(status_code=503, detail="coaching_service_unavailable")
+        reason = firestore_service.config_error() or "unknown — get_client() returned None with no recorded error"
+        print(f"[COACHING] Firestore client unavailable — {reason}")
+        raise HTTPException(status_code=503, detail=f"coaching_service_unavailable: {reason}")
     return db
 
 
@@ -96,11 +109,20 @@ class ActionBody(BaseModel):
 
 @router.post("/request")
 async def create_request(body: RequestBody, caller: dict = Depends(verify_firebase_token)):
+    print(f"[COACHING REQUEST] [1] request received — expertId={body.expertId} planType={body.planType}")
+
     if body.planType not in PLAN_TO_FIELD:
+        print(f"[COACHING REQUEST] rejected — invalid planType={body.planType!r}")
         raise HTTPException(status_code=400, detail="invalid_plan_type")
 
-    db = _db()
     athlete_uid = caller["uid"]
+    print(f"[COACHING REQUEST] [2] authentication passed — uid={athlete_uid}")
+
+    # _db() logs its own reason and raises a 503 with that reason attached —
+    # never a bare "Service Unavailable" (see _db()'s docstring).
+    db = _db()
+    print("[COACHING REQUEST] Firestore client acquired")
+
     expert_ref = db.collection("experts").document(body.expertId)
     user_ref = db.collection("users").document(athlete_uid)
     request_id = "PCR_" + str(int(time.time() * 1000))
@@ -109,19 +131,27 @@ async def create_request(body: RequestBody, caller: dict = Depends(verify_fireba
 
     @firestore.transactional
     def _txn(tx):
+        print(f"[COACHING REQUEST] [5] Firestore transaction started — requestId={request_id}")
+
         expert_snap = expert_ref.get(transaction=tx)
         if not expert_snap.exists:
+            print(f"[COACHING REQUEST] expert not found — expertId={body.expertId}")
             raise HTTPException(status_code=404, detail="expert_not_found")
         expert_data = expert_snap.to_dict() or {}
         expert_name = expert_data.get("name") or "Expert"
         pricing = expert_data.get("pricing") or {}
         amount = int(pricing.get(PLAN_TO_FIELD[body.planType]) or PRICING_DEFAULTS[body.planType])
+        print(f"[COACHING REQUEST] [4] expert loaded — expertId={body.expertId} "
+              f"name={expert_name!r} planType={body.planType} amount={amount}")
 
         # Duplicate-request / double-spend guard: at most one open
         # (pending) reservation per athlete, platform-wide, at a time.
         open_query = coach_requests.where(filter=FieldFilter("athleteId", "==", athlete_uid)) \
                                     .where(filter=FieldFilter("status", "==", "pending"))
-        if list(tx.get(open_query)):
+        existing = list(tx.get(open_query))
+        if existing:
+            print(f"[COACHING REQUEST] blocked — athlete already has an open request "
+                  f"({[d.id for d in existing]})")
             raise HTTPException(status_code=409, detail="open_request_exists")
 
         user_snap = user_ref.get(transaction=tx)
@@ -130,7 +160,12 @@ async def create_request(body: RequestBody, caller: dict = Depends(verify_fireba
         balance = float(wallet.get("balance", 0) or 0)
         reserved = float(wallet.get("reserved", 0) or 0)
         available = balance - reserved
+        print(f"[COACHING REQUEST] [3] wallet loaded — uid={athlete_uid} "
+              f"userDocExists={user_snap.exists} balance={balance} reserved={reserved} "
+              f"available={available} required={amount}")
+
         if available < amount:
+            print(f"[COACHING REQUEST] insufficient balance — available={available} required={amount}")
             raise HTTPException(status_code=402, detail={
                 "error": "insufficient_balance", "available": available, "required": amount,
             })
@@ -155,20 +190,43 @@ async def create_request(body: RequestBody, caller: dict = Depends(verify_fireba
             "expiresAt": expires.isoformat(),
             "paymentStatus": "reserved",
         })
+        print(f"[COACHING REQUEST] [6] reservation created — requestId={request_id} "
+              f"amount={amount} newReserved={wallet['reserved']} expiresAt={expires.isoformat()}")
         return {"requestId": request_id, "amount": amount, "expiresAt": expires.isoformat()}
 
-    result = _txn(db.transaction())
+    try:
+        result = _txn(db.transaction())
+    except HTTPException:
+        raise
+    except Exception as e:
+        # Anything NOT already an intentional HTTPException (400/402/404/409
+        # above) is unexpected — surface the exact exception, never a bare
+        # 503/500, and log the full traceback so Render's logs show the
+        # real cause without needing to reproduce it.
+        print(f"[COACHING REQUEST] UNEXPECTED transaction failure — uid={athlete_uid} "
+              f"expertId={body.expertId}: {type(e).__name__}: {e}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500,
+                             detail=f"coaching_request_failed: {type(e).__name__}: {e}")
 
-    notify(db, athlete_uid, "Request Sent",
-           "Your coaching request has been sent. Payment has been securely reserved. "
-           "You will only be charged if the expert accepts.",
-           category="expert", type="coaching_requested", action="coaches")
+    try:
+        notify(db, athlete_uid, "Request Sent",
+               "Your coaching request has been sent. Payment has been securely reserved. "
+               "You will only be charged if the expert accepts.",
+               category="expert", type="coaching_requested", action="coaches")
+    except Exception:
+        # Notification failure must never fail a reservation that already
+        # committed — log it and move on.
+        print(f"[COACHING REQUEST] notification write failed (non-fatal) — requestId={result['requestId']}")
+        print(traceback.format_exc())
 
+    print(f"[COACHING REQUEST] [7] response returned — requestId={result['requestId']} success=True")
     return {"success": True, **result}
 
 
 @router.post("/accept")
 async def accept_request(body: ActionBody, caller: dict = Depends(verify_firebase_token)):
+    print(f"[COACHING ACCEPT] request received — requestId={body.requestId} callerUid={caller['uid']}")
     db = _db()
     expert_uid = caller["uid"]
     request_ref = db.collection("personal_coach_requests").document(body.requestId)
@@ -246,25 +304,39 @@ async def accept_request(body: ActionBody, caller: dict = Depends(verify_firebas
 
         return {"already": False, "athleteId": athlete_uid, "amount": amount}
 
-    result = _txn(db.transaction())
+    try:
+        result = _txn(db.transaction())
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[COACHING ACCEPT] UNEXPECTED transaction failure — expertUid={expert_uid} "
+              f"requestId={body.requestId}: {type(e).__name__}: {e}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500,
+                             detail=f"coaching_accept_failed: {type(e).__name__}: {e}")
 
     if not result.get("already"):
-        req = (request_ref.get().to_dict() or {})
-        amount = result["amount"]
-        notify(db, result["athleteId"], "Congratulations!",
-               f"Your coaching request has been accepted. ₹{int(amount)} has been "
-               "automatically deducted. Your coaching starts now.",
-               category="expert", type="coaching_accepted", action="expert_profile",
-               action_id=expert_uid, priority="high")
-        notify(db, expert_uid, "Payment received",
-               (req.get("athleteName") or "An athlete") + " just started coaching with you.",
-               category="expert", type="coaching_started", action="expert_dashboard")
+        try:
+            req = (request_ref.get().to_dict() or {})
+            amount = result["amount"]
+            notify(db, result["athleteId"], "Congratulations!",
+                   f"Your coaching request has been accepted. ₹{int(amount)} has been "
+                   "automatically deducted. Your coaching starts now.",
+                   category="expert", type="coaching_accepted", action="expert_profile",
+                   action_id=expert_uid, priority="high")
+            notify(db, expert_uid, "Payment received",
+                   (req.get("athleteName") or "An athlete") + " just started coaching with you.",
+                   category="expert", type="coaching_started", action="expert_dashboard")
+        except Exception:
+            print(f"[COACHING ACCEPT] notification write failed (non-fatal) — requestId={body.requestId}")
+            print(traceback.format_exc())
 
     return {"success": True, "requestId": body.requestId, **result}
 
 
 @router.post("/reject")
 async def reject_request(body: ActionBody, caller: dict = Depends(verify_firebase_token)):
+    print(f"[COACHING REJECT] request received — requestId={body.requestId} callerUid={caller['uid']}")
     db = _db()
     expert_uid = caller["uid"]
     request_ref = db.collection("personal_coach_requests").document(body.requestId)
@@ -286,11 +358,24 @@ async def reject_request(body: ActionBody, caller: dict = Depends(verify_firebas
                                                "declined", "released", "declinedAt")
         return {"already": False, "athleteId": athlete_uid}
 
-    result = _txn(db.transaction())
+    try:
+        result = _txn(db.transaction())
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[COACHING REJECT] UNEXPECTED transaction failure — expertUid={expert_uid} "
+              f"requestId={body.requestId}: {type(e).__name__}: {e}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500,
+                             detail=f"coaching_reject_failed: {type(e).__name__}: {e}")
 
     if not result.get("already"):
-        notify(db, result["athleteId"], "Request declined",
-               "Unfortunately your request was declined. Your reserved amount has been released.",
-               category="expert", type="coaching_declined", action="coaches")
+        try:
+            notify(db, result["athleteId"], "Request declined",
+                   "Unfortunately your request was declined. Your reserved amount has been released.",
+                   category="expert", type="coaching_declined", action="coaches")
+        except Exception:
+            print(f"[COACHING REJECT] notification write failed (non-fatal) — requestId={body.requestId}")
+            print(traceback.format_exc())
 
     return {"success": True, "requestId": body.requestId, **result}

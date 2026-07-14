@@ -91,6 +91,20 @@ async def lifespan(app: FastAPI):
     else:
         print("[STARTUP] KB pre-warm disabled (DISABLE_KB_PREWARM=true) — KBs load on first request")
 
+    # Surface Firestore Admin configuration status at boot, not just on the
+    # first request — this is the #1 thing to check in Render's logs if
+    # /api/coaching/* returns 503 (missing FIREBASE_SERVICE_ACCOUNT_JSON /
+    # FIREBASE_SERVICE_ACCOUNT_FILE in the environment is the usual cause).
+    try:
+        from services import firestore_service
+        if firestore_service.is_configured():
+            print("[STARTUP] Firestore Admin (coaching escrow) — CONFIGURED")
+        else:
+            print(f"[STARTUP] Firestore Admin (coaching escrow) — NOT CONFIGURED: "
+                  f"{firestore_service.config_error()} — /api/coaching/* will 503 until this is set")
+    except Exception as exc:
+        print(f"[STARTUP] Firestore Admin config check itself failed (non-fatal): {exc}")
+
     try:
         from apscheduler.schedulers.asyncio import AsyncIOScheduler
         from services.coaching_sweep import sweep_expired_requests
