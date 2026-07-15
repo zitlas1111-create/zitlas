@@ -202,12 +202,21 @@
   /* Returns the newest workout review with workoutChangeHistory.
      NEVER relies on array order — cprofile.js unshifts new reviews so index 0 is newest,
      index -1 is oldest. Always sort by timestamp. No status/accept filter here — the
-     normalization uses this to sync to the latest expert edit even before athlete accepts. */
+     normalization uses this to sync to the latest expert edit even before athlete accepts.
+
+     planId-gated (this had NO staleness check at all before, the twin of
+     the same fix in day.js): a review carrying a planId must match the
+     currently active plan — without this, a freshly regenerated AI
+     workout plan could get retroactively re-marked isExpertPlan=true by
+     an old coach review purely because its timestamp was newer than the
+     brand-new plan's unset reviewedAt. */
   function getLatestWorkoutReview(reviews) {
+    var activePlanId = localStorage.getItem('zitlas_plan_id');
     return (reviews || [])
       .filter(function(r) {
         return r.reviewType === 'workout' &&
-          r.workoutChangeHistory && r.workoutChangeHistory.length;
+          r.workoutChangeHistory && r.workoutChangeHistory.length &&
+          (r.planId ? r.planId === activePlanId : true);
       })
       .sort(function(a, b) {
         var aDate = new Date(a.reviewedAt || a.completedAt || a.createdAt || 0);
@@ -354,7 +363,10 @@
       console.log('ORIGINAL PLAN SOURCE', originalWp ? (originalWp.originalWorkoutPlan && originalWp.originalWorkoutPlan.weekly_plan) : null);
 
       if (er && er.status === 'APPROVED' && er.modifiedWorkoutPlan) {
-        const planIdMismatch = er.planId && activePlanId && (er.planId !== activePlanId);
+        /* Fail-closed — same reasoning as day.js/diet.js's identical
+           guards: a review with a planId must match the active one; a
+           missing activePlanId no longer auto-passes. */
+        const planIdMismatch = er.planId ? (er.planId !== activePlanId) : false;
         console.log('[WeeklyPlan] Expert review planId check — er.planId:', er.planId, '| active:', activePlanId, '| mismatch:', planIdMismatch);
         if (!planIdMismatch && normalizeWorkoutDays(er.modifiedWorkoutPlan).length) {
           const expertMeta = {

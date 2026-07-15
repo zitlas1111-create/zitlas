@@ -2191,6 +2191,15 @@
        'expertReviewedPlan', 'approvedPlan', 'expertWorkoutOverride',
       ].forEach(function(k) { localStorage.removeItem(k); });
       console.log('[AI-COACH] New plan saved — all expert review keys cleared');
+      /* Local keys alone aren't durable — assets/js/review-sync.js's live
+         Firestore listener treats "no local review cache" as "resync from
+         Firestore" and can silently repopulate them from the OLD review's
+         still-live review_requests doc. Dismiss it there too so a fresh
+         plan (or a retaken assessment, which funnels through this same
+         function) never has a stale review reattach itself. Fire-and-
+         forget — this function doesn't block on network and the page
+         isn't navigating away. */
+      if (typeof ZitlasCoachingReset !== 'undefined') ZitlasCoachingReset.clearAll({});
 
       /* Push everything to Firestore in one write so every other device
          logged into this account sees the identical plan — this was

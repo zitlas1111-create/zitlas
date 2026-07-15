@@ -239,24 +239,17 @@
      relationship by moving it to a status neither diet.js nor weekly-plan.js
      recognizes as show-worthy, so a brand-new transformation starts on pure
      AI plans exactly like a first-time user. */
+  /* Delegates to the shared assets/js/coaching-reset.js module, which does
+     two things this function used to do only the second of: (1) marks any
+     review_requests doc this device has cached as no longer "live" in
+     Firestore, so assets/js/review-sync.js's live onSnapshot listener
+     can't silently resurrect it moments after clearAllGoalData() wipes the
+     local cache — clearing localStorage alone was never durable against
+     that listener, which is the actual bug this closes; (2) retires
+     personal_coaching/{uid} to 'reset' as before. */
   function clearCoachingArtifactsOnReset() {
-    if (typeof ZitlasDB === 'undefined') return Promise.resolve();
-    var uid = (typeof ZitlasAuth !== 'undefined' && ZitlasAuth.currentUser) ? ZitlasAuth.currentUser.uid : null;
-    if (!uid) return Promise.resolve();
-
-    var relRef = ZitlasDB.collection('personal_coaching').doc(uid);
-    return relRef.get().then(function (snap) {
-      if (!snap.exists) return;
-      var prior = snap.data() || {};
-      if (prior.status === 'reset') return; // already retired — nothing to do
-      return relRef.update({
-        status:      'reset',
-        resetAt:     new Date().toISOString(),
-        priorStatus: prior.status || null,
-      });
-    }).catch(function (e) {
-      console.warn('[GOAL RESET] coaching artifact cleanup failed (non-blocking):', e);
-    });
+    if (typeof ZitlasCoachingReset === 'undefined') return Promise.resolve();
+    return ZitlasCoachingReset.clearAll({ relationshipStatus: 'reset' });
   }
 
   function calcDaysLeft(endDateStr) {

@@ -73,12 +73,24 @@
 
   /* Returns the newest workout review with workoutChangeHistory.
      NEVER relies on array order — reviews are unshifted so newest is at index 0.
-     No status/accept filter: normalization syncs to latest expert edit regardless. */
+     No status/accept filter: normalization syncs to latest expert edit regardless.
+
+     planId-gated (this had NO staleness check at all before): a review
+     carrying a planId must match the currently active plan, same
+     fail-closed rule as diet.js's guards — a missing active planId no
+     longer auto-passes. Without this, a freshly regenerated AI workout
+     plan (e.g. after Reset Goal) could get retroactively re-marked
+     isExpertPlan=true by an OLD coach review purely because its timestamp
+     was newer than the brand-new plan's unset reviewedAt — this was the
+     training-side twin of the diet banner bug, arguably worse since it
+     silently mutated zitlas_workout_plan rather than just showing a banner. */
   function getLatestWorkoutReview(reviews) {
+    var activePlanId = localStorage.getItem('zitlas_plan_id');
     return (reviews || [])
       .filter(function(r) {
         return r.reviewType === 'workout' &&
-          r.workoutChangeHistory && r.workoutChangeHistory.length;
+          r.workoutChangeHistory && r.workoutChangeHistory.length &&
+          (r.planId ? r.planId === activePlanId : true);
       })
       .sort(function(a, b) {
         var aDate = new Date(a.reviewedAt || a.completedAt || a.createdAt || 0);
@@ -119,9 +131,13 @@
       console.log('REVIEWED WORKOUT PLAN', er ? er.modifiedWorkoutPlan : null);
 
       if (er && er.status === 'APPROVED') {
-        /* planId guard — reject ONLY when both planIds are present and don't match.
-           null/null means planId was never generated; still trust the review. */
-        const planIdMismatch = er.planId && activePlanId && (er.planId !== activePlanId);
+        /* Fail-closed: a review with a planId must match the currently
+           active one — a missing activePlanId (e.g. right after Reset
+           Goal, before this file's twin fix in coaching-reset.js) no
+           longer auto-passes. Only a review with NO planId at all (truly
+           legacy data) still gets the benefit of the doubt. Same
+           reasoning as diet.js's identical guard. */
+        const planIdMismatch = er.planId ? (er.planId !== activePlanId) : false;
         const reviewValid    = !planIdMismatch;
         console.log('[TRAINING] planId guard — er.planId:', er.planId, '| activePlanId:', activePlanId, '| mismatch:', planIdMismatch, '| valid:', reviewValid);
         if (!reviewValid) {

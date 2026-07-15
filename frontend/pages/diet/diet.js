@@ -2378,9 +2378,18 @@
        Remove the key so it never interferes again.
     ─────────────────────────────────────────────────────────────────────────── */
     if (_er) {
-      /* Reject ONLY when both planIds are present and don't match.
-         null/null means planId was never generated — still trust the review. */
-      var _planIdMismatch = _er.planId && _activePlanId && (_er.planId !== _activePlanId);
+      /* Fail-closed: if the review carries a planId (i.e. it was created
+         under the planId-tracking regime), it MUST match the currently
+         active one — a MISSING active planId no longer auto-passes. That
+         used to fail open ("null/null still trusts the review"), which
+         was fine for genuinely legacy pre-planId data but also silently
+         re-validated a stale review the instant Reset Goal cleared
+         zitlas_plan_id without (at the time) also clearing
+         zitlas_expert_review — the exact bug class assets/js/
+         coaching-reset.js now closes at the source. Only a review with NO
+         planId at all (truly legacy data, never had this concept) still
+         gets the benefit of the doubt. */
+      var _planIdMismatch = _er.planId ? (_er.planId !== _activePlanId) : false;
       var _reviewValid    = !_planIdMismatch;
       console.log('[DIET] planId guard — er.planId:', _er.planId, '| active:', _activePlanId, '| mismatch:', _planIdMismatch, '| valid:', _reviewValid);
       if (!_reviewValid) {
@@ -2579,7 +2588,26 @@
           'expertReviewedPlan', 'approvedPlan', 'expertWorkoutOverride',
         ].forEach(function (k) { localStorage.removeItem(k); });
         console.log('[DIET] Goal reset — all expert review keys cleared');
-        window.location.href = '../dashboard/ai-coach/ai-coach.html';
+
+        resetBtn.disabled = true;
+        /* This page's own Reset Goal button used to stop here — diverging
+           from dashboard.js's version, which additionally (a) marks any
+           cached review_requests doc as no longer "live" in Firestore, so
+           assets/js/review-sync.js's live listener can't silently
+           repopulate the local cache just cleared above, and (b) retires
+           personal_coaching/{uid} to 'reset' so _pcShowsCoachPlan() stops
+           preferring the old coach's plan. Resetting from THIS button
+           never did either, which is why the stale "your nutritionist
+           updated your plan" banner and coach-managed plan could survive
+           a reset performed from the Diet page specifically. Awaited
+           before navigating, same as dashboard.js, so the writes actually
+           land before the page tears down. */
+        var cleanup = (typeof ZitlasCoachingReset !== 'undefined')
+          ? ZitlasCoachingReset.clearAll({ relationshipStatus: 'reset' })
+          : Promise.resolve();
+        cleanup.then(function () {
+          window.location.href = '../dashboard/ai-coach/ai-coach.html';
+        });
       });
     }
   }
@@ -2793,7 +2821,14 @@
 
     var candidates = all.slice().reverse().filter(function (r) {
       var isCompleted    = r.status === 'review_completed' || r.status === 'completed';
-      var planIdMismatch = activePlanId && r.planId && r.planId !== activePlanId;
+      /* Fail-closed, same reasoning as the legacy _er guard above: a
+         review WITH a planId must match the active one — a missing
+         activePlanId (e.g. right after Reset Goal) no longer auto-passes
+         it. Already backstopped by the activeRequest anchor check below
+         (which assets/js/coaching-reset.js now clears on every reset
+         trigger), but this closes the gap directly rather than relying
+         solely on that second layer. */
+      var planIdMismatch = r.planId ? (r.planId !== activePlanId) : false;
       var _rtype = r.reviewType || r.planReviewType || 'diet';
       return _rtype === 'diet' &&
              isCompleted &&

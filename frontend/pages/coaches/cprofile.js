@@ -4027,6 +4027,14 @@
               .update({ status: 'ended' })
               .catch(function(e) { console.warn('[COACHING] request status update failed', e); });
           }
+          /* Dismisses any Diet/Workout Review (the SEPARATE, older
+             one-off-review system) this device has cached, so it can't
+             keep showing an interactive "your nutritionist updated your
+             plan" banner after coaching ends — the plan itself stays
+             visible per the comment above, only the pending-review
+             association is retired. No relationshipStatus override here:
+             this handler already wrote 'ended' immediately above. */
+          if (typeof ZitlasCoachingReset !== 'undefined') ZitlasCoachingReset.clearAll({});
           closeEndCoachingModal();
           showToast('Personal coaching ended. Your existing plans remain unchanged.');
           if (typeof ZitlasNotify !== 'undefined' && _myCoaching.coachId) {
