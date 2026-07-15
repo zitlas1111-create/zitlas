@@ -1,14 +1,26 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>ZITLAS — Your Weight-Loss Journey</title>
+  <title>ZITLAS | AI-Powered Fitness Ecosystem</title>
+  <meta name="description" content="ZITLAS is an AI-powered fitness ecosystem that provides personalized diet plans, workout plans, expert coaching, nutrition guidance, and goal-based fitness programs." />
+  <link rel="canonical" href="https://zitlas.com/pages/login/login.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://zitlas.com/pages/login/login.html" />
+  <meta property="og:title" content="ZITLAS | AI-Powered Fitness Ecosystem" />
+  <meta property="og:description" content="ZITLAS provides AI-personalized diet plans, workout plans, expert coaching, nutrition guidance, and goal-based fitness programs." />
+  <meta property="og:site_name" content="ZITLAS" />
+  <meta property="og:image" content="https://zitlas.com/assets/zino.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="ZITLAS | AI-Powered Fitness Ecosystem" />
+  <meta name="twitter:description" content="AI-powered diet plans, workout plans, expert coaching, nutrition guidance, and goal-based fitness programs." />
+  <meta name="twitter:image" content="https://zitlas.com/assets/zino.png" />
+  <meta name="robots" content="index, follow" />
   <link rel="stylesheet" href="login.css" />
   <link rel="stylesheet" href="../../assets/css/theme.css" />
-  <link rel="stylesheet" href="" />
   <script src="../../assets/js/i18n.js"></script>
-  <!-- Firebase SDK (compat — same API as v8) -->
+  <!-- Firebase SDK (compat - same API as v8) -->
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -16,10 +28,10 @@
 </head>
 <body>
 
-  <!-- ════════════ BACKGROUND GLOW ════════════ -->
+  <!-- â•â•â•â•â•â•â•â•â•â•â•â• BACKGROUND GLOW â•â•â•â•â•â•â•â•â•â•â•â• -->
   <div class="bg-glow" aria-hidden="true"></div>
 
-  <!-- ════════════ HERO ════════════ -->
+  <!-- â•â•â•â•â•â•â•â•â•â•â•â• HERO â•â•â•â•â•â•â•â•â•â•â•â• -->
   <section class="hero">
 
     <!-- Logo -->
@@ -28,7 +40,7 @@
     </div>
 
     <!-- Tagline -->
-    <p class="login-tagline" data-i18n="login_tagline">Your Weight-Loss Journey Starts Here</p>
+    <p class="login-tagline" data-i18n="login_tagline">Your AI-Powered Fitness Journey Starts Here</p>
 
     <!-- Headline -->
     <h1 class="login-headline">
@@ -38,8 +50,8 @@
 
     <!-- Subtitle -->
     <p class="login-subtitle">
-      <span data-i18n="login_subtitle">Fitness · Nutrition · Results</span><br>
-      <span data-i18n="login_subtitle2">One Platform · Unlimited Opportunities.</span>
+      <span data-i18n="login_subtitle">Fitness Â· Nutrition Â· Results</span><br>
+      <span data-i18n="login_subtitle2">One Platform Â· Unlimited Opportunities.</span>
     </p>
 
     <!-- Ecosystem Illustration -->
@@ -60,14 +72,14 @@
           </filter>
         </defs>
 
-        <!-- Connection lines — drawn in via animation -->
-        <!-- Center (140,100) → Fitness (70,45) -->
+        <!-- Connection lines â€” drawn in via animation -->
+        <!-- Center (140,100) â†’ Fitness (70,45) -->
         <path class="eco-line eco-l1" d="M140,100 L70,45"   fill="none" stroke="var(--primary)" stroke-width="1.2" opacity="0.4"/>
-        <!-- Center → Training (210,45) -->
+        <!-- Center â†’ Training (210,45) -->
         <path class="eco-line eco-l2" d="M140,100 L210,45"  fill="none" stroke="var(--primary)" stroke-width="1.2" opacity="0.4"/>
-        <!-- Center → Results (210,155) -->
+        <!-- Center â†’ Results (210,155) -->
         <path class="eco-line eco-l3" d="M140,100 L210,155" fill="none" stroke="var(--primary)" stroke-width="1.2" opacity="0.4"/>
-        <!-- Center → Nutrition (70,155) -->
+        <!-- Center â†’ Nutrition (70,155) -->
         <path class="eco-line eco-l4" d="M140,100 L70,155"  fill="none" stroke="var(--primary)" stroke-width="1.2" opacity="0.4"/>
 
         <!-- Pulse dots traveling each line -->
@@ -79,60 +91,82 @@
         <!-- Center glow halo -->
         <circle cx="140" cy="100" r="44" fill="url(#centerGlow)"/>
 
-        <!-- Center node — ZITLAS -->
+        <!-- Center node â€” ZITLAS -->
         <circle cx="140" cy="100" r="28" fill="var(--bg-card)" stroke="var(--primary)" stroke-width="1.5" filter="url(#glow)" class="eco-center-ring"/>
         <text x="140" y="95"  text-anchor="middle" fill="var(--primary)" font-size="9" font-weight="900" font-family="-apple-system,sans-serif" letter-spacing="2">ZITLAS</text>
-        <text x="140" y="110" text-anchor="middle" font-size="15" font-family="sans-serif">💪</text>
+        <text x="140" y="110" text-anchor="middle" font-size="15" font-family="sans-serif">ðŸ’ª</text>
 
         <!-- Outer: Fitness (top-left) -->
         <circle cx="70" cy="45" r="28" fill="url(#outerGlow)"/>
         <circle cx="70" cy="45" r="19" fill="var(--bg-card)" stroke="var(--primary)" stroke-width="0.8" stroke-opacity="0.45"/>
         <text x="70" y="40" text-anchor="middle" fill="var(--text-secondary)" font-size="7.5" font-weight="700" font-family="-apple-system,sans-serif" letter-spacing="0.5">FITNESS</text>
-        <text x="70" y="53" text-anchor="middle" font-size="12" font-family="sans-serif">🏃</text>
+        <text x="70" y="53" text-anchor="middle" font-size="12" font-family="sans-serif">ðŸƒ</text>
 
         <!-- Outer: Training (top-right) -->
         <circle cx="210" cy="45" r="28" fill="url(#outerGlow)"/>
         <circle cx="210" cy="45" r="19" fill="var(--bg-card)" stroke="var(--primary)" stroke-width="0.8" stroke-opacity="0.45"/>
         <text x="210" y="40" text-anchor="middle" fill="var(--text-secondary)" font-size="7" font-weight="700" font-family="-apple-system,sans-serif" letter-spacing="0.5">TRAINING</text>
-        <text x="210" y="53" text-anchor="middle" font-size="12" font-family="sans-serif">💪</text>
+        <text x="210" y="53" text-anchor="middle" font-size="12" font-family="sans-serif">ðŸ’ª</text>
 
         <!-- Outer: Results (bottom-right) -->
         <circle cx="210" cy="155" r="28" fill="url(#outerGlow)"/>
         <circle cx="210" cy="155" r="19" fill="var(--bg-card)" stroke="var(--primary)" stroke-width="0.8" stroke-opacity="0.45"/>
         <text x="210" y="150" text-anchor="middle" fill="var(--text-secondary)" font-size="7.5" font-weight="700" font-family="-apple-system,sans-serif" letter-spacing="0.5">RESULTS</text>
-        <text x="210" y="163" text-anchor="middle" font-size="12" font-family="sans-serif">📈</text>
+        <text x="210" y="163" text-anchor="middle" font-size="12" font-family="sans-serif">ðŸ“ˆ</text>
 
         <!-- Outer: Nutrition (bottom-left) -->
         <circle cx="70" cy="155" r="28" fill="url(#outerGlow)"/>
         <circle cx="70" cy="155" r="19" fill="var(--bg-card)" stroke="var(--primary)" stroke-width="0.8" stroke-opacity="0.45"/>
         <text x="70" y="150" text-anchor="middle" fill="var(--text-secondary)" font-size="7" font-weight="700" font-family="-apple-system,sans-serif" letter-spacing="0.5">NUTRITION</text>
-        <text x="70" y="163" text-anchor="middle" font-size="12" font-family="sans-serif">🥗</text>
+        <text x="70" y="163" text-anchor="middle" font-size="12" font-family="sans-serif">ðŸ¥—</text>
       </svg>
     </div>
-
-    <!-- Social Proof Stats -->
-    <div class="login-stats" id="loginStats">
-      <div class="lstat-card">
-        <span class="lstat-num" data-target="50000" id="lstat0">0+</span>
-        <span class="lstat-label" data-i18n="login_stat_athletes">Members</span>
-      </div>
-      <div class="lstat-card">
-        <span class="lstat-num" data-target="1200" id="lstat1">0+</span>
-        <span class="lstat-label" data-i18n="login_stat_coaches">Nutritionists</span>
-      </div>
-      <div class="lstat-card">
-        <span class="lstat-num" data-target="25000" id="lstat2">0+</span>
-        <span class="lstat-label" data-i18n="login_stat_academies">Meal Plans</span>
-      </div>
-      <div class="lstat-card">
-        <span class="lstat-num" data-target="10000" id="lstat3">0+</span>
-        <span class="lstat-label" data-i18n="login_stat_opps">Goals Achieved</span>
-      </div>
+    <!-- Real ZITLAS capabilities -->
+    <div class="login-features" id="loginFeatures" aria-label="ZITLAS platform capabilities">
+      <article class="lfeature-card lfeature-card--ai">
+        <span class="lfeature-kicker">AI</span>
+        <h2>AI Personalized Diet Plans</h2>
+        <p>Meal guidance shaped around goals, lifestyle, budget, and nutrition context.</p>
+      </article>
+      <article class="lfeature-card lfeature-card--ai">
+        <span class="lfeature-kicker">AI</span>
+        <h2>AI Personalized Workout Plans</h2>
+        <p>Training plans for weight loss, muscle gain, transformation, and general fitness.</p>
+      </article>
+      <article class="lfeature-card">
+        <span class="lfeature-kicker">Experts</span>
+        <h2>Personal Coaching by Experts</h2>
+        <p>Human review and coaching support for users who want professional guidance.</p>
+      </article>
+      <article class="lfeature-card">
+        <span class="lfeature-kicker">Nutrition</span>
+        <h2>Nutritionist Support</h2>
+        <p>Diet verification, practical meal swaps, and expert-led nutrition improvements.</p>
+      </article>
+      <article class="lfeature-card">
+        <span class="lfeature-kicker">Goals</span>
+        <h2>Goal Based Fitness Plans</h2>
+        <p>Programs aligned to weight loss, muscle gain, body transformation, and health goals.</p>
+      </article>
+      <article class="lfeature-card lfeature-card--success">
+        <span class="lfeature-kicker">Progress</span>
+        <h2>Progress Tracking & Analytics</h2>
+        <p>Dashboards and plan views that help users track routines, progress, and next actions.</p>
+      </article>
+      <article class="lfeature-card">
+        <span class="lfeature-kicker">Programs</span>
+        <h2>Weight Loss & Muscle Gain Programs</h2>
+        <p>Structured plans built around realistic nutrition targets and training preferences.</p>
+      </article>
+      <article class="lfeature-card lfeature-card--ai">
+        <span class="lfeature-kicker">Hybrid</span>
+        <h2>AI + Human Expert Collaboration</h2>
+        <p>AI-generated plans can be reviewed, refined, and approved by real experts.</p>
+      </article>
     </div>
-
   </section>
 
-  <!-- ════════════ LOGIN CARD ════════════ -->
+  <!-- â•â•â•â•â•â•â•â•â•â•â•â• LOGIN CARD â•â•â•â•â•â•â•â•â•â•â•â• -->
   <section class="login-card-section">
     <div class="login-card">
 
@@ -142,23 +176,23 @@
       <!-- Role Selector -->
       <div class="role-selector" id="roleSelector">
         <button type="button" class="role-tab active" id="roleTabAthlete">
-          <span class="role-tab-icon">🏃</span>
+          <span class="role-tab-icon">ðŸƒ</span>
           <span class="role-tab-label">Athlete</span>
         </button>
         <button type="button" class="role-tab" id="roleTabExpert">
-          <span class="role-tab-icon">👨‍⚕️</span>
+          <span class="role-tab-icon">ðŸ‘¨â€âš•ï¸</span>
           <span class="role-tab-label">Expert</span>
         </button>
       </div>
 
       <div class="login-card-header">
-        <h2 class="login-card-title" id="loginCardTitle">Welcome Back 👋</h2>
-        <p class="login-card-sub" id="loginCardSub">Sign in to continue your weight-loss journey</p>
+        <h2 class="login-card-title" id="loginCardTitle">Welcome Back ðŸ‘‹</h2>
+        <p class="login-card-sub" id="loginCardSub">Sign in to continue your AI-powered fitness journey</p>
       </div>
 
       <form class="login-form" id="loginForm" novalidate>
 
-        <!-- Full Name — shown only in signup mode -->
+        <!-- Full Name â€” shown only in signup mode -->
         <div class="lf-input-group" id="nameGroup" style="display:none">
           <span class="lf-input-icon">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -212,7 +246,7 @@
           </button>
         </div>
 
-        <!-- Confirm Password — shown only in signup mode -->
+        <!-- Confirm Password â€” shown only in signup mode -->
         <div class="lf-input-group" id="confirmPwGroup" style="display:none">
           <span class="lf-input-icon">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -264,8 +298,8 @@
       <!-- Footer -->
       <div class="login-card-footer">
         <a href="#" class="lf-create-link" id="createLink" data-i18n="login_create">Create Account</a>
-        <span class="lf-sep">·</span>
-        <button type="button" class="lf-skip-btn" id="skipBtn" data-i18n="login_skip">Skip for Now →</button>
+        <span class="lf-sep">Â·</span>
+        <button type="button" class="lf-skip-btn" id="skipBtn" data-i18n="login_skip">Skip for Now â†’</button>
       </div>
 
       <!-- Expert Hint -->
@@ -277,7 +311,7 @@
     </div>
   </section>
 
-  <!-- ════════════ POST-LOGIN OVERLAY ════════════ -->
+  <!-- â•â•â•â•â•â•â•â•â•â•â•â• POST-LOGIN OVERLAY â•â•â•â•â•â•â•â•â•â•â•â• -->
   <div class="login-overlay" id="loginOverlay" aria-hidden="true">
     <div class="overlay-inner">
       <div class="overlay-logo-wrap">
@@ -292,11 +326,11 @@
         <div class="overlay-bar"></div>
         <div class="overlay-bar"></div>
       </div>
-      <p class="overlay-msg">Welcome back 👋</p>
+      <p class="overlay-msg">Welcome back ðŸ‘‹</p>
     </div>
   </div>
 
-  <!-- ════════════ GOOGLE ROLE-SELECT MODAL ════════════ -->
+  <!-- â•â•â•â•â•â•â•â•â•â•â•â• GOOGLE ROLE-SELECT MODAL â•â•â•â•â•â•â•â•â•â•â•â• -->
   <!-- Shown only for new Google sign-in users to pick Athlete or Expert -->
   <div class="grm-backdrop" id="grmBackdrop" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="grmTitle">
     <div class="grm-card">
@@ -324,7 +358,7 @@
 
       <div class="grm-options">
         <button class="grm-option" id="grmOptAthlete" data-role="athlete" type="button">
-          <span class="grm-option-icon">🏃</span>
+          <span class="grm-option-icon">ðŸƒ</span>
           <div class="grm-option-text">
             <strong class="grm-option-name">Athlete</strong>
             <span class="grm-option-desc">Track fitness, get AI diet plans, consult experts</span>
@@ -334,7 +368,7 @@
           </span>
         </button>
         <button class="grm-option" id="grmOptExpert" data-role="expert" type="button">
-          <span class="grm-option-icon">👨‍⚕️</span>
+          <span class="grm-option-icon">ðŸ‘¨â€âš•ï¸</span>
           <div class="grm-option-text">
             <strong class="grm-option-name">Expert</strong>
             <span class="grm-option-desc">Review plans, guide athletes, publish revisions</span>
@@ -346,19 +380,19 @@
       </div>
 
       <button class="grm-confirm-btn" id="grmConfirm" type="button" disabled>
-        <span id="grmConfirmText">Continue →</span>
+        <span id="grmConfirmText">Continue â†’</span>
         <span class="grm-confirm-spinner" id="grmConfirmSpinner" aria-hidden="true">
           <svg class="spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
         </span>
       </button>
 
-      <!-- Application Under Review — shown after expert role is submitted -->
+      <!-- Application Under Review â€” shown after expert role is submitted -->
       <div class="grm-under-review" id="grmUnderReview" style="display:none" aria-live="polite">
-        <div class="grm-review-icon">⏳</div>
+        <div class="grm-review-icon">â³</div>
         <h2 class="grm-review-title">Application Under Review</h2>
         <p class="grm-review-sub" id="grmReviewEmail">Your expert application has been submitted.</p>
-        <p class="grm-review-note">We will notify you via email once your account is approved. This usually takes 1–2 business days.</p>
-        <button class="grm-review-home-btn" id="grmReviewHomeBtn" type="button">Continue as Athlete →</button>
+        <p class="grm-review-note">We will notify you via email once your account is approved. This usually takes 1â€“2 business days.</p>
+        <button class="grm-review-home-btn" id="grmReviewHomeBtn" type="button">Continue as Athlete â†’</button>
       </div>
 
     </div>
@@ -367,3 +401,5 @@
   <script src="login.js"></script>
 </body>
 </html>
+
+

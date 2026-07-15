@@ -1,10 +1,10 @@
-/* ══════════════════════════════════════════════
-   ZITLAS — Login Page
+﻿/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   ZITLAS â€” Login Page
    Matches dashboard.css design system exactly.
    Mobile-first. Orange accent. No green.
-   ══════════════════════════════════════════════ */
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
-/* ── Design tokens — identical to dashboard ── */
+/* â”€â”€ Design tokens â€” identical to dashboard â”€â”€ */
 :root {
   --accent:        var(--primary);
   --accent-light:  var(--primary-hover);
@@ -34,7 +34,7 @@
   --glow:        0 0 20px rgba(var(--primary-rgb),0.22);
 }
 
-/* ── Reset ── */
+/* â”€â”€ Reset â”€â”€ */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html {
   font-size: 16px;
@@ -56,9 +56,9 @@ input  { font-family: inherit; border: none; outline: none; background: none; co
 a      { text-decoration: none; color: inherit; }
 img    { display: block; max-width: 100%; }
 
-/* ══════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    BACKGROUND
-   ══════════════════════════════════════════════ */
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 .bg-glow {
   position: fixed;
@@ -72,9 +72,9 @@ img    { display: block; max-width: 100%; }
   z-index: 0;
 }
 
-/* ══════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    HERO SECTION
-   ══════════════════════════════════════════════ */
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 .hero {
   position: relative;
@@ -87,7 +87,7 @@ img    { display: block; max-width: 100%; }
   gap: 0;
 }
 
-/* ── Logo ── */
+/* â”€â”€ Logo â”€â”€ */
 .login-logo-block {
   display: flex;
   align-items: center;
@@ -113,7 +113,7 @@ img    { display: block; max-width: 100%; }
   50%       { text-shadow: 0 0 28px rgba(var(--primary-rgb),0.65), 0 0 60px rgba(var(--primary-rgb),0.25); }
 }
 
-/* ── Tagline ── */
+/* â”€â”€ Tagline â”€â”€ */
 .login-tagline {
   font-size: 12px;
   font-weight: 600;
@@ -123,7 +123,7 @@ img    { display: block; max-width: 100%; }
   animation: slideUp 0.45s ease 0.08s both;
 }
 
-/* ── Headline ── */
+/* â”€â”€ Headline â”€â”€ */
 .login-headline {
   font-size: clamp(26px, 7vw, 38px);
   font-weight: 900;
@@ -138,7 +138,7 @@ img    { display: block; max-width: 100%; }
   color: var(--accent);
 }
 
-/* ── Subtitle ── */
+/* â”€â”€ Subtitle â”€â”€ */
 .login-subtitle {
   font-size: 13px;
   font-weight: 500;
@@ -148,9 +148,9 @@ img    { display: block; max-width: 100%; }
   animation: slideUp 0.45s ease 0.20s both;
 }
 
-/* ══════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    ECOSYSTEM SVG
-   ══════════════════════════════════════════════ */
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 .ecosystem-wrap {
   width: 100%;
@@ -219,52 +219,87 @@ img    { display: block; max-width: 100%; }
   100% { cx: 140; cy: 100; opacity: 0; }
 }
 
-/* ══════════════════════════════════════════════
-   STATS ROW — same visual as dashboard .qs-card
-   ══════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   FEATURE GRID â€” same visual as dashboard .qs-card
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
-.login-stats {
+.login-features {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
   width: 100%;
-  max-width: 440px;
+  max-width: 560px;
   animation: slideUp 0.45s ease 0.32s both;
 }
 
-.lstat-card {
+.lfeature-card {
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 11px 6px;
+  padding: 14px 13px;
+  text-align: left;
+  min-height: 132px;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  transition: border-color var(--transition), transform var(--transition);
+  gap: 7px;
+  transition: border-color var(--transition), transform var(--transition), background var(--transition);
 }
 
-.lstat-card:hover { border-color: rgba(var(--primary-rgb),0.25); transform: translateY(-2px); }
-
-.lstat-num {
-  font-size: 15px;
-  font-weight: 900;
-  color: var(--accent);
-  line-height: 1;
-  letter-spacing: -0.3px;
+.lfeature-card:hover {
+  border-color: rgba(var(--primary-rgb),0.28);
+  background: var(--card-hover);
+  transform: translateY(-2px);
 }
 
-.lstat-label {
+.lfeature-card--ai {
+  border-color: rgba(var(--ai-rgb),0.28);
+  background: linear-gradient(135deg, rgba(var(--ai-rgb),0.10), var(--card));
+}
+
+.lfeature-card--success {
+  border-color: rgba(var(--success-rgb),0.28);
+  background: linear-gradient(135deg, rgba(var(--success-rgb),0.10), var(--card));
+}
+
+.lfeature-kicker {
+  align-self: flex-start;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(var(--primary-rgb),0.12);
+  color: var(--primary);
   font-size: 9.5px;
-  font-weight: 700;
-  color: var(--text-muted);
-  letter-spacing: 0.2px;
-  text-align: center;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
 }
 
-/* ══════════════════════════════════════════════
-   LOGIN CARD — matches dashboard modal/card style
-   ══════════════════════════════════════════════ */
+.lfeature-card--ai .lfeature-kicker {
+  background: rgba(var(--ai-rgb),0.12);
+  color: var(--ai-accent);
+}
+
+.lfeature-card--success .lfeature-kicker {
+  background: rgba(var(--success-rgb),0.12);
+  color: var(--success);
+}
+
+.lfeature-card h2 {
+  font-size: 13.5px;
+  font-weight: 900;
+  line-height: 1.22;
+  color: var(--text);
+  letter-spacing: -0.15px;
+}
+
+.lfeature-card p {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-sec);
+  margin: 0;
+}
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   LOGIN CARD â€” matches dashboard modal/card style
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 .login-card-section {
   position: relative;
@@ -289,7 +324,7 @@ img    { display: block; max-width: 100%; }
   animation: slideUp 0.45s ease 0.42s both;
 }
 
-/* Orange top line — same pattern as goal-card glow */
+/* Orange top line â€” same pattern as goal-card glow */
 .card-accent-line {
   position: absolute;
   top: 0;
@@ -319,7 +354,7 @@ img    { display: block; max-width: 100%; }
   font-weight: 400;
 }
 
-/* ── Input groups — matches dashboard .form-input ── */
+/* â”€â”€ Input groups â€” matches dashboard .form-input â”€â”€ */
 
 .login-form {
   display: flex;
@@ -409,7 +444,7 @@ img    { display: block; max-width: 100%; }
 
 .lf-forgot:hover { color: var(--accent); }
 
-/* ── Sign In Button — exact match of .save-goal-btn ── */
+/* â”€â”€ Sign In Button â€” exact match of .save-goal-btn â”€â”€ */
 
 .btn-login {
   width: 100%;
@@ -442,7 +477,7 @@ img    { display: block; max-width: 100%; }
 
 @keyframes spinAnim { to { transform: rotate(360deg); } }
 
-/* ── Divider ── */
+/* â”€â”€ Divider â”€â”€ */
 
 .lf-divider {
   display: flex;
@@ -467,7 +502,7 @@ img    { display: block; max-width: 100%; }
   letter-spacing: 0.2px;
 }
 
-/* ── Google Button ── */
+/* â”€â”€ Google Button â”€â”€ */
 
 .btn-google {
   width: 100%;
@@ -489,7 +524,7 @@ img    { display: block; max-width: 100%; }
 .btn-google:hover  { background: var(--card-hover); border-color: rgba(var(--white-rgb),0.15); transform: translateY(-1px); }
 .btn-google:active { transform: scale(0.98); }
 
-/* ── Role Selector ── */
+/* â”€â”€ Role Selector â”€â”€ */
 
 .role-selector {
   display: flex;
@@ -526,7 +561,7 @@ img    { display: block; max-width: 100%; }
 .role-tab-icon { font-size: 16px; line-height: 1; }
 .role-tab-label { letter-spacing: 0.1px; }
 
-/* ── Expert Hint Text ── */
+/* â”€â”€ Expert Hint Text â”€â”€ */
 
 .lf-expert-hint {
   text-align: center;
@@ -547,7 +582,7 @@ img    { display: block; max-width: 100%; }
 
 .lf-expert-link:hover { opacity: 0.75; }
 
-/* ── Card Footer ── */
+/* â”€â”€ Card Footer â”€â”€ */
 
 .login-card-footer {
   display: flex;
@@ -576,10 +611,10 @@ img    { display: block; max-width: 100%; }
 
 .lf-skip-btn:hover { color: var(--text); }
 
-/* ══════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    POST-LOGIN OVERLAY
    Same feel as dashboard success states, but full-screen
-   ══════════════════════════════════════════════ */
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 .login-overlay {
   position: fixed;
@@ -682,9 +717,9 @@ img    { display: block; max-width: 100%; }
   letter-spacing: 0.3px;
 }
 
-/* ══════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    UTILITY ANIMATIONS
-   ══════════════════════════════════════════════ */
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 @keyframes slideUp {
   from { opacity: 0; transform: translateY(16px); }
@@ -699,46 +734,45 @@ img    { display: block; max-width: 100%; }
   80%       { transform: translateX(4px); }
 }
 
-/* ══════════════════════════════════════════════
-   RESPONSIVE
-   ══════════════════════════════════════════════ */
+/* RESPONSIVE */
 
-/* 360px — smallest Android */
+@media (max-width: 430px) {
+  .login-features { grid-template-columns: 1fr; }
+  .lfeature-card { min-height: auto; }
+}
+
+/* 360px - smallest Android */
 @media (max-width: 360px) {
   .login-headline    { font-size: 24px; }
   .login-logo-text   { font-size: 24px; letter-spacing: 5px; }
-  .lstat-num         { font-size: 13px; }
+  .lfeature-card h2  { font-size: 13px; }
   .login-card        { padding: 24px 16px 20px; }
   .btn-login         { padding: 13px; font-size: 14px; }
 }
 
-/* 390–430px — iPhone base */
+/* 390-430px - iPhone base */
 @media (min-width: 390px) {
   .login-card-section { padding: 20px 18px 52px; }
-  .login-stats        { gap: 10px; }
-  .lstat-num          { font-size: 16px; }
+  .login-features     { gap: 10px; }
+  .lfeature-card      { min-height: 124px; }
 }
 
 /* 480px+ small tablet */
 @media (min-width: 480px) {
-  .hero               { padding: 60px 24px 28px; }
-  .login-headline     { font-size: 36px; }
-  .ecosystem-wrap     { max-width: 300px; }
-  .login-card         { padding: 32px 28px 26px; }
+  .hero           { padding: 60px 24px 28px; }
+  .login-headline { font-size: 36px; }
+  .ecosystem-wrap { max-width: 300px; }
+  .login-card     { padding: 32px 28px 26px; }
 }
 
-/* 768px+ tablet/desktop — wider but still centered */
+/* 768px+ tablet/desktop - wider but still centered */
 @media (min-width: 768px) {
   .hero { padding: 72px 32px 32px; }
   .ecosystem-wrap { max-width: 320px; }
-  .login-stats { max-width: 400px; gap: 12px; }
-  .login-card-section { padding: 24px 24px 64px; }
-  .lstat-card { padding: 14px 10px; }
-  .lstat-num { font-size: 18px; }
-  .lstat-label { font-size: 10px; }
+  .login-features { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
-/* 1024px+ laptop/desktop — two-column layout */
+/* 1024px+ laptop/desktop - two-column layout */
 @media (min-width: 1024px) {
   body {
     display: flex;
@@ -773,19 +807,19 @@ img    { display: block; max-width: 100%; }
     max-width: 400px;
   }
 
-  .login-logo-text  { font-size: 32px; letter-spacing: 7px; }
-  .login-headline   { font-size: clamp(32px, 3.5vw, 44px); }
-  .login-subtitle   { font-size: 14px; }
-  .ecosystem-wrap   { max-width: 340px; }
-  .login-stats      { max-width: 360px; gap: 10px; }
+  .login-logo-text { font-size: 32px; letter-spacing: 7px; }
+  .login-headline  { font-size: clamp(32px, 3.5vw, 44px); }
+  .login-subtitle  { font-size: 14px; }
+  .ecosystem-wrap  { max-width: 340px; }
+  .login-features  { max-width: 560px; gap: 10px; }
 }
 
-/* 1200px+ desktop — more breathing room */
+/* 1200px+ desktop - more breathing room */
 @media (min-width: 1200px) {
-  .hero              { padding: 0 64px; }
+  .hero { padding: 0 64px; }
   .login-card-section { flex-basis: 520px; padding: 0 56px; }
-  .login-card        { max-width: 420px; }
-  .ecosystem-wrap    { max-width: 360px; }
+  .login-card { max-width: 420px; }
+  .ecosystem-wrap { max-width: 360px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -794,50 +828,6 @@ img    { display: block; max-width: 100%; }
     transition-duration: 0.01ms !important;
   }
 }
-
-/* ══════════════════════════════════════════════
-   GOOGLE ROLE-SELECT MODAL
-   Appears for new Google users to pick account type
-   ══════════════════════════════════════════════ */
-
-.grm-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 10000;
-  background: rgba(var(--black-rgb),0.7);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.25s ease;
-}
-
-.grm-backdrop.active {
-  opacity: 1;
-  pointer-events: all;
-}
-
-.grm-card {
-  width: 100%;
-  max-width: 420px;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 24px 20px 22px;
-  position: relative;
-  box-shadow: 0 24px 64px rgba(var(--black-rgb),0.7);
-  transform: translateY(20px) scale(0.97);
-  transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.grm-backdrop.active .grm-card {
-  transform: translateY(0) scale(1);
-}
-
 /* Top accent line */
 .grm-card::before {
   content: '';
@@ -976,7 +966,7 @@ img    { display: block; max-width: 100%; }
   line-height: 1.4;
 }
 
-/* Check mark — visible only when active */
+/* Check mark â€” visible only when active */
 .grm-option-check {
   width: 22px;
   height: 22px;
@@ -1028,7 +1018,7 @@ img    { display: block; max-width: 100%; }
 
 .grm-confirm-spinner { display: none; align-items: center; }
 
-/* ── Application Under Review panel ──────────────────────────────────────── */
+/* â”€â”€ Application Under Review panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .grm-under-review {
   display: flex;
   flex-direction: column;
@@ -1086,7 +1076,7 @@ img    { display: block; max-width: 100%; }
 .grm-review-home-btn:hover  { opacity: .88; transform: translateY(-1px); }
 .grm-review-home-btn:active { transform: scale(.97); }
 
-/* ── Remember Me row ── */
+/* â”€â”€ Remember Me row â”€â”€ */
 .lf-remember-row {
   display: flex;
   align-items: center;
@@ -1106,3 +1096,8 @@ img    { display: block; max-width: 100%; }
   color: var(--text-sec, var(--text-secondary));
   user-select: none;
 }
+
+
+
+
+

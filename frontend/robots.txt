@@ -1,0 +1,11 @@
+﻿User-agent: *
+Allow: /
+
+Disallow: /pages/dashboard/
+Disallow: /pages/profile/
+Disallow: /pages/experts/
+Disallow: /pages/diet/
+Disallow: /uploads/
+Disallow: /api/
+
+Sitemap: https://zitlas.com/sitemap.xml

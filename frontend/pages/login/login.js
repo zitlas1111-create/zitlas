@@ -1,7 +1,7 @@
-/* ══════════════════════════════════════════════
-   ZITLAS — Login Page
+﻿/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   ZITLAS â€” Login Page
    login.js
-   ══════════════════════════════════════════════ */
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 'use strict';
 
@@ -10,56 +10,9 @@
    User A's stale session to redirect User B to User A's dashboard.
    onAuthStateChanged below is the single source of truth for redirects. */
 
-/* ══════════════════════════════════════════════
-   STAT COUNT-UP
-   Same algorithm as dashboard.js countUp()
-   ══════════════════════════════════════════════ */
-
-function formatStatNum(val, target) {
-  if (target >= 1000) {
-    const k = val / 1000;
-    return (k % 1 === 0 ? k.toFixed(0) : k.toFixed(1)) + 'K+';
-  }
-  return val + '+';
-}
-
-function countUp(el, target, duration) {
-  const start = performance.now();
-  function tick(now) {
-    const p = Math.min((now - start) / duration, 1);
-    const e = 1 - Math.pow(1 - p, 3); /* ease-out cubic */
-    const v = Math.round(e * target);
-    el.textContent = formatStatNum(v, target);
-    if (p < 1) requestAnimationFrame(tick);
-    else el.textContent = formatStatNum(target, target);
-  }
-  requestAnimationFrame(tick);
-}
-
-const statsEl = document.getElementById('loginStats');
-if (statsEl) {
-  const targets = [
-    { id: 'lstat0', val: 10000 },
-    { id: 'lstat1', val: 1200  },
-    { id: 'lstat2', val: 500   },
-    { id: 'lstat3', val: 100   },
-  ];
-
-  const io = new IntersectionObserver((entries) => {
-    if (!entries[0].isIntersecting) return;
-    targets.forEach(({ id, val }, i) => {
-      const el = document.getElementById(id);
-      if (el) setTimeout(() => countUp(el, val, 1600), i * 100);
-    });
-    io.disconnect();
-  }, { threshold: 0.3 });
-
-  io.observe(statsEl);
-}
-
-/* ══════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    PASSWORD TOGGLE
-   ══════════════════════════════════════════════ */
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 const pwToggle = document.getElementById('pwToggle');
 const pwInput  = document.getElementById('passwordInput');
@@ -77,9 +30,9 @@ if (pwToggle && pwInput && eyeIcon) {
   });
 }
 
-/* ══════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    ROLE SELECTOR
-   ══════════════════════════════════════════════ */
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 let selectedRole = 'athlete';
 let isSignupMode = false;
@@ -99,15 +52,15 @@ function setRole(role) {
   if (expertHint)     expertHint.style.display = (role === 'expert' || isSignupMode) ? 'none' : '';
   if (skipBtn)        skipBtn.style.display    = (role === 'expert' || isSignupMode) ? 'none' : '';
   if (loginCardTitle) loginCardTitle.textContent = isSignupMode
-    ? (role === 'expert' ? 'Create Expert Account 👨‍⚕️' : 'Create Account 🚀')
-    : (role === 'expert' ? 'Expert Login 👨‍⚕️' : 'Welcome Back 👋');
+    ? (role === 'expert' ? 'Create Expert Account ðŸ‘¨â€âš•ï¸' : 'Create Account ðŸš€')
+    : (role === 'expert' ? 'Expert Login ðŸ‘¨â€âš•ï¸' : 'Welcome Back ðŸ‘‹');
   if (loginCardSub)   loginCardSub.textContent = isSignupMode
-    ? 'Join ZITLAS — start your journey'
-    : (role === 'expert' ? 'Sign in to your ZITLAS Expert Portal' : 'Sign in to continue your weight-loss journey');
+    ? 'Join ZITLAS - start your AI-powered fitness journey'
+    : (role === 'expert' ? 'Sign in to your ZITLAS Expert Portal' : 'Sign in to continue your AI-powered fitness journey');
   if (emailInput)    emailInput.placeholder = role === 'expert' ? 'Expert Email' : 'Email or Mobile Number';
   if (loginBtnText)  loginBtnText.textContent = isSignupMode
     ? (role === 'expert' ? 'Create Expert Account' : 'Create Account')
-    : (role === 'expert' ? 'Expert Login →' : 'Sign In');
+    : (role === 'expert' ? 'Expert Login â†’' : 'Sign In');
 }
 
 if (roleTabAthlete) roleTabAthlete.addEventListener('click', () => setRole('athlete'));
@@ -117,9 +70,9 @@ if (expertHintBtn)  expertHintBtn.addEventListener('click',  () => {
   document.getElementById('emailInput')?.focus();
 });
 
-/* ══════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    SIGNUP MODE TOGGLE
-   ══════════════════════════════════════════════ */
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 function setSignupMode(on) {
   isSignupMode = on;
@@ -132,22 +85,22 @@ function setSignupMode(on) {
   if (forgotRow)      forgotRow.style.display      = on ? 'none' : '';
 
   if (loginCardTitle) loginCardTitle.textContent = on
-    ? (selectedRole === 'expert' ? 'Create Expert Account 👨‍⚕️' : 'Create Account 🚀')
-    : (selectedRole === 'expert' ? 'Expert Login 👨‍⚕️' : 'Welcome Back 👋');
+    ? (selectedRole === 'expert' ? 'Create Expert Account ðŸ‘¨â€âš•ï¸' : 'Create Account ðŸš€')
+    : (selectedRole === 'expert' ? 'Expert Login ðŸ‘¨â€âš•ï¸' : 'Welcome Back ðŸ‘‹');
   if (loginCardSub) loginCardSub.textContent = on
-    ? 'Join ZITLAS — start your journey'
-    : (selectedRole === 'expert' ? 'Sign in to your ZITLAS Expert Portal' : 'Sign in to continue your weight-loss journey');
+    ? 'Join ZITLAS - start your AI-powered fitness journey'
+    : (selectedRole === 'expert' ? 'Sign in to your ZITLAS Expert Portal' : 'Sign in to continue your AI-powered fitness journey');
   if (loginBtnText) loginBtnText.textContent = on
     ? (selectedRole === 'expert' ? 'Create Expert Account' : 'Create Account')
-    : (selectedRole === 'expert' ? 'Expert Login →' : 'Sign In');
+    : (selectedRole === 'expert' ? 'Expert Login â†’' : 'Sign In');
   if (createLink) createLink.textContent = on ? 'Already have an account? Sign In' : 'Create Account';
   if (expertHint) expertHint.style.display = (on || selectedRole === 'expert') ? 'none' : '';
   if (skipBtn)    skipBtn.style.display    = on ? 'none' : (selectedRole === 'expert' ? 'none' : '');
 }
 
-/* ══════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    AUTH ERROR MESSAGES
-   ══════════════════════════════════════════════ */
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 function getAuthErrorMsg(code) {
   var msgs = {
@@ -163,13 +116,13 @@ function getAuthErrorMsg(code) {
   return msgs[code] || 'Authentication failed. Please try again.';
 }
 
-/* ══════════════════════════════════════════════
-   FIREBASE — AUTO-REDIRECT IF ALREADY SIGNED IN
-   ══════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   FIREBASE â€” AUTO-REDIRECT IF ALREADY SIGNED IN
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 if (typeof ZitlasAuth !== 'undefined') {
   ZitlasAuth.onAuthStateChanged(async function (user) {
-    if (!user) return; /* not signed in — stay on login */
+    if (!user) return; /* not signed in â€” stay on login */
     console.log('[AUTH] onAuthStateChanged uid=' + user.uid + ' email=' + user.email);
     try {
       const docSnap = await ZitlasDB.collection('users').doc(user.uid).get();
@@ -220,10 +173,10 @@ if (typeof ZitlasAuth !== 'undefined') {
   });
 }
 
-/* ══════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    REDIRECT DESTINATION
    Reads ?redirect= param + sessionStorage pending action
-   ══════════════════════════════════════════════ */
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 function getRedirectDestination() {
   if (selectedRole === 'expert') {
@@ -239,9 +192,9 @@ function getRedirectDestination() {
   return '../dashboard/dashboard.html';
 }
 
-/* ══════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    POST-LOGIN OVERLAY
-   ══════════════════════════════════════════════ */
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 const loginOverlay = document.getElementById('loginOverlay');
 
@@ -250,8 +203,8 @@ function showLoginOverlay() {
   const msgEl = loginOverlay.querySelector('.overlay-msg');
   if (msgEl) {
     msgEl.textContent = selectedRole === 'expert'
-      ? 'Expert Portal Loading 👨‍⚕️'
-      : 'Welcome back 👋';
+      ? 'Expert Portal Loading ðŸ‘¨â€âš•ï¸'
+      : 'Welcome back ðŸ‘‹';
   }
   loginOverlay.removeAttribute('aria-hidden');
   loginOverlay.classList.add('active');
@@ -262,9 +215,9 @@ function showLoginOverlay() {
   }, 1900);
 }
 
-/* ══════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    INPUT ERROR HELPER
-   ══════════════════════════════════════════════ */
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 function setInputError(groupId) {
   const el = document.getElementById(groupId);
@@ -278,9 +231,9 @@ function clearInputError(groupId) {
   document.getElementById(groupId)?.classList.remove('input-error');
 }
 
-/* ══════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    LOGIN FORM
-   ══════════════════════════════════════════════ */
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 const loginForm      = document.getElementById('loginForm');
 const loginBtn       = document.getElementById('loginBtn');
@@ -335,7 +288,7 @@ if (loginForm) {
 
     try {
       if (isSignupMode) {
-        /* ── STEP 1: Pre-auth checks — no Firebase Auth account exists yet ── */
+        /* â”€â”€ STEP 1: Pre-auth checks â€” no Firebase Auth account exists yet â”€â”€ */
 
         /* Abort if email already has ANY sign-in method */
         const existingMethods = await ZitlasAuth.fetchSignInMethodsForEmail(email);
@@ -350,18 +303,18 @@ if (loginForm) {
           const existingExpert = await ZitlasDB.collection('experts')
             .where('email', '==', email).limit(1).get();
           if (!existingExpert.empty) {
-            console.log('[EXPERT FOUND] by email before signup — aborting account creation');
+            console.log('[EXPERT FOUND] by email before signup â€” aborting account creation');
             showToast('Expert account already exists. Please sign in.');
             setLoading(false);
             return;
           }
         }
 
-        /* ── STEP 2: Create Firebase Auth account ── */
+        /* â”€â”€ STEP 2: Create Firebase Auth account â”€â”€ */
         const cred = await ZitlasAuth.createUserWithEmailAndPassword(email, password);
         const user = cred.user;
 
-        /* ── STEP 3: Firestore setup — rollback Auth account on any failure ── */
+        /* â”€â”€ STEP 3: Firestore setup â€” rollback Auth account on any failure â”€â”€ */
         try {
           await user.updateProfile({ displayName: name });
           const ts = firebase.firestore.FieldValue.serverTimestamp();
@@ -392,15 +345,15 @@ if (loginForm) {
           }
         } catch (firestoreErr) {
           /* Rollback: delete the just-created Auth account so the email stays free */
-          console.warn('[AUTH] Firestore setup failed — deleting orphan Auth account', firestoreErr);
+          console.warn('[AUTH] Firestore setup failed â€” deleting orphan Auth account', firestoreErr);
           try { await user.delete(); } catch (_) {}
           throw firestoreErr; /* re-throw so outer catch shows the error */
         }
       } else {
-        /* ── Sign In ── */
+        /* â”€â”€ Sign In â”€â”€ */
         await ZitlasAuth.signInWithEmailAndPassword(email, password);
         if (rememberInput?.checked) localStorage.setItem('zitlas_remember', 'true');
-        /* onAuthStateChanged handles localStorage sync + redirect — keep loading state */
+        /* onAuthStateChanged handles localStorage sync + redirect â€” keep loading state */
       }
     } catch (err) {
       setLoading(false);
@@ -417,9 +370,9 @@ if (loginForm) {
   });
 }
 
-/* ══════════════════════════════════════════════
-   GOOGLE SIGN-IN — Firebase Authentication
-   ══════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   GOOGLE SIGN-IN â€” Firebase Authentication
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 const googleBtn = document.getElementById('googleBtn');
 
@@ -429,7 +382,7 @@ function setGoogleLoading(on) {
   googleBtn.style.opacity  = on ? '0.6' : '';
   googleBtn.style.cursor   = on ? 'wait' : '';
   const span = googleBtn.querySelector('span:last-of-type');
-  if (span) span.textContent = on ? 'Signing in…' : 'Continue with Google';
+  if (span) span.textContent = on ? 'Signing inâ€¦' : 'Continue with Google';
 }
 
 if (googleBtn) {
@@ -437,7 +390,7 @@ if (googleBtn) {
 
     /* Graceful fallback if Firebase config is missing */
     if (typeof ZitlasAuth === 'undefined') {
-      showToast('Firebase not configured — fill in firebase-config.js first');
+      showToast('Firebase not configured â€” fill in firebase-config.js first');
       return;
     }
 
@@ -455,7 +408,7 @@ if (googleBtn) {
       const doc = await ZitlasDB.collection('users').doc(user.uid).get();
 
       if (doc.exists) {
-        /* Returning user — resolve role from new schema OR legacy schema */
+        /* Returning user â€” resolve role from new schema OR legacy schema */
         const data        = doc.data();
         const roles       = Array.isArray(data.roles) ? data.roles : [];
         const expertStatus = data.expert_status || '';
@@ -484,8 +437,8 @@ if (googleBtn) {
         selectedRole = resolvedRole;
         showLoginOverlay();
       } else {
-        /* New Google user — check experts collection by email before showing role modal */
-        console.log('[GOOGLE LOGIN] No users doc for uid=' + user.uid + ' — checking experts by email');
+        /* New Google user â€” check experts collection by email before showing role modal */
+        console.log('[GOOGLE LOGIN] No users doc for uid=' + user.uid + ' â€” checking experts by email');
         const expertByEmail = await ZitlasDB.collection('experts')
           .where('email', '==', user.email).limit(1).get();
         if (!expertByEmail.empty) {
@@ -515,9 +468,9 @@ if (googleBtn) {
   });
 }
 
-/* ══════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    SKIP FOR NOW
-   ══════════════════════════════════════════════ */
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 if (skipBtn) {
   skipBtn.addEventListener('click', () => {
@@ -527,9 +480,9 @@ if (skipBtn) {
   });
 }
 
-/* ══════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    FIREBASE HELPERS
-   ══════════════════════════════════════════════ */
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 function _clearAuthLocalStorage() {
   ['zitlas_user','zitlas_user_role','zitlas_expert_profile','zitlas_expert_id',
@@ -574,7 +527,7 @@ function syncFirebaseUser(user, role) {
 
   if (role === 'expert') {
     localStorage.setItem('zitlas_expert_id', user.uid);
-    /* Transient seed only — expert-dashboard init overwrites this with
+    /* Transient seed only â€” expert-dashboard init overwrites this with
        fresh experts/{uid} Firestore data on load. `id` must be present
        so downstream uid-match guards work. */
     localStorage.setItem('zitlas_expert_profile', JSON.stringify({
@@ -612,7 +565,7 @@ function syncEmailUser(user, name, role) {
 
   if (role === 'expert') {
     localStorage.setItem('zitlas_expert_id', user.uid);
-    /* Transient seed only — expert-dashboard init overwrites this with
+    /* Transient seed only â€” expert-dashboard init overwrites this with
        fresh experts/{uid} Firestore data on load. `id` must be present
        so downstream uid-match guards work. */
     localStorage.setItem('zitlas_expert_profile', JSON.stringify({
@@ -633,9 +586,9 @@ function syncEmailUser(user, name, role) {
   if (rememberInput?.checked) localStorage.setItem('zitlas_remember', 'true');
 }
 
-/* ══════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    GOOGLE ROLE-SELECTION MODAL (new users only)
-   ══════════════════════════════════════════════ */
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 let _pendingGoogleUser = null;
 
@@ -692,11 +645,11 @@ function hideRoleModal() {
     const user = _pendingGoogleUser;
 
     confirmBtn.disabled = true;
-    if (confirmTxt)  confirmTxt.textContent   = 'Setting up…';
+    if (confirmTxt)  confirmTxt.textContent   = 'Setting upâ€¦';
     if (confirmSpin) confirmSpin.style.display = 'flex';
 
     try {
-      /* Phase 5 — Firestore schema: roles[] + expert_status (never overwrites on update) */
+      /* Phase 5 â€” Firestore schema: roles[] + expert_status (never overwrites on update) */
       const newRoles = ['athlete'];
       if (chosenRole === 'expert') newRoles.push('expert_pending');
 
@@ -713,7 +666,7 @@ function hideRoleModal() {
       if (chosenRole === 'expert') {
         /* Mark application pending in localStorage so profile.html can show the banner */
         localStorage.setItem('zitlas_expert_applied', user.email || 'true');
-        /* Show "Application Under Review" panel — do NOT redirect to expert-dashboard */
+        /* Show "Application Under Review" panel â€” do NOT redirect to expert-dashboard */
         showExpertApplicationReview(user.email);
       } else {
         syncFirebaseUser(user, chosenRole);
@@ -725,7 +678,7 @@ function hideRoleModal() {
     } catch (err) {
       console.error('[ZITLAS] saveUserRole error:', err);
       confirmBtn.disabled = false;
-      if (confirmTxt)  confirmTxt.textContent   = 'Continue →';
+      if (confirmTxt)  confirmTxt.textContent   = 'Continue â†’';
       if (confirmSpin) confirmSpin.style.display = 'none';
       showToast('Failed to save account. Please try again.');
     }
@@ -735,7 +688,7 @@ function hideRoleModal() {
   const reviewHomeBtn = document.getElementById('grmReviewHomeBtn');
   if (reviewHomeBtn) {
     reviewHomeBtn.addEventListener('click', function () {
-      console.log('[ZITLAS] Under-review → continuing as athlete guest');
+      console.log('[ZITLAS] Under-review â†’ continuing as athlete guest');
       sessionStorage.setItem('zitlas_guest', '1');
       /* replace() so the back button does NOT return to the application form */
       window.location.replace('../dashboard/dashboard.html');
@@ -762,9 +715,9 @@ function showExpertApplicationReview(email) {
   if (panel) panel.style.display = 'flex';
 }
 
-/* ══════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    CREATE ACCOUNT / FORGOT PASSWORD
-   ══════════════════════════════════════════════ */
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 const createLink = document.getElementById('createLink');
 if (createLink) {
@@ -794,9 +747,9 @@ if (forgotLink) {
   });
 }
 
-/* ══════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    MINI TOAST
-   ══════════════════════════════════════════════ */
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 let _toastEl, _toastTimer;
 
@@ -830,3 +783,6 @@ function showToast(msg) {
   _toastEl.style.opacity = '1';
   _toastTimer = setTimeout(() => { _toastEl.style.opacity = '0'; }, 2600);
 }
+
+
+
