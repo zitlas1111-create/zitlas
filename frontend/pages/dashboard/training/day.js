@@ -90,7 +90,8 @@
       .filter(function(r) {
         return r.reviewType === 'workout' &&
           r.workoutChangeHistory && r.workoutChangeHistory.length &&
-          (r.planId ? r.planId === activePlanId : true);
+          /* FAIL-CLOSED goal identity: planId required on both sides */
+          !!(r.planId && activePlanId && r.planId === activePlanId);
       })
       .sort(function(a, b) {
         var aDate = new Date(a.reviewedAt || a.completedAt || a.createdAt || 0);
@@ -103,12 +104,15 @@
   function _getCompletedWorkoutReview() {
     try {
       var revs = JSON.parse(localStorage.getItem('expert_plan_reviews') || '[]');
+      var activePlanId = localStorage.getItem('zitlas_plan_id');
       var wRevs = revs
         .filter(function(r) {
           return r.reviewType === 'workout' &&
             (r.status === 'completed' || r.status === 'review_completed') &&
             (r.athleteAccepted === true || !!r.acceptedAt) &&
-            r.workoutChangeHistory && r.workoutChangeHistory.length > 0;
+            r.workoutChangeHistory && r.workoutChangeHistory.length > 0 &&
+            /* FAIL-CLOSED goal identity */
+            !!(r.planId && activePlanId && r.planId === activePlanId);
         })
         .sort(function(a, b) {
           return new Date(b.reviewedAt || b.completedAt || b.acceptedAt || 0) -
@@ -172,6 +176,31 @@
       if (wp) {
         /* New schema: {originalWorkoutPlan, currentWorkoutPlan, workoutModifications} */
         if (wp.originalWorkoutPlan || wp.currentWorkoutPlan) {
+          /* GOAL-IDENTITY GATE — same policy as diet.js/weekly-plan.js:
+             stamped+matching → render; stamped+mismatched → delete (dead
+             goal's plan); unstamped+expert layer → delete (unverifiable);
+             unstamped pure AI → adopt-stamp in place. */
+          var _curPlanId = localStorage.getItem('zitlas_plan_id') || null;
+          var _wrapHasMods = !!(wp.workoutModifications && Object.keys(wp.workoutModifications).length);
+          var _wrapperOk;
+          if (wp.planId) {
+            _wrapperOk = !!(_curPlanId && wp.planId === _curPlanId);
+          } else if (_wrapHasMods || wp.isExpertPlan) {
+            _wrapperOk = false;
+          } else if (_curPlanId) {
+            wp.planId = _curPlanId;
+            try { localStorage.setItem('zitlas_workout_plan', JSON.stringify(wp)); } catch (_) {}
+            _wrapperOk = true;
+          } else {
+            _wrapperOk = false;
+          }
+          if (!_wrapperOk) {
+            console.log('[TRAINING] STALE workout wrapper discarded — planId:',
+              wp.planId || 'missing', '| current:', _curPlanId || 'none');
+            try { localStorage.removeItem('zitlas_workout_plan'); } catch (_) {}
+            if (typeof ZitlasCloudSync !== 'undefined') ZitlasCloudSync.save('workoutPlan', null);
+            return null;
+          }
           /* Ensure currentWorkoutPlan is never null */
           if (!wp.currentWorkoutPlan && wp.originalWorkoutPlan) wp.currentWorkoutPlan = wp.originalWorkoutPlan;
 
@@ -262,6 +291,7 @@
               workoutModifications: _mods, isExpertPlan: true,
               expertName: _acceptedRev.expertName || 'Expert',
               reviewedAt: _acceptedRev.reviewedAt || new Date().toISOString(),
+              planId: _acceptedRev.planId || localStorage.getItem('zitlas_plan_id') || null,
             };
             try { localStorage.setItem('zitlas_workout_plan', JSON.stringify(_migrated)); } catch (_) {}
             const _hasMods = Object.keys(_mods).length > 0;

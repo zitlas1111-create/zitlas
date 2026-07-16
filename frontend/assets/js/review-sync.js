@@ -114,12 +114,31 @@
     }
   }
 
+  /* Self-healing hygiene: drop cached reviews that don't belong to the
+     CURRENT plan generation. Renderers are all planId-gated anyway
+     (fail-closed), so this only keeps the cache from accumulating dead
+     goals' reviews forever. Runs once per attach. */
+  function pruneStaleCache() {
+    var currentPlanId = null;
+    try { currentPlanId = localStorage.getItem('zitlas_plan_id') || null; } catch (_) {}
+    var all = safeJSON(REVIEWS_KEY, []);
+    if (!Array.isArray(all) || !all.length) return;
+    var kept = all.filter(function (r) {
+      return r && r.planId && currentPlanId && r.planId === currentPlanId;
+    });
+    if (kept.length !== all.length) {
+      console.log('[REVIEW SYNC] pruned', all.length - kept.length, 'stale cached review(s)');
+      try { localStorage.setItem(REVIEWS_KEY, JSON.stringify(kept)); } catch (_) {}
+    }
+  }
+
   function attach() {
     if (win.__zitlasReviewSyncAttached) return;
     if (typeof ZitlasDB === 'undefined') return;
     var uid = myUid();
     if (!uid) return;
     win.__zitlasReviewSyncAttached = true;
+    pruneStaleCache();
 
     console.log('[REVIEW SYNC] listening: review_requests.where(userId ==', uid + ')');
     ZitlasDB.collection('review_requests')

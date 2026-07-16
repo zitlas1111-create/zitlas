@@ -246,10 +246,53 @@
     return !!(obj && obj.originalDietPlan && obj.currentDietPlan);
   }
 
+  function _currentPlanId() { return localStorage.getItem('zitlas_plan_id') || null; }
+
+  /* ── Goal-identity policy for the diet wrapper schema ──
+     (docs/GOAL_LIFECYCLE_ARCHITECTURE.md, Rule 2 — stamp at write,
+     fail-closed at read.)
+       'valid'   — stamped with the CURRENT planId → render as-is
+       'adopted' — unstamped but pure AI content (no expert layer):
+                   first-party data always written in the same lifecycle
+                   as zitlas_plan_id, so it is stamped in place once
+       'stale'   — stamped with a DIFFERENT planId (whole wrapper belongs
+                   to a dead goal), OR unstamped while carrying an expert
+                   layer (an expert claim that cannot prove which goal it
+                   was accepted under). Stale wrappers are DELETED, never
+                   rendered — this is the exact leak where nutritionist
+                   modifications from a previous goal kept appearing
+                   after Goal Reset. */
+  function validateDietStorage(storage) {
+    if (!isNewDietSchema(storage)) return 'stale';
+    var current = _currentPlanId();
+    if (storage.planId) {
+      return (current && storage.planId === current) ? 'valid' : 'stale';
+    }
+    var hasExpertLayer = !!storage.isExpertPlan ||
+      !!(storage.expertModifications && Object.keys(storage.expertModifications).length);
+    if (hasExpertLayer) return 'stale';
+    if (!current) return 'stale'; /* no active goal — nothing may render */
+    storage.planId = current;
+    return 'adopted';
+  }
+
+  /* Deletes the wrapper locally AND marks it cleared on the users/{uid}
+     cloud mirror, so another device's hydrate can't resurrect it. */
+  function discardDietStorage(reason) {
+    console.log('[DIET] discarding stale diet storage —', reason);
+    try { localStorage.removeItem('zitlas_diet_plan'); } catch (_) {}
+    if (typeof ZitlasCloudSync !== 'undefined') ZitlasCloudSync.save('dietPlan', null);
+  }
+
   function loadDietStorage() {
     var raw = safeJSON('zitlas_diet_plan', null);
     if (!raw) return null;
-    if (isNewDietSchema(raw)) return raw;
+    if (isNewDietSchema(raw)) {
+      var verdict = validateDietStorage(raw);
+      if (verdict === 'stale') { discardDietStorage('loadDietStorage verdict'); return null; }
+      if (verdict === 'adopted') saveDietStorage(raw); /* persist the stamp */
+      return raw;
+    }
     /* Auto-migrate legacy flat plan {days:[...]} into new schema and persist immediately
        so every subsequent read (from any page) sees the correct structure. */
     if (raw.days) {
@@ -260,6 +303,7 @@
         isExpertPlan:        false,
         expertName:          null,
         reviewedAt:          null,
+        planId:              _currentPlanId(),
       };
       saveDietStorage(_migrated);
       return _migrated;
@@ -1035,6 +1079,7 @@
         currentDietPlan:     weeklyPlan,
         expertModifications: {},
         isExpertPlan:        false,
+        planId:              _currentPlanId(),
       });
     }
 
@@ -1405,12 +1450,19 @@
 
     /* Fail-closed on goal identity: the "Request Sent / Pending" status
        card only renders for a request created under the CURRENT plan.
-       An anchor from a previous goal (or with no planId at all) is stale
-       by definition and must never resurface after a Goal Reset. */
+       A stale anchor (previous goal, or no planId at all) is PURGED —
+       not just skipped — so it can never resurface after a Goal Reset.
+       (review-sync.js's adoption is planId-gated too, so a purged anchor
+       is only ever re-created for a genuinely current review.) */
     var _vnPlanId = localStorage.getItem('zitlas_plan_id') || null;
     var existing = safeJSON('zitlas_review_request', null);
-    if (existing && existing.planId && _vnPlanId && existing.planId === _vnPlanId) {
-      updateVerifyStatusUI(existing);
+    if (existing) {
+      if (existing.planId && _vnPlanId && existing.planId === _vnPlanId) {
+        updateVerifyStatusUI(existing);
+      } else {
+        console.log('[DIET] purging stale review anchor —', existing.id, existing.planId, 'vs', _vnPlanId);
+        try { localStorage.removeItem('zitlas_review_request'); } catch (_) {}
+      }
     }
 
     var review = safeJSON('zitlas_expert_review', null);
@@ -2351,34 +2403,43 @@
       }
     }
     if (_rawDietStr) {
-      console.log("[DIET INIT]", JSON.parse(localStorage.getItem("zitlas_diet_plan")));
       var _parsedDiet = null;
       try { _parsedDiet = JSON.parse(_rawDietStr); } catch (_) {}
       if (_parsedDiet && (_parsedDiet.currentDietPlan !== undefined || _parsedDiet.originalDietPlan !== undefined)) {
-        console.log("[DIET expertModifications]", _parsedDiet.expertModifications);
-        var _effective = buildEffectivePlan(_parsedDiet);
-        if (_effective && _effective.days && _effective.days.length) {
-          var _hasMods = _parsedDiet.expertModifications && Object.keys(_parsedDiet.expertModifications).length > 0;
-          if (_hasMods || _parsedDiet.isExpertPlan) planSource = 'expert';
-          console.log(planSource);
-          console.log("[ALL REVIEWS]", JSON.parse(localStorage.getItem("expert_plan_reviews")));
-          console.log("[DIET STORAGE]", JSON.parse(localStorage.getItem("zitlas_diet_plan")));
-          weeklyPlan = normalizePlan(_effective);
-          showLoading(false);
-          renderPlanMeta();
-          renderFocusCard(weeklyPlan, null);
-          renderDay(currentDay);
-          renderVerifyNutriSection();
-          /* Check for a pending expert review even when the plan is already in new schema.
-             Without this, getCompletedPlanReview() is never reached and the accept banner
-             is never wired — so acceptExpertPlan() can never be called. */
-          var _pendingReview = getCompletedPlanReview();
-          console.log("[NEW SCHEMA] pending review", _pendingReview);
-          if (_pendingReview && !_pendingReview.athleteAccepted) {
-            activePlanReview = _pendingReview;
-            showExpertReviewBanner(_pendingReview);
+        /* GOAL-IDENTITY GATE — the wrapper (and especially its expert
+           layer) may only render for the goal it belongs to. A stale
+           wrapper is deleted here and we fall through to the AI/no-plan
+           path, so nutritionist modifications from a previous goal can
+           never appear again regardless of how the wrapper survived. */
+        var _verdict = validateDietStorage(_parsedDiet);
+        if (_verdict === 'stale') {
+          discardDietStorage('init render gate — wrapper planId ' + (_parsedDiet.planId || 'missing') +
+            ' vs current ' + (_currentPlanId() || 'none'));
+          _parsedDiet = null;
+          _rawDietStr = null;
+        } else {
+          if (_verdict === 'adopted') saveDietStorage(_parsedDiet);
+          var _effective = buildEffectivePlan(_parsedDiet);
+          if (_effective && _effective.days && _effective.days.length) {
+            var _hasMods = _parsedDiet.expertModifications && Object.keys(_parsedDiet.expertModifications).length > 0;
+            if (_hasMods || _parsedDiet.isExpertPlan) planSource = 'expert';
+            weeklyPlan = normalizePlan(_effective);
+            showLoading(false);
+            renderPlanMeta();
+            renderFocusCard(weeklyPlan, null);
+            renderDay(currentDay);
+            renderVerifyNutriSection();
+            /* Check for a pending expert review even when the plan is already in new schema.
+               Without this, getCompletedPlanReview() is never reached and the accept banner
+               is never wired — so acceptExpertPlan() can never be called. */
+            var _pendingReview = getCompletedPlanReview();
+            console.log("[NEW SCHEMA] pending review", _pendingReview);
+            if (_pendingReview && !_pendingReview.athleteAccepted) {
+              activePlanReview = _pendingReview;
+              showExpertReviewBanner(_pendingReview);
+            }
+            return;
           }
-          return;
         }
       }
     }
@@ -2468,6 +2529,7 @@
         isExpertPlan:        false,
         expertName:          null,
         reviewedAt:          null,
+        planId:              _currentPlanId(),
       });
       weeklyPlan = normalizePlan(_flatCached);
       showLoading(false);
@@ -3038,6 +3100,9 @@
       isExpertPlan:        true,
       expertName:          _expName,
       reviewedAt:          review.reviewedAt || new Date().toISOString(),
+      /* Goal-identity stamp — this accepted expert layer belongs to the
+         plan generation the review was made for. */
+      planId:              review.planId || _currentPlanId(),
     });
     console.log("AFTER SAVE", JSON.parse(localStorage.getItem("zitlas_diet_plan")));
 

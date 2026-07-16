@@ -51,6 +51,26 @@ Stamped artifacts:
 - `zitlas_expert_review.planId` — accepted legacy review object.
 - `coaching_plans/{uid}.diet.planId` / `.training.planId` — coach-authored plans
   (stamped at save in `coaching-workspace.js`).
+- **The plan wrapper schemas themselves** — `zitlas_diet_plan`
+  (`{originalDietPlan, currentDietPlan, expertModifications, isExpertPlan, planId}`)
+  and `zitlas_workout_plan` (`{originalWorkoutPlan, …, workoutModifications, planId}`),
+  stamped at every creation site: accept flows (diet.js `acceptExpertPlan`,
+  cprofile.js `_buildDietStorageFromReview`/`_buildWorkoutStorageFromReview` and
+  the inline workout-accept), flat→wrapper migrations, and the swap-flow rewrap.
+
+**Wrapper read policy** (`validateDietStorage()` in diet.js; mirrored inline in
+weekly-plan.js and day.js for the workout wrapper):
+- stamped + matching current `planId` → **valid**, render.
+- stamped + mismatched (or no active goal) → **stale** — the whole wrapper
+  belongs to a dead goal: it is DELETED locally *and* nulled on the `users/{uid}`
+  mirror, then the page falls through to the no-plan/AI path.
+- unstamped + expert layer (`isExpertPlan` or non-empty modifications) →
+  **stale** — an expert claim that cannot prove which goal it was accepted
+  under never renders. This was the final leak: nutritionist modifications
+  baked into the wrapper survived resets with no identity to validate.
+- unstamped + pure AI content → **adopted** — first-party content is stamped
+  with the current planId in place (it is always written in the same
+  lifecycle as `zitlas_plan_id`), so existing users' plans are undisturbed.
 
 Fail-closed readers:
 - `diet.js getCompletedPlanReview()` (nutritionist banner)

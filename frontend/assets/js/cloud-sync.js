@@ -277,7 +277,10 @@
     var lsKey = FIELD_MAP[cloudKey] || SCALAR_FIELD_MAP[cloudKey];
     if (lsKey) {
       try {
-        localStorage.setItem(lsKey, typeof value === 'string' && SCALAR_FIELD_MAP[cloudKey]
+        /* null = cleared — remove the local key (matching _applyField's
+           treatment of cloud nulls) instead of storing the string "null" */
+        if (value === null) localStorage.removeItem(lsKey);
+        else localStorage.setItem(lsKey, typeof value === 'string' && SCALAR_FIELD_MAP[cloudKey]
           ? value : JSON.stringify(value));
       } catch (_) {}
     }
@@ -315,7 +318,8 @@
       if (!lsKey) return;
       var value = fields[cloudKey];
       try {
-        localStorage.setItem(lsKey, typeof value === 'string' && SCALAR_FIELD_MAP[cloudKey]
+        if (value === null) localStorage.removeItem(lsKey);
+        else localStorage.setItem(lsKey, typeof value === 'string' && SCALAR_FIELD_MAP[cloudKey]
           ? value : JSON.stringify(value));
       } catch (_) {}
     });

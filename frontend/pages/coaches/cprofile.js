@@ -1908,6 +1908,9 @@
       isExpertPlan:        true,
       expertName:          _expName,
       reviewedAt:          _reviewedAt,
+      /* Goal-identity stamp — diet.js refuses to render an expert layer
+         that can't prove it belongs to the current plan generation. */
+      planId:              review.planId || localStorage.getItem('zitlas_plan_id') || null,
     };
   }
 
@@ -2017,6 +2020,9 @@
       isExpertPlan:         true,
       expertName:           _expName,
       reviewedAt:           _reviewedAt,
+      /* Goal-identity stamp — weekly-plan.js/day.js refuse to render an
+         expert layer that can't prove it belongs to the current plan. */
+      planId:               review.planId || localStorage.getItem('zitlas_plan_id') || null,
     };
   }
 
@@ -2226,6 +2232,7 @@
               isExpertPlan:         true,
               expertName:           review.expertName || 'Expert',
               reviewedAt:           review.reviewedAt || new Date().toISOString(),
+              planId:               review.planId || localStorage.getItem('zitlas_plan_id') || null,
             };
 
             localStorage.setItem('zitlas_workout_plan', JSON.stringify(_storage));

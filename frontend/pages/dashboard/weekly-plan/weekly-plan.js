@@ -227,7 +227,8 @@
       .filter(function(r) {
         return r.reviewType === 'workout' &&
           r.workoutChangeHistory && r.workoutChangeHistory.length &&
-          (r.planId ? r.planId === activePlanId : true);
+          /* FAIL-CLOSED goal identity: planId required on both sides */
+          !!(r.planId && activePlanId && r.planId === activePlanId);
       })
       .sort(function(a, b) {
         var aDate = new Date(a.reviewedAt || a.completedAt || a.createdAt || 0);
@@ -239,12 +240,15 @@
   /* Used only for CASE 1 flat-schema migration — requires completion + athlete acceptance. */
   function getCompletedWorkoutReview() {
     const reviews = JSON.parse(localStorage.getItem('expert_plan_reviews') || '[]');
+    const activePlanId = localStorage.getItem('zitlas_plan_id');
     const workoutReviews = reviews
       .filter(function(r) {
         return r.reviewType === 'workout' &&
           (r.status === 'completed' || r.status === 'review_completed') &&
           (r.athleteAccepted === true || !!r.acceptedAt) &&
-          r.workoutChangeHistory && r.workoutChangeHistory.length > 0;
+          r.workoutChangeHistory && r.workoutChangeHistory.length > 0 &&
+          /* FAIL-CLOSED goal identity */
+          !!(r.planId && activePlanId && r.planId === activePlanId);
       })
       .sort(function(a, b) {
         return new Date(b.reviewedAt || b.completedAt || b.acceptedAt || 0) -
@@ -279,6 +283,7 @@
       isExpertPlan:         true,
       expertName:           review.expertName || 'Expert',
       reviewedAt:           review.reviewedAt || new Date().toISOString(),
+      planId:               review.planId || localStorage.getItem('zitlas_plan_id') || null,
     };
     try {
       localStorage.setItem('zitlas_workout_plan', JSON.stringify(newStorage));
@@ -304,8 +309,9 @@
       const er           = JSON.parse(localStorage.getItem('zitlas_expert_review') || 'null');
       const activePlanId = localStorage.getItem('zitlas_plan_id');
 
-      /* Load original AI plan for diff computation */
-      const originalWp = JSON.parse(localStorage.getItem('zitlas_workout_plan') || 'null');
+      /* Load original AI plan for diff computation (let — the goal-identity
+         gate below nulls it when the wrapper belongs to a dead goal) */
+      let originalWp = JSON.parse(localStorage.getItem('zitlas_workout_plan') || 'null');
 
       /* ── Normalize new schema so every code path can read .weekly_plan at root ── */
       if (originalWp) {
@@ -405,21 +411,51 @@
 
       /* 2. Fitness AI plan (or new expert-modified schema) */
       if (originalWp) {
-        /* 2a. New schema already has workoutModifications — apply and render */
+        /* 2a. New schema already has workoutModifications — apply and render.
+           GOAL-IDENTITY GATE (same policy as diet.js's validateDietStorage):
+             stamped + matching current planId          → render
+             stamped + mismatched                       → whole wrapper is a
+               previous goal's plan — DELETE it, fall through
+             unstamped + expert layer                   → unverifiable expert
+               claim — DELETE (this is how stale coach modifications kept
+               surviving goal resets)
+             unstamped + pure AI content                → adopt: stamp with
+               the current planId in place (first-party data) */
         if (originalWp.originalWorkoutPlan || originalWp.currentWorkoutPlan) {
           const hasMods = !!(originalWp.workoutModifications &&
             Object.keys(originalWp.workoutModifications).length > 0);
-          console.log('[WeeklyPlan] New workout schema detected | hasMods:', hasMods, '| by:', originalWp.expertName);
-          const effectivePlan = hasMods
-            ? buildEffectiveWorkoutPlan(originalWp)
-            : (originalWp.currentWorkoutPlan || originalWp.originalWorkoutPlan);
-          const wmMeta = hasMods ? {
-            reviewedBy: originalWp.expertName || 'Expert',
-            reviewedAt: originalWp.reviewedAt
-              ? new Date(originalWp.reviewedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
-              : '',
-          } : null;
-          return transformWorkoutPlan(effectivePlan, originalWp.originalWorkoutPlan, wmMeta);
+          const _curPlanId = localStorage.getItem('zitlas_plan_id') || null;
+          let _wrapperOk;
+          if (originalWp.planId) {
+            _wrapperOk = !!(_curPlanId && originalWp.planId === _curPlanId);
+          } else if (hasMods || originalWp.isExpertPlan) {
+            _wrapperOk = false;
+          } else if (_curPlanId) {
+            originalWp.planId = _curPlanId;
+            try { localStorage.setItem('zitlas_workout_plan', JSON.stringify(originalWp)); } catch (_) {}
+            _wrapperOk = true;
+          } else {
+            _wrapperOk = false;
+          }
+          if (!_wrapperOk) {
+            console.log('[WeeklyPlan] STALE workout wrapper discarded — planId:',
+              originalWp.planId || 'missing', '| current:', _curPlanId || 'none');
+            try { localStorage.removeItem('zitlas_workout_plan'); } catch (_) {}
+            if (typeof ZitlasCloudSync !== 'undefined') ZitlasCloudSync.save('workoutPlan', null);
+            originalWp = null;
+          } else {
+            console.log('[WeeklyPlan] New workout schema detected | hasMods:', hasMods, '| by:', originalWp.expertName);
+            const effectivePlan = hasMods
+              ? buildEffectiveWorkoutPlan(originalWp)
+              : (originalWp.currentWorkoutPlan || originalWp.originalWorkoutPlan);
+            const wmMeta = hasMods ? {
+              reviewedBy: originalWp.expertName || 'Expert',
+              reviewedAt: originalWp.reviewedAt
+                ? new Date(originalWp.reviewedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+                : '',
+            } : null;
+            return transformWorkoutPlan(effectivePlan, originalWp.originalWorkoutPlan, wmMeta);
+          }
         }
 
         /* 2b. Flat schema — check if athlete accepted a workout review that wasn't written (CASE 1 recovery) */
