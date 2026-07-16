@@ -37,13 +37,13 @@
       login_tagline:          'Your AI-Powered Fitness Journey Starts Here',
       login_headline:         'Build Your',
       login_headline_accent:  'Healthier Future.',
-      login_subtitle:         'Fitness Â· Nutrition Â· Results',
-      login_subtitle2:        'One Platform Â· Unlimited Opportunities.',
+      login_subtitle:         'Personalized AI-powered fitness plans designed for weight loss, muscle gain, nutrition, and expert coaching.',
+      login_subtitle2:        '',
       login_stat_athletes:    'AI Diet Plans',
       login_stat_coaches:     'AI Workout Plans',
       login_stat_academies:   'Expert Coaching',
       login_stat_opps:        'Progress Tracking',
-      login_welcome:          'Welcome Back ðŸ‘‹',
+      login_welcome:          'Welcome Back',
       login_card_sub:         'Sign in to continue your AI-powered fitness journey',
       login_email_ph:         'Email or Mobile Number',
       login_password_ph:      'Password',
@@ -52,7 +52,7 @@
       login_divider:          'or continue with',
       login_google:           'Continue with Google',
       login_create:           'Create Account',
-      login_skip:             'Skip for Now â†’',
+      login_skip:             'Skip for Now',
 
       /* â”€â”€ DASHBOARD â”€â”€ */
       dash_greeting_sub:      'Discipline today, victory tomorrow.',
@@ -347,16 +347,16 @@
       btn_mark_complete: 'à¤ªà¥‚à¤°à¥à¤£ à¤šà¤¿à¤¹à¥à¤¨à¤¿à¤¤ à¤•à¤°à¥‡à¤‚',
 
       /* â”€â”€ LOGIN â”€â”€ */
-      login_tagline:         'Your AI-Powered Fitness Journey Starts Here',
-      login_headline:        'à¤¬à¤¨à¤¾à¤à¤‚ à¤…à¤ªà¤¨à¤¾',
-      login_headline_accent: 'à¤¸à¥à¤µà¤¸à¥à¤¥ à¤­à¤µà¤¿à¤·à¥à¤¯à¥¤',
-      login_subtitle:        'à¤«à¤¿à¤Ÿà¤¨à¥‡à¤¸ Â· à¤ªà¥‹à¤·à¤£ Â· à¤ªà¤°à¤¿à¤£à¤¾à¤®',
-      login_subtitle2:       'à¤à¤• à¤ªà¥à¤²à¥‡à¤Ÿà¤«à¤¼à¥‰à¤°à¥à¤® Â· à¤…à¤¸à¥€à¤®à¤¿à¤¤ à¤…à¤µà¤¸à¤°à¥¤',
+      login_tagline:          'Your AI-Powered Fitness Journey Starts Here',
+      login_headline:         'Build Your',
+      login_headline_accent:  'Healthier Future.',
+      login_subtitle:         'Personalized AI-powered fitness plans designed for weight loss, muscle gain, nutrition, and expert coaching.',
+      login_subtitle2:        '',
       login_stat_athletes:   'AI Diet Plans',
       login_stat_coaches:    'AI Workout Plans',
       login_stat_academies:  'Expert Coaching',
       login_stat_opps:       'Progress Tracking',
-      login_welcome:         'à¤µà¤¾à¤ªà¤¸ à¤†à¤ ðŸ‘‹',
+      login_welcome:          'Welcome Back',
       login_card_sub:        'à¤…à¤ªà¤¨à¥€ à¤µà¥‡à¤Ÿ-à¤²à¥‰à¤¸ à¤¯à¤¾à¤¤à¥à¤°à¤¾ à¤œà¤¾à¤°à¥€ à¤°à¤–à¥‡à¤‚',
       login_email_ph:        'à¤ˆà¤®à¥‡à¤² à¤¯à¤¾ à¤®à¥‹à¤¬à¤¾à¤‡à¤² à¤¨à¤‚à¤¬à¤°',
       login_password_ph:     'à¤ªà¤¾à¤¸à¤µà¤°à¥à¤¡',
@@ -365,7 +365,7 @@
       login_divider:         'à¤¯à¤¾ à¤œà¤¾à¤°à¥€ à¤°à¤–à¥‡à¤‚',
       login_google:          'Google à¤¸à¥‡ à¤œà¤¾à¤°à¥€ à¤°à¤–à¥‡à¤‚',
       login_create:          'à¤–à¤¾à¤¤à¤¾ à¤¬à¤¨à¤¾à¤à¤‚',
-      login_skip:            'à¤…à¤­à¥€ à¤›à¥‹à¤¡à¤¼à¥‡à¤‚ â†’',
+      login_skip:             'Skip for Now',
 
       /* â”€â”€ DASHBOARD â”€â”€ */
       dash_greeting_sub:      'à¤†à¤œ à¤…à¤¨à¥à¤¶à¤¾à¤¸à¤¨, à¤•à¤² à¤œà¥€à¤¤à¥¤',
@@ -686,6 +686,7 @@
   }
 
 })();
+
 
 
 

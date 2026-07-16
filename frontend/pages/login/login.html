@@ -1,405 +1,117 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>ZITLAS | AI-Powered Fitness Ecosystem</title>
-  <meta name="description" content="ZITLAS is an AI-powered fitness ecosystem that provides personalized diet plans, workout plans, expert coaching, nutrition guidance, and goal-based fitness programs." />
+  <meta name="description" content="ZITLAS is an AI-powered fitness ecosystem offering personalized diet plans, workout plans, expert coaching, nutrition guidance, and goal-based fitness programs." />
   <link rel="canonical" href="https://zitlas.com/pages/login/login.html" />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://zitlas.com/pages/login/login.html" />
   <meta property="og:title" content="ZITLAS | AI-Powered Fitness Ecosystem" />
-  <meta property="og:description" content="ZITLAS provides AI-personalized diet plans, workout plans, expert coaching, nutrition guidance, and goal-based fitness programs." />
+  <meta property="og:description" content="ZITLAS is an AI-powered fitness ecosystem offering personalized diet plans, workout plans, expert coaching, nutrition guidance, and goal-based fitness programs." />
   <meta property="og:site_name" content="ZITLAS" />
   <meta property="og:image" content="https://zitlas.com/assets/zino.png" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="ZITLAS | AI-Powered Fitness Ecosystem" />
-  <meta name="twitter:description" content="AI-powered diet plans, workout plans, expert coaching, nutrition guidance, and goal-based fitness programs." />
+  <meta name="twitter:description" content="ZITLAS is an AI-powered fitness ecosystem offering personalized diet plans, workout plans, expert coaching, nutrition guidance, and goal-based fitness programs." />
   <meta name="twitter:image" content="https://zitlas.com/assets/zino.png" />
   <meta name="robots" content="index, follow" />
-  <link rel="stylesheet" href="login.css" />
   <link rel="stylesheet" href="../../assets/css/theme.css" />
+  <link rel="stylesheet" href="login.css" />
+  <script>if ('IntersectionObserver' in window) document.documentElement.className += ' js-anims';</script>
   <script src="../../assets/js/i18n.js"></script>
-  <!-- Firebase SDK (compat - same API as v8) -->
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
   <script src="../../assets/js/firebase-config.js?v=20260715"></script>
 </head>
 <body>
-
-  <!-- â•â•â•â•â•â•â•â•â•â•â•â• BACKGROUND GLOW â•â•â•â•â•â•â•â•â•â•â•â• -->
-  <div class="bg-glow" aria-hidden="true"></div>
-
-  <!-- â•â•â•â•â•â•â•â•â•â•â•â• HERO â•â•â•â•â•â•â•â•â•â•â•â• -->
-  <section class="hero">
-
-    <!-- Logo -->
-    <div class="login-logo-block">
-      <span class="login-logo-text">ZITLAS</span>
-    </div>
-
-    <!-- Tagline -->
-    <p class="login-tagline" data-i18n="login_tagline">Your AI-Powered Fitness Journey Starts Here</p>
-
-    <!-- Headline -->
-    <h1 class="login-headline">
-      <span data-i18n="login_headline">Build Your</span><br>
-      <span class="login-headline-accent" data-i18n="login_headline_accent">Healthier Future.</span>
-    </h1>
-
-    <!-- Subtitle -->
-    <p class="login-subtitle">
-      <span data-i18n="login_subtitle">Fitness Â· Nutrition Â· Results</span><br>
-      <span data-i18n="login_subtitle2">One Platform Â· Unlimited Opportunities.</span>
-    </p>
-
-    <!-- Ecosystem Illustration -->
-    <div class="ecosystem-wrap" aria-hidden="true">
-      <svg class="ecosystem-svg" viewBox="0 0 280 200" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <radialGradient id="centerGlow" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stop-color="var(--primary)" stop-opacity="0.22"/>
-            <stop offset="100%" stop-color="var(--primary)" stop-opacity="0"/>
-          </radialGradient>
-          <radialGradient id="outerGlow" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stop-color="var(--primary)" stop-opacity="0.10"/>
-            <stop offset="100%" stop-color="var(--primary)" stop-opacity="0"/>
-          </radialGradient>
-          <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
-            <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur"/>
-            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-          </filter>
-        </defs>
-
-        <!-- Connection lines â€” drawn in via animation -->
-        <!-- Center (140,100) â†’ Fitness (70,45) -->
-        <path class="eco-line eco-l1" d="M140,100 L70,45"   fill="none" stroke="var(--primary)" stroke-width="1.2" opacity="0.4"/>
-        <!-- Center â†’ Training (210,45) -->
-        <path class="eco-line eco-l2" d="M140,100 L210,45"  fill="none" stroke="var(--primary)" stroke-width="1.2" opacity="0.4"/>
-        <!-- Center â†’ Results (210,155) -->
-        <path class="eco-line eco-l3" d="M140,100 L210,155" fill="none" stroke="var(--primary)" stroke-width="1.2" opacity="0.4"/>
-        <!-- Center â†’ Nutrition (70,155) -->
-        <path class="eco-line eco-l4" d="M140,100 L70,155"  fill="none" stroke="var(--primary)" stroke-width="1.2" opacity="0.4"/>
-
-        <!-- Pulse dots traveling each line -->
-        <circle class="pdot pdot-1" r="3" fill="var(--primary)" filter="url(#glow)"/>
-        <circle class="pdot pdot-2" r="3" fill="var(--primary)" filter="url(#glow)"/>
-        <circle class="pdot pdot-3" r="3" fill="var(--primary)" filter="url(#glow)"/>
-        <circle class="pdot pdot-4" r="3" fill="var(--primary)" filter="url(#glow)"/>
-
-        <!-- Center glow halo -->
-        <circle cx="140" cy="100" r="44" fill="url(#centerGlow)"/>
-
-        <!-- Center node â€” ZITLAS -->
-        <circle cx="140" cy="100" r="28" fill="var(--bg-card)" stroke="var(--primary)" stroke-width="1.5" filter="url(#glow)" class="eco-center-ring"/>
-        <text x="140" y="95"  text-anchor="middle" fill="var(--primary)" font-size="9" font-weight="900" font-family="-apple-system,sans-serif" letter-spacing="2">ZITLAS</text>
-        <text x="140" y="110" text-anchor="middle" font-size="15" font-family="sans-serif">ðŸ’ª</text>
-
-        <!-- Outer: Fitness (top-left) -->
-        <circle cx="70" cy="45" r="28" fill="url(#outerGlow)"/>
-        <circle cx="70" cy="45" r="19" fill="var(--bg-card)" stroke="var(--primary)" stroke-width="0.8" stroke-opacity="0.45"/>
-        <text x="70" y="40" text-anchor="middle" fill="var(--text-secondary)" font-size="7.5" font-weight="700" font-family="-apple-system,sans-serif" letter-spacing="0.5">FITNESS</text>
-        <text x="70" y="53" text-anchor="middle" font-size="12" font-family="sans-serif">ðŸƒ</text>
-
-        <!-- Outer: Training (top-right) -->
-        <circle cx="210" cy="45" r="28" fill="url(#outerGlow)"/>
-        <circle cx="210" cy="45" r="19" fill="var(--bg-card)" stroke="var(--primary)" stroke-width="0.8" stroke-opacity="0.45"/>
-        <text x="210" y="40" text-anchor="middle" fill="var(--text-secondary)" font-size="7" font-weight="700" font-family="-apple-system,sans-serif" letter-spacing="0.5">TRAINING</text>
-        <text x="210" y="53" text-anchor="middle" font-size="12" font-family="sans-serif">ðŸ’ª</text>
-
-        <!-- Outer: Results (bottom-right) -->
-        <circle cx="210" cy="155" r="28" fill="url(#outerGlow)"/>
-        <circle cx="210" cy="155" r="19" fill="var(--bg-card)" stroke="var(--primary)" stroke-width="0.8" stroke-opacity="0.45"/>
-        <text x="210" y="150" text-anchor="middle" fill="var(--text-secondary)" font-size="7.5" font-weight="700" font-family="-apple-system,sans-serif" letter-spacing="0.5">RESULTS</text>
-        <text x="210" y="163" text-anchor="middle" font-size="12" font-family="sans-serif">ðŸ“ˆ</text>
-
-        <!-- Outer: Nutrition (bottom-left) -->
-        <circle cx="70" cy="155" r="28" fill="url(#outerGlow)"/>
-        <circle cx="70" cy="155" r="19" fill="var(--bg-card)" stroke="var(--primary)" stroke-width="0.8" stroke-opacity="0.45"/>
-        <text x="70" y="150" text-anchor="middle" fill="var(--text-secondary)" font-size="7" font-weight="700" font-family="-apple-system,sans-serif" letter-spacing="0.5">NUTRITION</text>
-        <text x="70" y="163" text-anchor="middle" font-size="12" font-family="sans-serif">ðŸ¥—</text>
-      </svg>
-    </div>
-    <!-- Real ZITLAS capabilities -->
-    <div class="login-features" id="loginFeatures" aria-label="ZITLAS platform capabilities">
-      <article class="lfeature-card lfeature-card--ai">
-        <span class="lfeature-kicker">AI</span>
-        <h2>AI Personalized Diet Plans</h2>
-        <p>Meal guidance shaped around goals, lifestyle, budget, and nutrition context.</p>
-      </article>
-      <article class="lfeature-card lfeature-card--ai">
-        <span class="lfeature-kicker">AI</span>
-        <h2>AI Personalized Workout Plans</h2>
-        <p>Training plans for weight loss, muscle gain, transformation, and general fitness.</p>
-      </article>
-      <article class="lfeature-card">
-        <span class="lfeature-kicker">Experts</span>
-        <h2>Personal Coaching by Experts</h2>
-        <p>Human review and coaching support for users who want professional guidance.</p>
-      </article>
-      <article class="lfeature-card">
-        <span class="lfeature-kicker">Nutrition</span>
-        <h2>Nutritionist Support</h2>
-        <p>Diet verification, practical meal swaps, and expert-led nutrition improvements.</p>
-      </article>
-      <article class="lfeature-card">
-        <span class="lfeature-kicker">Goals</span>
-        <h2>Goal Based Fitness Plans</h2>
-        <p>Programs aligned to weight loss, muscle gain, body transformation, and health goals.</p>
-      </article>
-      <article class="lfeature-card lfeature-card--success">
-        <span class="lfeature-kicker">Progress</span>
-        <h2>Progress Tracking & Analytics</h2>
-        <p>Dashboards and plan views that help users track routines, progress, and next actions.</p>
-      </article>
-      <article class="lfeature-card">
-        <span class="lfeature-kicker">Programs</span>
-        <h2>Weight Loss & Muscle Gain Programs</h2>
-        <p>Structured plans built around realistic nutrition targets and training preferences.</p>
-      </article>
-      <article class="lfeature-card lfeature-card--ai">
-        <span class="lfeature-kicker">Hybrid</span>
-        <h2>AI + Human Expert Collaboration</h2>
-        <p>AI-generated plans can be reviewed, refined, and approved by real experts.</p>
-      </article>
-    </div>
-  </section>
-
-  <!-- â•â•â•â•â•â•â•â•â•â•â•â• LOGIN CARD â•â•â•â•â•â•â•â•â•â•â•â• -->
-  <section class="login-card-section">
-    <div class="login-card">
-
-      <!-- Card top accent line -->
-      <div class="card-accent-line" aria-hidden="true"></div>
-
-      <!-- Role Selector -->
-      <div class="role-selector" id="roleSelector">
-        <button type="button" class="role-tab active" id="roleTabAthlete">
-          <span class="role-tab-icon">ðŸƒ</span>
-          <span class="role-tab-label">Athlete</span>
-        </button>
-        <button type="button" class="role-tab" id="roleTabExpert">
-          <span class="role-tab-icon">ðŸ‘¨â€âš•ï¸</span>
-          <span class="role-tab-label">Expert</span>
-        </button>
-      </div>
-
-      <div class="login-card-header">
-        <h2 class="login-card-title" id="loginCardTitle">Welcome Back ðŸ‘‹</h2>
-        <p class="login-card-sub" id="loginCardSub">Sign in to continue your AI-powered fitness journey</p>
-      </div>
-
-      <form class="login-form" id="loginForm" novalidate>
-
-        <!-- Full Name â€” shown only in signup mode -->
-        <div class="lf-input-group" id="nameGroup" style="display:none">
-          <span class="lf-input-icon">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-              <circle cx="12" cy="7" r="4"/>
-            </svg>
-          </span>
-          <input type="text" id="nameInput" class="lf-input" placeholder="Full Name" autocomplete="name" />
-        </div>
-
-        <!-- Email / Mobile -->
-        <div class="lf-input-group" id="emailGroup">
-          <span class="lf-input-icon">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
-              <polyline points="22,6 12,13 2,6"/>
-            </svg>
-          </span>
-          <input
-            type="email"
-            id="emailInput"
-            class="lf-input"
-            data-i18n-ph="login_email_ph"
-            placeholder="Email or Mobile Number"
-            autocomplete="email"
-            inputmode="email"
-          />
-        </div>
-
-        <!-- Password -->
-        <div class="lf-input-group" id="passwordGroup">
-          <span class="lf-input-icon">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-            </svg>
-          </span>
-          <input
-            type="password"
-            id="passwordInput"
-            class="lf-input"
-            data-i18n-ph="login_password_ph"
-            placeholder="Password"
-            autocomplete="current-password"
-          />
-          <button type="button" class="lf-pw-toggle" id="pwToggle" aria-label="Toggle password visibility">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="eyeIcon">
-              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-              <circle cx="12" cy="12" r="3"/>
-            </svg>
-          </button>
-        </div>
-
-        <!-- Confirm Password â€” shown only in signup mode -->
-        <div class="lf-input-group" id="confirmPwGroup" style="display:none">
-          <span class="lf-input-icon">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-            </svg>
-          </span>
-          <input type="password" id="confirmPwInput" class="lf-input" placeholder="Confirm Password" autocomplete="new-password" />
-        </div>
-
-        <!-- Forgot -->
-        <div class="lf-row-between">
-          <span></span>
-          <a href="#" class="lf-forgot" id="forgotLink" data-i18n="login_forgot">Forgot Password?</a>
-        </div>
-
-        <!-- Remember Me -->
-        <label class="lf-remember-row">
-          <input type="checkbox" id="rememberInput" class="lf-remember-cb" />
-          <span class="lf-remember-label">Remember Me</span>
-        </label>
-
-        <!-- Sign In Button -->
-        <button type="submit" class="btn-login" id="loginBtn">
-          <span id="loginBtnText" data-i18n="login_sign_in">Sign In</span>
-          <span class="btn-spinner" id="loginBtnSpinner" aria-hidden="true">
-            <svg class="spin" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-              <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
-            </svg>
-          </span>
-        </button>
-
-      </form>
-
-      <!-- Divider -->
-      <div class="lf-divider"><span class="lf-divider-text" data-i18n="login_divider">or continue with</span></div>
-
-      <!-- Google -->
-      <button class="btn-google" id="googleBtn" type="button">
-        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
-          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-          <path fill="var(--success)" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-        </svg>
-        <span data-i18n="login_google">Continue with Google</span>
-      </button>
-
-      <!-- Footer -->
-      <div class="login-card-footer">
-        <a href="#" class="lf-create-link" id="createLink" data-i18n="login_create">Create Account</a>
-        <span class="lf-sep">Â·</span>
-        <button type="button" class="lf-skip-btn" id="skipBtn" data-i18n="login_skip">Skip for Now â†’</button>
-      </div>
-
-      <!-- Expert Hint -->
-      <p class="lf-expert-hint" id="expertHint">
-        Are you a certified expert?
-        <button type="button" class="lf-expert-link" id="expertHintBtn">Login as Expert</button>
-      </p>
-
-    </div>
-  </section>
-
-  <!-- â•â•â•â•â•â•â•â•â•â•â•â• POST-LOGIN OVERLAY â•â•â•â•â•â•â•â•â•â•â•â• -->
-  <div class="login-overlay" id="loginOverlay" aria-hidden="true">
-    <div class="overlay-inner">
-      <div class="overlay-logo-wrap">
-        <div class="overlay-ring overlay-ring-a"></div>
-        <div class="overlay-ring overlay-ring-b"></div>
-        <span class="overlay-logo-text">ZITLAS</span>
-      </div>
-      <div class="overlay-bars" aria-hidden="true">
-        <div class="overlay-bar"></div>
-        <div class="overlay-bar"></div>
-        <div class="overlay-bar"></div>
-        <div class="overlay-bar"></div>
-        <div class="overlay-bar"></div>
-      </div>
-      <p class="overlay-msg">Welcome back ðŸ‘‹</p>
-    </div>
-  </div>
-
-  <!-- â•â•â•â•â•â•â•â•â•â•â•â• GOOGLE ROLE-SELECT MODAL â•â•â•â•â•â•â•â•â•â•â•â• -->
-  <!-- Shown only for new Google sign-in users to pick Athlete or Expert -->
-  <div class="grm-backdrop" id="grmBackdrop" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="grmTitle">
-    <div class="grm-card">
-
-      <!-- Google user identity strip -->
-      <div class="grm-user-strip" id="grmUserStrip">
-        <img class="grm-photo" id="grmPhoto" src="" alt="Google profile photo" />
-        <div class="grm-user-info">
-          <span class="grm-user-name" id="grmUserName">User</span>
-          <span class="grm-user-email" id="grmUserEmail">user@gmail.com</span>
-        </div>
-        <span class="grm-google-badge">
-          <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
-            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-            <path fill="var(--success)" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-          </svg>
-          Google
-        </span>
-      </div>
-
-      <h2 class="grm-title" id="grmTitle">Select Account Type</h2>
-      <p class="grm-sub">How will you use ZITLAS?</p>
-
-      <div class="grm-options">
-        <button class="grm-option" id="grmOptAthlete" data-role="athlete" type="button">
-          <span class="grm-option-icon">ðŸƒ</span>
-          <div class="grm-option-text">
-            <strong class="grm-option-name">Athlete</strong>
-            <span class="grm-option-desc">Track fitness, get AI diet plans, consult experts</span>
+  <main class="public-page">
+    <section class="hero-shell">
+      <div class="hero-left">
+        <div class="hero-fx" aria-hidden="true">
+          <span class="glow-orb orb-a"></span>
+          <span class="glow-orb orb-b"></span>
+          <span class="light-trail trail-orange"></span>
+          <span class="light-trail trail-blue"></span>
+          <div class="particle-field">
+            <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
           </div>
-          <span class="grm-option-check" aria-hidden="true">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-          </span>
-        </button>
-        <button class="grm-option" id="grmOptExpert" data-role="expert" type="button">
-          <span class="grm-option-icon">ðŸ‘¨â€âš•ï¸</span>
-          <div class="grm-option-text">
-            <strong class="grm-option-name">Expert</strong>
-            <span class="grm-option-desc">Review plans, guide athletes, publish revisions</span>
-          </div>
-          <span class="grm-option-check" aria-hidden="true">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-          </span>
+        </div>
+
+        <div class="hero-visual" aria-hidden="true"></div>
+
+        <div class="hero-copy">
+          <a class="brand-mark reveal d1" href="#top" aria-label="ZITLAS home">ZITLAS</a>
+          <p class="eyebrow reveal d2" data-i18n="login_tagline">Your AI-Powered Fitness Journey Starts Here</p>
+          <h1 class="reveal d3"><span data-i18n="login_headline">Build Your</span><span class="accent" data-i18n="login_headline_accent">Healthier Future.</span></h1>
+          <p class="hero-subcopy reveal d4" data-i18n="login_subtitle">Personalized AI-powered fitness plans designed for weight loss, muscle gain, nutrition, and expert coaching.</p>
+        </div>
+
+        <button type="button" class="scroll-cue" id="scrollCueBtn" aria-label="Scroll to login" onclick="document.getElementById('loginCard').scrollIntoView({ behavior: 'smooth', block: 'start' });">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
       </div>
 
-      <button class="grm-confirm-btn" id="grmConfirm" type="button" disabled>
-        <span id="grmConfirmText">Continue â†’</span>
-        <span class="grm-confirm-spinner" id="grmConfirmSpinner" aria-hidden="true">
-          <svg class="spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-        </span>
-      </button>
+      <section class="login-section" id="login-section" aria-label="Login section">
+        <div class="login-fx" aria-hidden="true">
+          <span class="glow-orb orb-c"></span>
+          <span class="glow-orb orb-d"></span>
+        </div>
 
-      <!-- Application Under Review â€” shown after expert role is submitted -->
-      <div class="grm-under-review" id="grmUnderReview" style="display:none" aria-live="polite">
-        <div class="grm-review-icon">â³</div>
-        <h2 class="grm-review-title">Application Under Review</h2>
-        <p class="grm-review-sub" id="grmReviewEmail">Your expert application has been submitted.</p>
-        <p class="grm-review-note">We will notify you via email once your account is approved. This usually takes 1â€“2 business days.</p>
-        <button class="grm-review-home-btn" id="grmReviewHomeBtn" type="button">Continue as Athlete â†’</button>
-      </div>
+        <div class="login-card rise" id="loginCard">
+        <div class="role-selector" id="roleSelector">
+          <button type="button" class="role-tab active" id="roleTabAthlete"><span class="role-tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span><span class="role-tab-label">Athlete</span></button>
+          <button type="button" class="role-tab" id="roleTabExpert"><span class="role-tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.5 13.5 17 22l-5-3-5 3 1.5-8.5"/></svg></span><span class="role-tab-label">Expert</span></button>
+        </div>
+        <div class="login-card-header"><h2 class="login-card-title" id="loginCardTitle" data-i18n="login_welcome">Welcome Back</h2><p class="login-card-sub" id="loginCardSub">Sign in to continue your AI-powered fitness journey</p></div>
+        <form class="login-form" id="loginForm" novalidate>
+          <div class="lf-input-group" id="nameGroup" style="display:none"><span class="lf-input-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span><input type="text" id="nameInput" class="lf-input" placeholder="Full Name" autocomplete="name" /></div>
+          <div class="lf-input-group" id="emailGroup"><span class="lf-input-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg></span><input type="email" id="emailInput" class="lf-input" data-i18n-ph="login_email_ph" placeholder="Email or Mobile Number" autocomplete="email" inputmode="email" /></div>
+          <div class="lf-input-group" id="passwordGroup"><span class="lf-input-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span><input type="password" id="passwordInput" class="lf-input" data-i18n-ph="login_password_ph" placeholder="Password" autocomplete="current-password" /><button type="button" class="lf-pw-toggle" id="pwToggle" aria-label="Toggle password visibility"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="eyeIcon"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button></div>
+          <div class="lf-input-group" id="confirmPwGroup" style="display:none"><span class="lf-input-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span><input type="password" id="confirmPwInput" class="lf-input" placeholder="Confirm Password" autocomplete="new-password" /></div>
+          <div class="lf-row-between"><span></span><a href="#" class="lf-forgot" id="forgotLink" data-i18n="login_forgot">Forgot Password?</a></div>
+          <label class="lf-remember-row"><input type="checkbox" id="rememberInput" class="lf-remember-cb" /><span class="lf-remember-label">Remember Me</span></label>
+          <div class="btn-login-wrap"><span class="btn-login-glow" aria-hidden="true"></span><button type="submit" class="btn-login" id="loginBtn"><span id="loginBtnText" data-i18n="login_sign_in">Sign In</span><span class="btn-spinner" id="loginBtnSpinner" aria-hidden="true"><svg class="spin" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg></span></button></div>
+        </form>
+        <div class="lf-divider"><span class="lf-divider-text" data-i18n="login_divider">or continue with</span></div>
+        <button class="btn-google" id="googleBtn" type="button"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg><span data-i18n="login_google">Continue with Google</span></button>
+        <div class="login-card-footer"><a href="#" class="lf-create-link" id="createLink" data-i18n="login_create">Create Account</a><span class="lf-sep">/</span><button type="button" class="lf-skip-btn" id="skipBtn" data-i18n="login_skip">Skip for Now</button></div>
+        <p class="lf-expert-hint" id="expertHint">Are you a certified expert? <button type="button" class="lf-expert-link" id="expertHintBtn">Login as Expert</button></p>
+        </div>
+      </section>
+    </section>
 
+    <div class="login-overlay" id="loginOverlay" aria-hidden="true">
+      <div class="overlay-inner"><div class="overlay-logo-wrap"><div class="overlay-ring overlay-ring-a"></div><div class="overlay-ring overlay-ring-b"></div><span class="overlay-logo-text">ZITLAS</span></div><div class="overlay-bars" aria-hidden="true"><div class="overlay-bar"></div><div class="overlay-bar"></div><div class="overlay-bar"></div><div class="overlay-bar"></div><div class="overlay-bar"></div></div><p class="overlay-msg">Welcome back</p></div>
     </div>
-  </div>
 
+    <div class="grm-backdrop" id="grmBackdrop" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="grmTitle">
+      <div class="grm-card">
+        <div class="grm-user-strip" id="grmUserStrip"><img class="grm-photo" id="grmPhoto" src="" alt="Google profile photo" /><div class="grm-user-info"><span class="grm-user-name" id="grmUserName">User</span><span class="grm-user-email" id="grmUserEmail">user@gmail.com</span></div><span class="grm-google-badge">Google</span></div>
+        <h2 class="grm-title" id="grmTitle">Select Account Type</h2><p class="grm-sub">How will you use ZITLAS?</p>
+        <div class="grm-options">
+          <button class="grm-option" id="grmOptAthlete" data-role="athlete" type="button"><span class="grm-option-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span><div class="grm-option-text"><strong class="grm-option-name">Athlete</strong><span class="grm-option-desc">Track fitness, get AI diet plans, consult experts</span></div><span class="grm-option-check" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span></button>
+          <button class="grm-option" id="grmOptExpert" data-role="expert" type="button"><span class="grm-option-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.5 13.5 17 22l-5-3-5 3 1.5-8.5"/></svg></span><div class="grm-option-text"><strong class="grm-option-name">Expert</strong><span class="grm-option-desc">Review plans, guide athletes, publish revisions</span></div><span class="grm-option-check" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span></button>
+        </div>
+        <button class="grm-confirm-btn" id="grmConfirm" type="button" disabled><span id="grmConfirmText">Continue</span><span class="grm-confirm-spinner" id="grmConfirmSpinner" aria-hidden="true"><svg class="spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg></span></button>
+        <div class="grm-under-review" id="grmUnderReview" style="display:none" aria-live="polite"><div class="grm-review-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div><h2 class="grm-review-title">Application Under Review</h2><p class="grm-review-sub" id="grmReviewEmail">Your expert application has been submitted.</p><p class="grm-review-note">We will notify you via email once your account is approved. This usually takes 1-2 business days.</p><button class="grm-review-home-btn" id="grmReviewHomeBtn" type="button">Continue as Athlete</button></div>
+      </div>
+    </div>
+  </main>
+  <script>
+  (function () {
+    'use strict';
+    if (!('IntersectionObserver' in window)) return;
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) { en.target.classList.add('in-view'); io.unobserve(en.target); }
+      });
+    }, { threshold: 0.15 });
+    document.querySelectorAll('.rise').forEach(function (el) { io.observe(el); });
+  })();
+  </script>
   <script src="login.js"></script>
 </body>
 </html>
-
-
