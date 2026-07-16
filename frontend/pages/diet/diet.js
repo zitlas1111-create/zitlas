@@ -1403,11 +1403,21 @@
     var rail    = document.getElementById('vnNutriRail');
     if (!section || !rail) return;
 
+    /* Fail-closed on goal identity: the "Request Sent / Pending" status
+       card only renders for a request created under the CURRENT plan.
+       An anchor from a previous goal (or with no planId at all) is stale
+       by definition and must never resurface after a Goal Reset. */
+    var _vnPlanId = localStorage.getItem('zitlas_plan_id') || null;
     var existing = safeJSON('zitlas_review_request', null);
-    if (existing) updateVerifyStatusUI(existing);
+    if (existing && existing.planId && _vnPlanId && existing.planId === _vnPlanId) {
+      updateVerifyStatusUI(existing);
+    }
 
     var review = safeJSON('zitlas_expert_review', null);
-    if (review && review.status === 'APPROVED') showVerifiedBanner(review);
+    if (review && review.status === 'APPROVED' &&
+        review.planId && _vnPlanId && review.planId === _vnPlanId) {
+      showVerifiedBanner(review);
+    }
 
     var _vnExperts = _getSponsoredExperts();
     if (_vnExperts.length === 0) {
@@ -1608,22 +1618,6 @@
         _pcAttachCheckinsListener();
         renderDay(currentDay); /* inject Snap Meal rows into the AI view */
         _pcUpdateAskCoachUi();
-        /* Keep the coach's copy of this athlete's assessment + AI plans
-           current (once per page load). The diet page is the athlete's
-           daily surface, so this is what guarantees the coaching
-           workspace always reflects the LATEST assessment — never a
-           stale context from a previous goal. */
-        if (!initCoachDietMode._ctxPublished &&
-            typeof ZitlasCoachingWorkspace !== 'undefined' && ZitlasCoachingWorkspace.publishAthleteContext) {
-          initCoachDietMode._ctxPublished = true;
-          ZitlasCoachingWorkspace.publishAthleteContext({
-            athleteId: uid,
-            athleteName: _pcRel.athleteName,
-            coachId: _pcRel.coachId,
-            coachName: _pcRel.coachName,
-            planType: _pcRel.planType,
-          });
-        }
       }
       applyCoachDiet();
     }, function (e) { console.warn('[DIET COACH] rel listener error', e); });
@@ -1631,9 +1625,23 @@
 
   var _PC_EMOJI = { breakfast: '🍳', lunch: '🍛', snacks: '🍎', snack: '🍎', dinner: '🥗' };
 
+  /* Goal-identity guard: a coach plan is only valid for the plan
+     generation (planId) it was authored against. When the athlete
+     regenerates/resets, the old coach plan silently retires here and the
+     fresh AI plan renders until the coach publishes for the new goal.
+     Fail-closed: a coach plan stamped with a different planId — or an
+     unstamped legacy plan while a current planId exists — never renders. */
+  function _pcCoachPlanIsCurrent(coachPlan) {
+    if (!coachPlan) return false;
+    var current = localStorage.getItem('zitlas_plan_id') || null;
+    if (!current) return false;
+    return coachPlan.planId === current;
+  }
+
   function applyCoachDiet() {
     var coachDiet = _pcPlanDoc && _pcPlanDoc.diet;
-    if (!_pcShowsCoachPlan() || !coachDiet || !coachDiet.days || !coachDiet.days.length) {
+    if (!_pcShowsCoachPlan() || !coachDiet || !coachDiet.days || !coachDiet.days.length ||
+        !_pcCoachPlanIsCurrent(coachDiet)) {
       /* Not eligible / no coach plan — leave the AI flow exactly as-is.
          If we had been showing a coach plan and it disappeared, reload to
          restore the pristine AI pipeline rather than half-reverting state. */
@@ -2394,20 +2402,13 @@
        Remove the key so it never interferes again.
     ─────────────────────────────────────────────────────────────────────────── */
     if (_er) {
-      /* Fail-closed: if the review carries a planId (i.e. it was created
-         under the planId-tracking regime), it MUST match the currently
-         active one — a MISSING active planId no longer auto-passes. That
-         used to fail open ("null/null still trusts the review"), which
-         was fine for genuinely legacy pre-planId data but also silently
-         re-validated a stale review the instant Reset Goal cleared
-         zitlas_plan_id without (at the time) also clearing
-         zitlas_expert_review — the exact bug class assets/js/
-         coaching-reset.js now closes at the source. Only a review with NO
-         planId at all (truly legacy data, never had this concept) still
-         gets the benefit of the doubt. */
-      var _planIdMismatch = _er.planId ? (_er.planId !== _activePlanId) : false;
-      var _reviewValid    = !_planIdMismatch;
-      console.log('[DIET] planId guard — er.planId:', _er.planId, '| active:', _activePlanId, '| mismatch:', _planIdMismatch, '| valid:', _reviewValid);
+      /* FAIL-CLOSED goal identity: the review must carry a planId AND it
+         must match the currently active plan. No planId on either side —
+         no trust. Every review path stamps planId at creation, so the
+         only reviews this hides are relics from a previous goal, which
+         is exactly the point. */
+      var _reviewValid = !!(_er.planId && _activePlanId && _er.planId === _activePlanId);
+      console.log('[DIET] planId guard — er.planId:', _er.planId, '| active:', _activePlanId, '| valid:', _reviewValid);
       if (!_reviewValid) {
         console.log('[DIET] Expert review DISCARDED — planId mismatch: review=' + _er.planId + ' active=' + _activePlanId);
         localStorage.removeItem('zitlas_expert_review');
@@ -2842,20 +2843,19 @@
 
     var candidates = all.slice().reverse().filter(function (r) {
       var isCompleted    = r.status === 'review_completed' || r.status === 'completed';
-      /* Fail-closed, same reasoning as the legacy _er guard above: a
-         review WITH a planId must match the active one — a missing
-         activePlanId (e.g. right after Reset Goal) no longer auto-passes
-         it. Already backstopped by the activeRequest anchor check below
-         (which assets/js/coaching-reset.js now clears on every reset
-         trigger), but this closes the gap directly rather than relying
-         solely on that second layer. */
-      var planIdMismatch = r.planId ? (r.planId !== activePlanId) : false;
+      /* FAIL-CLOSED goal-identity check: a review qualifies ONLY when it
+         carries a planId AND it matches the currently active plan. A
+         review without a planId, or a device without an active planId
+         (right after Goal Reset), can never surface a banner. Every
+         review-creation path stamps planId, so the only unstamped reviews
+         are pre-feature relics that must not resurface anyway. */
+      var planIdValid = !!(r.planId && activePlanId && r.planId === activePlanId);
       var _rtype = r.reviewType || r.planReviewType || 'diet';
       return _rtype === 'diet' &&
              isCompleted &&
              r.reviewedDietPlan &&
              (!uid || r.userId === uid) &&
-             !planIdMismatch;
+             planIdValid;
     });
 
     /* No active request on this device -> nothing to anchor to. Falling

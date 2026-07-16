@@ -85,10 +85,21 @@
       /* superseded/cancelled — fall through to adopt a replacement */
     }
 
-    /* No usable anchor — adopt the newest live, not-yet-accepted request */
+    /* No usable anchor — adopt the newest live, not-yet-accepted request,
+       but FAIL-CLOSED on goal identity: a review is only adoptable when it
+       was created for THIS device's current plan (matching planId). With
+       no current planId (fresh reset, no goal yet) nothing is adoptable.
+       This closes the resurrection path where a Goal Reset cleared the
+       anchor and this branch re-adopted the PREVIOUS goal's still-live
+       review — the "nutritionist updated your plan" banner that survived
+       seven resets. */
+    var currentPlanId = null;
+    try { currentPlanId = localStorage.getItem('zitlas_plan_id') || null; } catch (_) {}
+    if (!currentPlanId) return;
+
     var live = docs.filter(function (d) {
       return d.id && isLive(d.status) && !d.athleteAccepted &&
-             (d.reviewType || d.planReviewType || 'diet') !== undefined;
+             d.planId && d.planId === currentPlanId;
     }).sort(function (a, b) {
       return String(b.submittedAt || b.createdAt || '') < String(a.submittedAt || a.createdAt || '') ? -1 : 1;
     });

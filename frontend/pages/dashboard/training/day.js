@@ -131,15 +131,11 @@
       console.log('REVIEWED WORKOUT PLAN', er ? er.modifiedWorkoutPlan : null);
 
       if (er && er.status === 'APPROVED') {
-        /* Fail-closed: a review with a planId must match the currently
-           active one — a missing activePlanId (e.g. right after Reset
-           Goal, before this file's twin fix in coaching-reset.js) no
-           longer auto-passes. Only a review with NO planId at all (truly
-           legacy data) still gets the benefit of the doubt. Same
-           reasoning as diet.js's identical guard. */
-        const planIdMismatch = er.planId ? (er.planId !== activePlanId) : false;
-        const reviewValid    = !planIdMismatch;
-        console.log('[TRAINING] planId guard — er.planId:', er.planId, '| activePlanId:', activePlanId, '| mismatch:', planIdMismatch, '| valid:', reviewValid);
+        /* FAIL-CLOSED goal identity — same as diet.js/weekly-plan.js: the
+           review must carry a planId AND match the currently active plan.
+           Reviews from a previous goal (or with no planId) never apply. */
+        const reviewValid = !!(er.planId && activePlanId && er.planId === activePlanId);
+        console.log('[TRAINING] planId guard — er.planId:', er.planId, '| activePlanId:', activePlanId, '| valid:', reviewValid);
         if (!reviewValid) {
           console.log('[TRAINING] Expert review DISCARDED — planId mismatch: review=' + er.planId + ' active=' + activePlanId);
           localStorage.removeItem('zitlas_expert_review');

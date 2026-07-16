@@ -3961,18 +3961,6 @@
         }).then(function(result) {
           if (result.status === 200 && result.data.success) {
             console.log('[COACHING] request reserved — personal_coach_requests/' + result.data.requestId);
-            /* Publish this athlete's current assessment + AI plans right
-               away, so the coach sees real data (not blank templates or a
-               stale previous-goal context) the moment they open the
-               workspace after accepting. */
-            if (window.ZitlasCoachingWorkspace && ZitlasCoachingWorkspace.publishAthleteContext) {
-              ZitlasCoachingWorkspace.publishAthleteContext({
-                athleteId: uid,
-                coachId: coach.id,
-                coachName: coach.name,
-                planType: _selectedPlan,
-              });
-            }
             closeCoachingSheet();
             showToast('📨 Request sent — ₹' + result.data.amount + ' reserved. You’ll only be charged if ' + (coach.name || 'the expert') + ' accepts.');
             return;
@@ -4075,27 +4063,11 @@
         if (window.ZitlasCoachingWorkspace) {
           ZitlasCoachingWorkspace.attachNotifications(uid, showToast);
         }
-        var _ctxPublished = false;
         ZitlasDB.collection('personal_coaching').doc(uid).onSnapshot(function(snap) {
           _myCoaching = snap.exists ? snap.data() : null;
           _pcRelationship = _myCoaching;
           console.log('[COACHING] relationship:', _myCoaching
             ? _myCoaching.status + ' with ' + _myCoaching.coachName : 'none');
-          /* Active relationship → refresh the coach's copy of this
-             athlete's assessment/plans/medical data (once per page load),
-             so the coaching workspace always shows the LATEST assessment
-             — never a stale context from a previous goal. */
-          if (!_ctxPublished && _myCoaching && _myCoaching.status === 'active' &&
-              window.ZitlasCoachingWorkspace && ZitlasCoachingWorkspace.publishAthleteContext) {
-            _ctxPublished = true;
-            ZitlasCoachingWorkspace.publishAthleteContext({
-              athleteId: uid,
-              athleteName: _myCoaching.athleteName,
-              coachId: _myCoaching.coachId,
-              coachName: _myCoaching.coachName,
-              planType: _myCoaching.planType,
-            });
-          }
           updateCoachButtons();
           _applyChatReadOnlyState();
         }, function(err) { console.warn('[COACHING] relationship listener error', err); });

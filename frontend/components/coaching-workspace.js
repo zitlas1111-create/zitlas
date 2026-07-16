@@ -11,14 +11,21 @@
  *   })
  *
  * Firestore:
- *   coaching_plans/{athleteUid}
+ *   users/{athleteUid} — SINGLE SOURCE OF TRUTH for athlete data
+ *     (assessment, survey, goal, calculations, swot, dietPlan,
+ *     workoutPlan, precautions, planId — live-mirrored from the athlete's
+ *     device by assets/js/cloud-sync.js). The workspace subscribes to it
+ *     directly; it never keeps its own copy.
+ *   coaching_plans/{athleteUid} — COACH-AUTHORED plans only
  *     { athleteId, athleteName, coachId, coachName, planType,
- *       athleteContext (published by the athlete's device),
- *       diet:     { days: [ {day, meals:[{id, name, time, options:[{name, calories, protein, notes}]}]} ] },
+ *       diet:     { planId, days: [ {day, meals:[{id, name, time, options:[{name, calories, protein, notes}]}]} ] },
  *       dietSelections: { '<day>:<mealId>': optionIndex },
  *       dietUpdatedAt, dietVersion,
- *       training: { days: [ {day, rest, focus, duration, exercises:[{name, sets, reps, duration, rest, notes}]} ] },
+ *       training: { planId, days: [ {day, rest, focus, duration, exercises:[{name, sets, reps, duration, rest, notes}]} ] },
  *       trainingUpdatedAt, trainingVersion }
+ *     diet.planId / training.planId = the athlete plan generation the
+ *     coach authored against; consumers fail-closed on mismatch so a
+ *     previous goal's coach plan can never render after a reset.
  *   coaching_plans/{athleteUid}/versions/{id}   — snapshot per save (restore)
  *   coaching_meal_requests/{id}                 — athlete "Ask Expert" per meal
  *   coaching_notifications/{id}                 — cross-side toasts
@@ -39,8 +46,13 @@
   var S = {
     open: false,
     opts: null,
-    plan: null,            /* coaching_plans doc data */
+    plan: null,            /* coaching_plans doc data (coach-authored plans) */
     planLoaded: false,     /* first coaching_plans snapshot has arrived */
+    athlete: null,         /* normalized users/{athleteId} doc — the SINGLE
+                              source of truth for assessment, goal, AI plans,
+                              calculations, medical data. Live-mirrored from
+                              the athlete's device by cloud-sync.js. */
+    athleteLoaded: false,  /* first users/{athleteId} snapshot has arrived */
     tab: 'overview',
     dayIdx: 0,             /* viewer/editor selected day */
     unsubs: [],
@@ -271,6 +283,7 @@
     S.dietDraft = null; S.dietDirty = false; S.dietDraftSeeded = false;
     S.trainDraft = null; S.trainDirty = false; S.trainDraftSeeded = false;
     S.plan = null; S.planLoaded = false; S.mealReqs = []; S.chatMsgs = [];
+    S.athlete = null; S.athleteLoaded = false;
     S.open = true;
 
     console.log('[CW] open', opts.role, 'athlete:', opts.athleteId, 'coach:', opts.coachId, 'plan:', opts.planType);
@@ -287,7 +300,6 @@
 
     switchTab(S.tab, true);
     subscribeAll();
-    if (opts.role === 'athlete') publishAthleteContext();
     attachNotifications(myUid());
   }
 
@@ -332,6 +344,25 @@
   function subscribeAll() {
     var d = db();
     if (!d) { toast('Connection unavailable'); return; }
+
+    /* SINGLE SOURCE OF TRUTH — the athlete's users/{uid} doc, which
+       cloud-sync.js live-mirrors from the athlete's device on every plan
+       generation, assessment, and Goal Reset. The workspace used to read
+       a one-shot "athleteContext" COPY published into coaching_plans,
+       which went stale the moment the athlete changed anything (the
+       phantom-diabetes / stale-plan bug class). Now assessment, goal,
+       AI plans, calculations and medical data are always live. */
+    S.unsubs.push(d.collection('users').doc(S.opts.athleteId)
+      .onSnapshot(function (snap) {
+        S.athlete = _normalizeAthleteDoc(snap.exists ? snap.data() : null);
+        S.athleteLoaded = true;
+        console.log('[CW] athlete snapshot — planId:', S.athlete && S.athlete.planId,
+          '| goal:', S.athlete && S.athlete.goal && S.athlete.goal.type);
+        renderHeader();
+        if (S.tab === 'diet' && !S.dietDirty) renderTab();
+        else if (S.tab === 'training' && !S.trainDirty) renderTab();
+        else if (S.tab === 'overview' || S.tab === 'chat') renderTab();
+      }, function (e) { console.warn('[CW] athlete listener error', e); }));
 
     S.unsubs.push(d.collection('coaching_plans').doc(S.opts.athleteId)
       .onSnapshot(function (snap) {
@@ -395,46 +426,42 @@
       }, function (e) { console.warn('[CW] chat listener error', e); }));
   }
 
-  /* Athlete device publishes its localStorage-derived context so the coach
-     never has to ask onboarding questions again. Merge-write, cheap.
-     Every key is ALWAYS present (null when absent locally) so a fresh
-     publish fully overwrites a stale context from a previous goal —
-     e.g. old medical conditions can never outlive a new assessment.
-     `info` is optional: workspace-internal calls fall back to S.opts;
-     external callers (cprofile.js, diet.js) pass ids explicitly. */
-  function publishAthleteContext(info) {
-    var d = db();
-    if (!d) return Promise.resolve();
-    var o = info || S.opts || {};
-    if (!o.athleteId) return Promise.resolve();
-    var ctx = {};
-    var keys = {
-      assessment: 'zitlas_assessment', calculations: 'zitlas_calculations',
-      swot: 'zitlas_swot', survey: 'zitlas_survey', goal: 'zitlas_goal',
-      diet_plan: 'zitlas_diet_plan', workout_plan: 'zitlas_workout_plan',
-      precautions: 'zitlas_precautions',
-    };
-    Object.keys(keys).forEach(function (k) {
-      try { ctx[k] = JSON.parse(localStorage.getItem(keys[k]) || 'null'); } catch (_) { ctx[k] = null; }
-    });
-    /* Unwrap expert-modification schema to the flat plan */
-    if (ctx.diet_plan && (ctx.diet_plan.currentDietPlan || ctx.diet_plan.originalDietPlan)) {
-      ctx.diet_plan = ctx.diet_plan.currentDietPlan || ctx.diet_plan.originalDietPlan;
+  /* Normalizes the raw users/{uid} doc (cloud-sync.js field names) into
+     the ctx shape the workspace consumes. Null when the athlete has no
+     synced data (brand-new account or freshly reset goal). The expert-
+     modification wrapper schema is unwrapped to the flat plan. */
+  function _normalizeAthleteDoc(data) {
+    if (!data) return null;
+    var diet = data.dietPlan || null;
+    if (diet && (diet.currentDietPlan || diet.originalDietPlan)) {
+      diet = diet.currentDietPlan || diet.originalDietPlan;
     }
-    if (ctx.workout_plan && (ctx.workout_plan.currentWorkoutPlan || ctx.workout_plan.originalWorkoutPlan)) {
-      ctx.workout_plan = ctx.workout_plan.currentWorkoutPlan || ctx.workout_plan.originalWorkoutPlan;
+    var workout = data.workoutPlan || null;
+    if (workout && (workout.currentWorkoutPlan || workout.originalWorkoutPlan)) {
+      workout = workout.currentWorkoutPlan || workout.originalWorkoutPlan;
     }
-    var patch = {
-      athleteId: o.athleteId,
-      athleteContext: ctx,
-      athleteContextUpdatedAt: new Date().toISOString(),
+    return {
+      assessment:   data.assessment || null,
+      calculations: data.calculations || null,
+      swot:         data.swot || null,
+      survey:       data.survey || null,
+      goal:         data.goal || null,
+      precautions:  data.precautions || null,
+      diet_plan:    diet,
+      workout_plan: workout,
+      planId:       data.planId || null,
+      syncedAt:     data.planGeneratedAt || data.goalUpdatedAt || data.assessmentUpdatedAt || null,
     };
-    if (o.athleteName) patch.athleteName = o.athleteName;
-    if (o.coachId) { patch.coachId = o.coachId; patch.coachName = o.coachName || 'Coach'; }
-    if (o.planType) patch.planType = o.planType;
-    return d.collection('coaching_plans').doc(o.athleteId).set(patch, { merge: true })
-      .then(function () { console.log('[CW] athlete context published'); })
-      .catch(function (e) { console.warn('[CW] context publish failed', e); });
+  }
+  /* Every consumer goes through this — {} when nothing has synced yet. */
+  function athleteCtx() { return S.athlete || {}; }
+  /* Goal-identity check for coach-authored plans: valid ONLY when stamped
+     with the athlete's CURRENT planId. Fail-closed — a plan authored for
+     a previous goal (or before stamping existed) is treated as absent,
+     so the coach can never view or keep editing a previous goal's plan. */
+  function coachPlanIsCurrent(p) {
+    var aid = athleteCtx().planId;
+    return !!(p && aid && p.planId === aid);
   }
 
   /* ══════════════════════════════════════════════
@@ -446,7 +473,7 @@
   ══════════════════════════════════════════════ */
   var _MED_NEGATIVE = ['', 'none', 'no', 'nil', 'n/a', 'na', 'nothing'];
   function medInfo() {
-    var ctx = (S.plan && S.plan.athleteContext) || {};
+    var ctx = athleteCtx();
     var a = ctx.assessment || ctx.survey || {};
     var raw = a.medical_conditions || '';
     var has = raw && _MED_NEGATIVE.indexOf(String(raw).trim().toLowerCase()) === -1;
@@ -534,7 +561,7 @@
       ? ('Active coaching' + (dl !== null ? ' · ' + dl + ' days left' : ''))
       : 'Coaching ended';
 
-    var ctx = (S.plan && S.plan.athleteContext) || {};
+    var ctx = athleteCtx();
     var c = ctx.calculations || {};
     var goal = ctx.goal || {};
     var items = [];
@@ -543,8 +570,9 @@
     if (a.weight_kg) items.push({ v: a.weight_kg + ' kg', l: 'Weight' });
     if (c.bmi) items.push({ v: parseFloat(c.bmi).toFixed(1), l: 'BMI' });
     if (dl !== null) items.push({ v: dl + 'd', l: 'Remaining' });
-    var dietDays = S.plan && S.plan.diet && S.plan.diet.days ? S.plan.diet.days.length : 0;
-    var trainDays = S.plan && S.plan.training && S.plan.training.days ? S.plan.training.days.length : 0;
+    /* Chips only count coach plans authored for the CURRENT goal */
+    var dietDays = S.plan && coachPlanIsCurrent(S.plan.diet) && S.plan.diet.days ? S.plan.diet.days.length : 0;
+    var trainDays = S.plan && coachPlanIsCurrent(S.plan.training) && S.plan.training.days ? S.plan.training.days.length : 0;
     items.push({ v: dietDays ? dietDays + ' days' : '—', l: 'Coach Diet' });
     items.push({ v: trainDays ? trainDays + ' days' : '—', l: 'Coach Training' });
 
@@ -583,16 +611,16 @@
 
   function renderOverview() {
     var body = $('cwBody');
-    var ctx = (S.plan && S.plan.athleteContext) || null;
+    var ctx = S.athlete;
     if (!ctx || (!ctx.assessment && !ctx.calculations && !ctx.survey)) {
       body.innerHTML =
         '<div class="cw-card"><div class="cw-empty">' +
           '<span class="cw-empty-icon">📡</span>' +
-          (!S.planLoaded
+          (!S.athleteLoaded
             ? 'Loading athlete data…'
             : (S.opts.role === 'coach'
-              ? 'Waiting for the athlete’s data to sync.<br>It publishes automatically when they visit their Diet page or open this workspace.'
-              : 'Your ZITLAS profile hasn’t synced yet.<br>Complete your assessment on the AI Coach page and reopen this workspace.')) +
+              ? 'This athlete has no active goal yet.<br>Their profile fills in automatically the moment they complete an assessment.'
+              : 'You don’t have an active goal yet.<br>Complete your assessment on the AI Coach page and this fills in automatically.')) +
         '</div></div>';
       return;
     }
@@ -704,9 +732,9 @@
     }
 
     html += '<div class="cw-card"><p class="cw-card-title">🤖 Data Source</p>' +
-      '<div class="cw-empty" style="padding:6px 0 2px">Generated by ZITLAS AI — synced ' +
-      esc(S.plan && S.plan.athleteContextUpdatedAt ? fmtDate(S.plan.athleteContextUpdatedAt) : 'recently') +
-      '. The coach never needs to re-ask these questions.</div></div>';
+      '<div class="cw-empty" style="padding:6px 0 2px">Generated by ZITLAS AI — live from the athlete’s profile' +
+      (ctx.syncedAt ? ' (plan generated ' + esc(fmtDate(ctx.syncedAt)) + ')' : '') +
+      '. Always the latest assessment — the coach never needs to re-ask these questions.</div></div>';
 
     body.innerHTML = html;
     loadActivityCard();
@@ -816,10 +844,9 @@
     };
   }
 
-  /* Prefill the editor from the athlete's AI diet (athleteContext.diet_plan) */
+  /* Prefill the editor from the athlete's LATEST AI diet (live users doc) */
   function dietFromAiPlan() {
-    var ctx = S.plan && S.plan.athleteContext;
-    var ai = ctx && ctx.diet_plan;
+    var ai = athleteCtx().diet_plan;
     var aiDays = ai && ai.days;
     if (!aiDays || !aiDays.length) return null;
     return {
@@ -870,7 +897,7 @@
   /* ── athlete / read-only coach view ── */
   function renderDietViewer() {
     var body = $('cwBody');
-    var diet = S.plan && S.plan.diet;
+    var diet = S.plan && coachPlanIsCurrent(S.plan.diet) ? S.plan.diet : null;
     var readonlyNote = (S.opts.role === 'coach' && !canEditDiet())
       ? '<div class="cw-readonly-note">🔒 Diet is read-only on the ' + esc(S.opts.planLabel || 'current') + ' plan.</div>'
       : '';
@@ -1023,7 +1050,12 @@
   /* ── coach diet editor ── */
   function ensureDietDraft() {
     var remote = S.plan && S.plan.diet;
-    var hasRemote = !!(remote && remote.days && remote.days.length);
+    /* A remote coach plan only counts when authored for the athlete's
+       CURRENT goal — a stale plan (previous goal / pre-reset) is treated
+       as absent so the coach re-seeds from the LATEST AI plan instead of
+       continuing to edit a dead goal's plan. Old versions stay in the
+       versions history. */
+    var hasRemote = !!(remote && remote.days && remote.days.length && coachPlanIsCurrent(remote));
     /* A saved coach plan always beats an unsaved auto-seed (e.g. saved
        from another device between snapshots). */
     if (S.dietDraft && S.dietDraftSeeded && !S.dietDirty && hasRemote) S.dietDraft = null;
@@ -1033,9 +1065,10 @@
       S.dietDraftSeeded = false;
       return;
     }
-    /* No coach plan yet — auto-preload the athlete's AI-generated diet so
-       the coach edits the real plan, never a blank template. Template is
-       the fallback ONLY when the AI plan genuinely doesn't exist. */
+    /* No (current) coach plan — auto-preload the athlete's AI-generated
+       diet so the coach edits the real plan, never a blank template.
+       Template is the fallback ONLY when the AI plan genuinely doesn't
+       exist. */
     var ai = dietFromAiPlan();
     if (ai) { S.dietDraft = ai; S.dietDraftSeeded = true; }
   }
@@ -1045,7 +1078,7 @@
     ensureDietDraft();
 
     if (!S.dietDraft) {
-      if (!S.planLoaded) {
+      if (!S.planLoaded || !S.athleteLoaded) {
         body.innerHTML = '<div class="cw-card"><div class="cw-empty"><span class="cw-empty-icon">🥗</span>Loading the athlete’s plan…</div></div>';
         return;
       }
@@ -1191,6 +1224,11 @@
     var docRef = d.collection('coaching_plans').doc(S.opts.athleteId);
     var pendingReqs = S.mealReqs.filter(function (r) { return r.status === 'pending'; });
 
+    /* Goal-identity stamp: this plan belongs to the athlete's CURRENT
+       plan generation. Consumers (diet.js, this workspace) fail-closed
+       on mismatch, so it silently retires if the athlete resets. */
+    S.dietDraft.planId = athleteCtx().planId || null;
+
     docRef.set({
       athleteId: S.opts.athleteId, athleteName: S.opts.athleteName || 'Athlete',
       coachId: S.opts.coachId, coachName: S.opts.coachName || 'Coach',
@@ -1238,8 +1276,7 @@
     };
   }
   function trainingFromAiPlan() {
-    var ctx = S.plan && S.plan.athleteContext;
-    var wp = ctx && ctx.workout_plan;
+    var wp = athleteCtx().workout_plan;
     var aiDays = wp && (wp.weekly_plan || wp.days || wp.weekly_schedule || wp.workout_days);
     if (!aiDays || !aiDays.length) return null;
     return {
@@ -1526,7 +1563,7 @@
 
   function renderTrainingViewer() {
     var body = $('cwBody');
-    var tr = S.plan && S.plan.training;
+    var tr = S.plan && coachPlanIsCurrent(S.plan.training) ? S.plan.training : null;
     var readonlyNote = (S.opts.role === 'coach' && !canEditTraining())
       ? '<div class="cw-readonly-note">🔒 Training is read-only on the ' + esc(S.opts.planLabel || 'current') + ' plan.</div>'
       : '';
@@ -1574,7 +1611,10 @@
 
   function ensureTrainDraft() {
     var remote = S.plan && S.plan.training;
-    var hasRemote = !!(remote && remote.days && remote.days.length);
+    /* Same goal-identity rule as the diet draft: stale coach plans are
+       treated as absent so the coach always works against the athlete's
+       CURRENT goal. */
+    var hasRemote = !!(remote && remote.days && remote.days.length && coachPlanIsCurrent(remote));
     /* A saved coach plan always beats an unsaved auto-seed */
     if (S.trainDraft && S.trainDraftSeeded && !S.trainDirty && hasRemote) S.trainDraft = null;
     if (S.trainDraft) return;
@@ -1583,8 +1623,8 @@
       S.trainDraftSeeded = false;
       return;
     }
-    /* No coach plan yet — auto-preload the athlete's AI-generated workout
-       so the coach edits the real plan, never a blank template. */
+    /* No (current) coach plan — auto-preload the athlete's AI-generated
+       workout so the coach edits the real plan, never a blank template. */
     var ai = trainingFromAiPlan();
     if (ai) { S.trainDraft = ai; S.trainDraftSeeded = true; }
   }
@@ -1594,7 +1634,7 @@
     ensureTrainDraft();
 
     if (!S.trainDraft) {
-      if (!S.planLoaded) {
+      if (!S.planLoaded || !S.athleteLoaded) {
         body.innerHTML = '<div class="cw-card"><div class="cw-empty"><span class="cw-empty-icon">💪</span>Loading the athlete’s plan…</div></div>';
         return;
       }
@@ -1725,6 +1765,9 @@
     var now = new Date().toISOString();
     var version = ((S.plan && S.plan.trainingVersion) || 0) + 1;
     var docRef = d.collection('coaching_plans').doc(S.opts.athleteId);
+
+    /* Goal-identity stamp — same contract as saveDiet() */
+    S.trainDraft.planId = athleteCtx().planId || null;
 
     docRef.set({
       athleteId: S.opts.athleteId, athleteName: S.opts.athleteName || 'Athlete',
@@ -1995,7 +2038,7 @@
     var pin = '';
     if (S.opts.role === 'coach') {
       var med = medInfo();
-      var ctx = (S.plan && S.plan.athleteContext) || {};
+      var ctx = athleteCtx();
       var a2 = ctx.assessment || ctx.survey || {};
       var c2 = ctx.calculations || {};
       var g2 = ctx.goal || {};
@@ -2117,9 +2160,5 @@
     close: close,
     attachNotifications: attachNotifications,
     isOpen: function () { return S.open; },
-    /* Athlete-side pages call this (with explicit ids) to keep the
-       coach's copy of assessment/plans/medical data current without
-       needing the workspace UI to be opened. */
-    publishAthleteContext: publishAthleteContext,
   };
 })(window);

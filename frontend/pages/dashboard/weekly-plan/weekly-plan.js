@@ -97,9 +97,20 @@
     }, function (e) { console.warn('[WP COACH] rel listener error', e); });
   }
 
+  /* Goal-identity guard (mirror of diet.js's _pcCoachPlanIsCurrent): a
+     coach plan only renders for the plan generation it was authored
+     against. Fail-closed — unstamped or mismatched plans never render. */
+  function _pcCoachPlanIsCurrent(coachPlan) {
+    if (!coachPlan) return false;
+    var current = localStorage.getItem('zitlas_plan_id') || null;
+    if (!current) return false;
+    return coachPlan.planId === current;
+  }
+
   function applyCoachTraining() {
     var tr = _pcPlanDoc && _pcPlanDoc.training;
-    if (!_pcShowsCoachPlan() || !tr || !tr.days || !tr.days.length) {
+    if (!_pcShowsCoachPlan() || !tr || !tr.days || !tr.days.length ||
+        !_pcCoachPlanIsCurrent(tr)) {
       if (_pcActive) { _pcActive = false; window.location.reload(); }
       return;
     }
@@ -363,12 +374,12 @@
       console.log('ORIGINAL PLAN SOURCE', originalWp ? (originalWp.originalWorkoutPlan && originalWp.originalWorkoutPlan.weekly_plan) : null);
 
       if (er && er.status === 'APPROVED' && er.modifiedWorkoutPlan) {
-        /* Fail-closed — same reasoning as day.js/diet.js's identical
-           guards: a review with a planId must match the active one; a
-           missing activePlanId no longer auto-passes. */
-        const planIdMismatch = er.planId ? (er.planId !== activePlanId) : false;
-        console.log('[WeeklyPlan] Expert review planId check — er.planId:', er.planId, '| active:', activePlanId, '| mismatch:', planIdMismatch);
-        if (!planIdMismatch && normalizeWorkoutDays(er.modifiedWorkoutPlan).length) {
+        /* FAIL-CLOSED goal identity — same as day.js/diet.js: the review
+           must carry a planId AND match the active plan. Reviews from a
+           previous goal (or with no planId) never apply. */
+        const planIdValid = !!(er.planId && activePlanId && er.planId === activePlanId);
+        console.log('[WeeklyPlan] Expert review planId check — er.planId:', er.planId, '| active:', activePlanId, '| valid:', planIdValid);
+        if (planIdValid && normalizeWorkoutDays(er.modifiedWorkoutPlan).length) {
           const expertMeta = {
             reviewedBy: er.reviewedBy || 'Expert',
             reviewedAt: er.reviewedAt

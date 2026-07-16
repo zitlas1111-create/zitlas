@@ -145,6 +145,17 @@
   }
 
   function _applyField(cloudKey, lsKey, cloudValue) {
+    /* Cloud null = the field was cleared (Goal Reset). REMOVE the local
+       key rather than mirroring the null, so a reset performed on any
+       device (or a hydrate racing a reset) actually deletes stale state
+       here instead of restoring it — the exact resurrection bug where
+       hydrateOnLoad() used to undo clearAllGoalData() on the next page
+       load. */
+    if (cloudValue === null) {
+      var had = localStorage.getItem(lsKey) !== null;
+      if (had) localStorage.removeItem(lsKey);
+      return had;
+    }
     if (MERGE_ON_APPLY[cloudKey]) {
       var existing = {};
       try { existing = JSON.parse(localStorage.getItem(lsKey) || '{}') || {}; } catch (_) {}
@@ -202,8 +213,11 @@
     });
     Object.keys(SCALAR_FIELD_MAP).forEach(function (cloudKey) {
       var lsKey = SCALAR_FIELD_MAP[cloudKey];
-      if (data[cloudKey] === undefined || data[cloudKey] === null) return;
-      try { localStorage.setItem(lsKey, String(data[cloudKey])); } catch (_) {}
+      if (data[cloudKey] === undefined) return;
+      try {
+        if (data[cloudKey] === null) localStorage.removeItem(lsKey);
+        else localStorage.setItem(lsKey, String(data[cloudKey]));
+      } catch (_) {}
     });
   }
 
@@ -234,6 +248,17 @@
         var lsKey = FIELD_MAP[cloudKey];
         if (!lsKey || data[cloudKey] === undefined) return;
         if (_applyField(cloudKey, lsKey, data[cloudKey])) changed = true;
+      });
+      Object.keys(SCALAR_FIELD_MAP).forEach(function (cloudKey) {
+        var lsKey = SCALAR_FIELD_MAP[cloudKey];
+        if (data[cloudKey] === undefined) return;
+        try {
+          if (data[cloudKey] === null) {
+            if (localStorage.getItem(lsKey) !== null) { localStorage.removeItem(lsKey); changed = true; }
+          } else if (localStorage.getItem(lsKey) !== String(data[cloudKey])) {
+            localStorage.setItem(lsKey, String(data[cloudKey])); changed = true;
+          }
+        } catch (_) {}
       });
       if (changed) {
         console.log('[CLOUD SYNC] remote change applied —', _subscribers.length, 'subscriber(s) re-rendering');
@@ -307,6 +332,40 @@
       .catch(function (e) { console.warn('[CLOUD SYNC] saveBulk failed', e); });
   }
 
+  /* ── GOAL RESET (the architectural half) ──
+     Every goal-scoped field is nulled on users/{uid} AND removed locally,
+     in one atomic write. Cloud null is the canonical "cleared" marker:
+     _applyField/_applySnapshot translate it into localStorage.removeItem
+     on EVERY device, so a reset done here propagates everywhere and can
+     never be resurrected by the next hydrateOnLoad(). Identity and money
+     (personalInfo, wallet, location) deliberately survive — resetting a
+     goal is not deleting an account. */
+  var GOAL_SCOPED_FIELDS = [
+    'goal', 'assessment', 'survey', 'calculations', 'swot',
+    'dietPlan', 'workoutPlan', 'roadmap', 'precautions',
+    'planGeneratedAt', 'planId',
+  ];
+  function clearGoalData() {
+    /* Local first — the resetting tab is consistent immediately */
+    GOAL_SCOPED_FIELDS.forEach(function (cloudKey) {
+      var lsKey = FIELD_MAP[cloudKey] || SCALAR_FIELD_MAP[cloudKey];
+      if (lsKey) { try { localStorage.removeItem(lsKey); } catch (_) {} }
+    });
+    var d = db();
+    var uid = myUid();
+    if (!d || !uid) return Promise.resolve();
+    var patch = {};
+    var now = new Date().toISOString();
+    GOAL_SCOPED_FIELDS.forEach(function (cloudKey) {
+      patch[cloudKey] = null;
+      patch[cloudKey + 'UpdatedAt'] = now;
+    });
+    patch.goalResetAt = now;
+    return d.collection('users').doc(uid).set(patch, { merge: true })
+      .then(function () { console.log('[CLOUD SYNC] goal-scoped cloud data cleared (reset)'); })
+      .catch(function (e) { console.warn('[CLOUD SYNC] clearGoalData failed', e); });
+  }
+
   /* Convenience: hydrate then boot the page's normal init, then attach
      realtime pointed at the same init function so it just re-runs on any
      remote change. Falls back to calling initFn immediately (local-only)
@@ -328,6 +387,7 @@
     save: save,
     saveCloudOnly: saveCloudOnly,
     saveBulk: saveBulk,
+    clearGoalData: clearGoalData,
     bootWithSync: bootWithSync,
     myUid: myUid,
     compressImage: compressImage,
