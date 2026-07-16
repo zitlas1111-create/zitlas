@@ -2107,7 +2107,10 @@
     input.onchange = function () {
       var file = input.files && input.files[0];
       input.value = '';
-      if (file) _snapSend(file, meal);
+      if (file) {
+        console.log('[SNAP MEAL] IMAGE SELECTED —', file.name, file.type, file.size + 'B');
+        _snapSend(file, meal);
+      }
     };
     input.click();
   }
@@ -2139,11 +2142,15 @@
         confidenceScore: estimate ? estimate.confidenceScore : null,
       };
       return ZitlasDB.collection('meal_snap_logs').doc(uid).collection(_snapDateKey()).doc(id).set(doc)
-        .then(function () { return !!estimate; });
+        .then(function () {
+          console.log('[SNAP MEAL] MEAL_SNAP_LOGS DOCUMENT CREATED —', id);
+          return !!estimate;
+        });
     }).then(function (hadEstimate) {
+      console.log('[SNAP MEAL] UPLOAD COMPLETE ✅');
       showToast(hadEstimate ? '✅ Meal logged and analyzed.' : '📷 Meal logged — nutrition estimate unavailable.');
     }).catch(function (e) {
-      console.error('[SNAP MEAL] failed', e);
+      console.error('[SNAP MEAL] PIPELINE FAILED —', (e && e.message) || e, e);
       showToast('Could not log meal — try again.');
     });
   }
@@ -2227,7 +2234,10 @@
     input.onchange = function () {
       var f = input.files && input.files[0];
       input.value = '';
-      if (f) _pcOpenCheckinPreview(f, meal);
+      if (f) {
+        console.log('[MEAL CHECKIN] IMAGE SELECTED —', f.name, f.type, f.size + 'B');
+        _pcOpenCheckinPreview(f, meal);
+      }
     };
     input.click();
   }
@@ -2254,19 +2264,49 @@
   /* AI nutrition estimate (backend/routes/meal_ai.py) runs ALONGSIDE the
      photo upload — never blocks or fails the checkin send if it errors or
      times out; the athlete's send is what matters, the estimate is a bonus
-     enrichment of fields meal_checkins already reserved for this. */
+     enrichment of fields meal_checkins already reserved for this.
+     HANG-PROOF: this promise is GUARANTEED to settle within 25s. It sits
+     inside Promise.all with the image upload — an unbounded fetch here
+     (slow vision model, sleeping server) used to keep the sheet stuck on
+     "Uploading…" even after the image itself had uploaded fine. */
   function _pcEstimateNutrition(file) {
     if (typeof getIdToken !== 'function') return Promise.resolve(null);
-    return getIdToken().then(function (token) {
+    console.log('[MEAL CHECKIN] NUTRITION ESTIMATION STARTED');
+    var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, 25000) : null;
+    var fetchPromise = getIdToken().then(function (token) {
       var fd = new FormData();
       fd.append('file', file);
       return fetch('/api/meal/estimate-nutrition', {
         method: 'POST', headers: { 'Authorization': 'Bearer ' + token }, body: fd,
+        signal: ctrl ? ctrl.signal : undefined,
       }).then(function (res) { return res.ok ? res.json() : null; });
-    }).catch(function (e) { console.warn('[MEAL CHECKIN] nutrition estimate failed (non-fatal)', e); return null; });
+    }).then(function (estimate) {
+      if (timer) clearTimeout(timer);
+      console.log(estimate
+        ? '[MEAL CHECKIN] NUTRITION ESTIMATION SUCCESS'
+        : '[MEAL CHECKIN] NUTRITION ESTIMATION UNAVAILABLE (non-fatal)');
+      return estimate;
+    }).catch(function (e) {
+      if (timer) clearTimeout(timer);
+      console.warn('[MEAL CHECKIN] NUTRITION ESTIMATION FAILED (non-fatal) —', (e && e.message) || e);
+      return null;
+    });
+    /* Belt-and-braces: even if fetch ignores the abort (old WebView),
+       resolve null after 26s so Promise.all can never be held hostage. */
+    return Promise.race([
+      fetchPromise,
+      new Promise(function (resolve) {
+        setTimeout(function () {
+          console.warn('[MEAL CHECKIN] NUTRITION ESTIMATION TIMED OUT (non-fatal)');
+          resolve(null);
+        }, 26000);
+      }),
+    ]);
   }
 
   function _pcSendCheckin(file, meal, previewUrl) {
+    console.log('[MEAL CHECKIN] MEAL CHECKIN STARTED —', meal.meal_name, '| file:', file.name, file.size + 'B');
     var btn = document.getElementById('pcSendCheckin');
     if (typeof ZitlasChatAttach === 'undefined') {
       /* Must NOT flip the button to "Uploading…" first — this early return
@@ -2299,6 +2339,7 @@
       };
       console.log('[MEAL CHECKIN] submitting', doc);
       return ZitlasDB.collection('meal_checkins').doc(id).set(doc).then(function () {
+        console.log('[MEAL CHECKIN] MEAL_CHECKINS DOCUMENT CREATED —', id);
         var nid = 'CN_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
         return ZitlasDB.collection('coaching_notifications').doc(nid).set({
           id: nid, toId: _pcRel.coachId, fromId: uid, fromName: athleteName,
@@ -2306,20 +2347,23 @@
           type: 'meal_checkin', createdAt: new Date().toISOString(), read: false,
         });
       }).then(function () {
+        console.log('[MEAL CHECKIN] COACHING_NOTIFICATION CREATED');
         if (typeof ZitlasNotify !== 'undefined') {
           ZitlasNotify.send(_pcRel.coachId, {
             title: '📷 ' + athleteName + ' submitted a meal',
             message: doc.mealName + ' — ' + doc.day, category: 'meal_snap',
             type: 'meal_checkin', action: 'expert_dashboard',
           });
+          console.log('[MEAL CHECKIN] NOTIFICATION SENT → coach', _pcRel.coachId);
         }
       });
     }).then(function () {
+      console.log('[MEAL CHECKIN] UPLOAD COMPLETE ✅');
       URL.revokeObjectURL(previewUrl);
       _pcCloseSheet();
       showToast('✅ Sent to your coach for review.');
     }).catch(function (e) {
-      console.error('[MEAL CHECKIN] failed', e);
+      console.error('[MEAL CHECKIN] PIPELINE FAILED —', (e && e.message) || e, e);
       showToast(e && e.message ? e.message : 'Could not send — try again.');
       if (btn) { btn.disabled = false; btn.textContent = 'Send'; }
     });

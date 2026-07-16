@@ -34,32 +34,44 @@
     return { ok: true };
   }
 
-  /* ── Compression (canvas downscale, keeps aspect ratio) ── */
+  /* ── Compression (canvas downscale, keeps aspect ratio) ──
+     Every async callback body is wrapped in try/catch: an exception thrown
+     inside FileReader.onload / Image.onload (e.g. a null canvas context on
+     a constrained mobile WebView) previously escaped the promise executor
+     and left this promise UNSETTLED FOREVER — the upstream Promise.all then
+     hung and the UI stayed on "Uploading…" with no error anywhere. */
   function compress(file) {
     return new Promise(function (resolve, reject) {
       var reader = new FileReader();
-      reader.onerror = reject;
+      reader.onerror = function () { reject(new Error('Could not read the selected file')); };
+      reader.onabort = function () { reject(new Error('File read was aborted')); };
       reader.onload = function (e) {
-        var img = new Image();
-        img.onerror = reject;
-        img.onload = function () {
-          var MAX = 1280;
-          var w = img.naturalWidth, h = img.naturalHeight;
-          if (w > MAX || h > MAX) {
-            var scale = Math.min(MAX / w, MAX / h);
-            w = Math.round(w * scale);
-            h = Math.round(h * scale);
-          }
-          var canvas = document.createElement('canvas');
-          canvas.width = w; canvas.height = h;
-          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-          canvas.toBlob(function (blob) {
-            if (blob) resolve(blob); else reject(new Error('Canvas compression failed'));
-          }, 'image/jpeg', 0.8);
-        };
-        img.src = e.target.result;
+        try {
+          var img = new Image();
+          img.onerror = function () { reject(new Error('Could not decode the image')); };
+          img.onload = function () {
+            try {
+              var MAX = 1280;
+              var w = img.naturalWidth, h = img.naturalHeight;
+              if (w > MAX || h > MAX) {
+                var scale = Math.min(MAX / w, MAX / h);
+                w = Math.round(w * scale);
+                h = Math.round(h * scale);
+              }
+              var canvas = document.createElement('canvas');
+              canvas.width = w; canvas.height = h;
+              var ctx = canvas.getContext('2d');
+              if (!ctx) { reject(new Error('Canvas 2D context unavailable')); return; }
+              ctx.drawImage(img, 0, 0, w, h);
+              canvas.toBlob(function (blob) {
+                if (blob) resolve(blob); else reject(new Error('Canvas compression failed'));
+              }, 'image/jpeg', 0.8);
+            } catch (err) { reject(err); }
+          };
+          img.src = e.target.result;
+        } catch (err) { reject(err); }
       };
-      reader.readAsDataURL(file);
+      try { reader.readAsDataURL(file); } catch (err) { reject(err); }
     });
   }
 
@@ -104,30 +116,58 @@
   }
 
   function _uploadToBackend(blob) {
+    console.log('[UPLOAD] BACKEND FALLBACK STARTED —', blob.size + 'B → POST /api/chat/upload');
     var fd = new FormData();
     fd.append('file', blob, 'photo.jpg');
-    return fetch('/api/chat/upload', { method: 'POST', body: fd }).then(function (resp) {
+    /* AbortController timeout — a stalled connection (or a sleeping Render
+       instance that never answers) previously made this fetch wait FOREVER,
+       hanging the whole send pipeline. */
+    var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, 60000) : null;
+    function clearTimer() { if (timer) { clearTimeout(timer); timer = null; } }
+    return fetch('/api/chat/upload', {
+      method: 'POST', body: fd, signal: ctrl ? ctrl.signal : undefined,
+    }).then(function (resp) {
+      clearTimer();
       if (!resp.ok) throw new Error('Upload failed (' + resp.status + ')');
       return resp.json();
     }).then(function (data) {
       if (!data.success || !data.url) throw new Error('Server rejected the image');
-      console.log('[CHAT IMAGE] uploaded → backend', data.url);
+      console.log('[UPLOAD] BACKEND FALLBACK SUCCESS →', data.url);
       return data.url;
+    }).catch(function (e) {
+      clearTimer();
+      if (e && e.name === 'AbortError') throw new Error('Backend upload timed out after 60s');
+      throw e;
     });
   }
 
   function upload(file, opts) {
     opts = opts || {};
     var v = validate(file);
-    if (!v.ok) return Promise.reject(new Error(v.reason));
-    console.log('[CHAT IMAGE] compressing', file.name, file.type, file.size + 'B');
-    return compress(file).then(function (blob) {
-      console.log('[CHAT IMAGE] compressed to', blob.size + 'B — uploading');
-      return _uploadToFirebaseStorage(blob, opts.pathPrefix).catch(function (e) {
-        console.warn('[CHAT IMAGE] Firebase Storage path failed (' +
+    if (!v.ok) {
+      console.error('[UPLOAD] validation failed —', v.reason);
+      return Promise.reject(new Error(v.reason));
+    }
+    console.log('[UPLOAD] UPLOAD STARTED —', file.name, file.type, file.size + 'B');
+    return _withTimeout(compress(file), 30000, 'Image compression').then(function (blob) {
+      console.log('[UPLOAD] compressed to', blob.size + 'B');
+      console.log('[UPLOAD] FIREBASE UPLOAD STARTED — prefix:', opts.pathPrefix || 'chat_uploads');
+      return _uploadToFirebaseStorage(blob, opts.pathPrefix).then(function (url) {
+        console.log('[UPLOAD] FIREBASE UPLOAD SUCCESS');
+        return url;
+      }).catch(function (e) {
+        console.warn('[UPLOAD] FIREBASE UPLOAD FAILED (' +
           ((e && (e.code || e.message)) || 'unknown') + ') — falling back to backend upload');
         return _uploadToBackend(blob);
       });
+    }).then(function (url) {
+      console.log('[UPLOAD] DOWNLOAD URL CREATED →', url);
+      console.log('[UPLOAD] UPLOAD PROMISE RESOLVED');
+      return url;
+    }).catch(function (e) {
+      console.error('[UPLOAD] UPLOAD PROMISE REJECTED —', (e && e.message) || e);
+      throw e;
     });
   }
 
