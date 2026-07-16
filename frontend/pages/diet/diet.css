@@ -3141,3 +3141,64 @@ img { display: block; max-width: 100%; }
   font-weight: 400;
   margin-top: 2px;
 }
+
+/* ══════════════════════════════════════════
+   ASK ZINO (AI MEAL SWAP) — coach swap sheet action.
+   A separate premium AI card below "Ask Expert for new options";
+   deliberately not styled like a numbered coach option.
+══════════════════════════════════════════ */
+.pc-zino-swap-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1.5px solid rgba(255, 140, 0, 0.45);
+  background: linear-gradient(135deg, rgba(255, 140, 0, 0.10), rgba(255, 167, 38, 0.04));
+  box-shadow: 0 0 18px rgba(255, 140, 0, 0.14);
+  cursor: pointer;
+  text-align: left;
+  transition: transform 0.15s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.pc-zino-swap-btn:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255, 140, 0, 0.7);
+  box-shadow: 0 0 26px rgba(255, 140, 0, 0.26);
+}
+.pc-zino-swap-btn:active { transform: scale(0.985); }
+.pc-zino-swap-icon { font-size: 20px; flex-shrink: 0; }
+.pc-zino-swap-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.pc-zino-swap-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text, #1E293B);
+}
+.pc-zino-swap-sub {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-sec, #64748B);
+}
+.pc-zino-ai-badge {
+  flex-shrink: 0;
+  align-self: center;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--primary, #FF8C00), var(--primary-hover, #FFA726));
+  color: #101010;
+}
+@media (max-width: 480px) {
+  .pc-zino-swap-btn { padding: 12px 14px; gap: 10px; }
+  .pc-zino-swap-title { font-size: 13.5px; }
+  .pc-zino-swap-sub { font-size: 11px; }
+}

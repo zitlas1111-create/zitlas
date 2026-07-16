@@ -1813,7 +1813,19 @@
       '<p class="cw-sheet-title">Swap ' + esc(c.mealName) + '</p>' +
       '<p class="cw-sheet-sub">' + esc(c.day) + ' — choose one of your coach’s options.</p>' +
       optsHtml +
-      (canAsk ? '<button class="cw-ghost-btn" style="width:100%;margin-top:6px" id="pcAskExpert">💬 Ask Expert for new options</button>' : '')
+      (canAsk ? '<button class="cw-ghost-btn" style="width:100%;margin-top:6px" id="pcAskExpert">💬 Ask Expert for new options</button>' : '') +
+      /* Ask ZINO — a separate AI action, deliberately NOT a numbered coach
+         option. Hands this meal to the existing ZINO swap engine, which is
+         already personalized (goal, diet preference, calorie/protein
+         targets, disliked + previously rejected foods). */
+      '<button class="pc-zino-swap-btn" id="pcAskZino" type="button">' +
+        '<span class="pc-zino-swap-icon" aria-hidden="true">✨</span>' +
+        '<span class="pc-zino-swap-text">' +
+          '<span class="pc-zino-swap-title">Ask ZINO (AI Meal Swap)</span>' +
+          '<span class="pc-zino-swap-sub">Let ZINO instantly suggest a personalized meal swap based on your nutrition goals.</span>' +
+        '</span>' +
+        '<span class="pc-zino-ai-badge">AI</span>' +
+      '</button>'
     );
 
     var sheet = document.getElementById('pcSheet');
@@ -1834,6 +1846,17 @@
     });
     var askBtn = document.getElementById('pcAskExpert');
     if (askBtn) askBtn.addEventListener('click', function () { _pcAskExpert(c); });
+
+    var zinoBtn = document.getElementById('pcAskZino');
+    if (zinoBtn) zinoBtn.addEventListener('click', function () {
+      var cur = c.options[c.selIdx] || c.options[0] || {};
+      console.log('[DIET COACH] Ask ZINO — meal:', c.mealName, '| current:', cur.name || '(none)');
+      _pcCloseSheet();
+      /* Existing AI swap flow, untouched: reason picker → ZINO suggestion.
+         The current option's name seeds the rejected-foods list so ZINO
+         never suggests back what the athlete is trying to swap away. */
+      openSwapModal(c.mealName, cur.name ? [cur.name] : [], meal.time || '');
+    });
   }
 
   function _pcAthleteName() {
