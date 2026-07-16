@@ -2113,14 +2113,18 @@
   }
 
   function _snapSend(file, meal) {
-    if (typeof ZitlasChatAttach === 'undefined') { showToast('Upload unavailable — please retry.'); return; }
+    if (typeof ZitlasChatAttach === 'undefined') {
+      console.error('[SNAP MEAL] chat-attachments.js is not loaded on this page — upload impossible');
+      showToast('Upload unavailable — please refresh the page and retry.');
+      return;
+    }
     var uid = _pcUid();
     if (!uid) { showToast('Please sign in first.'); return; }
     var day = _pcTodayName();
     var mealType = (meal.meal_name || 'meal').toLowerCase();
 
     showToast('📷 Analyzing your meal…');
-    Promise.all([ZitlasChatAttach.upload(file), _pcEstimateNutrition(file)]).then(function (results) {
+    Promise.all([ZitlasChatAttach.upload(file, { pathPrefix: 'meal_snaps' }), _pcEstimateNutrition(file)]).then(function (results) {
       var url = results[0];
       var estimate = results[1];
       var id = 'MSL_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
@@ -2264,10 +2268,16 @@
 
   function _pcSendCheckin(file, meal, previewUrl) {
     var btn = document.getElementById('pcSendCheckin');
+    if (typeof ZitlasChatAttach === 'undefined') {
+      /* Must NOT flip the button to "Uploading…" first — this early return
+         used to leave the sheet permanently stuck in that state. */
+      console.error('[MEAL CHECKIN] chat-attachments.js is not loaded on this page — upload impossible');
+      showToast('Upload unavailable — please refresh the page and retry.');
+      return;
+    }
     if (btn) { btn.disabled = true; btn.textContent = 'Uploading…'; }
-    if (typeof ZitlasChatAttach === 'undefined') { showToast('Upload unavailable — please retry.'); return; }
 
-    Promise.all([ZitlasChatAttach.upload(file), _pcEstimateNutrition(file)]).then(function (results) {
+    Promise.all([ZitlasChatAttach.upload(file, { pathPrefix: 'meal_checkins' }), _pcEstimateNutrition(file)]).then(function (results) {
       var url = results[0];
       var estimate = results[1];
       var uid = _pcUid();

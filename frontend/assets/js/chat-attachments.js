@@ -63,23 +63,71 @@
     });
   }
 
-  /* ── Upload: validate -> compress -> POST. Resolves the public URL. ── */
-  function upload(file) {
+  /* ── Upload: validate -> compress -> store. Resolves the public URL. ──
+     PRIMARY: Firebase Storage (durable — survives server redeploys; the
+     same bucket certificate uploads already use). Requires
+     firebase-storage-compat.js on the page so firebase-config.js
+     initializes ZitlasStorage.
+     FALLBACK: the original POST /api/chat/upload (FastAPI local storage)
+     whenever Storage is unavailable on the page, denied by bucket rules,
+     or times out — the upload NEVER fails just because Storage did.
+     opts.pathPrefix names the bucket folder (default 'chat_uploads'). */
+  var _STORAGE_TIMEOUT_MS = 30000;
+
+  function _withTimeout(promise, ms, label) {
+    return Promise.race([
+      promise,
+      new Promise(function (_, reject) {
+        setTimeout(function () { reject(new Error(label + ' timed out after ' + ms + 'ms')); }, ms);
+      }),
+    ]);
+  }
+
+  function _uploadToFirebaseStorage(blob, pathPrefix) {
+    if (typeof ZitlasStorage === 'undefined' || !ZitlasStorage) {
+      return Promise.reject(new Error('firebase storage not initialized on this page'));
+    }
+    var uid = (typeof ZitlasAuth !== 'undefined' && ZitlasAuth.currentUser)
+      ? ZitlasAuth.currentUser.uid : 'anon';
+    var path = (pathPrefix || 'chat_uploads') + '/' + uid + '/' +
+      Date.now() + '_' + Math.random().toString(36).slice(2, 8) + '.jpg';
+    var ref = ZitlasStorage.ref().child(path);
+    return _withTimeout(
+      Promise.resolve(ref.put(blob, { contentType: 'image/jpeg' })).then(function () {
+        return _withTimeout(ref.getDownloadURL(), 15000, 'getDownloadURL');
+      }),
+      _STORAGE_TIMEOUT_MS, 'Firebase Storage upload'
+    ).then(function (url) {
+      console.log('[CHAT IMAGE] uploaded → Firebase Storage', path);
+      return url;
+    });
+  }
+
+  function _uploadToBackend(blob) {
+    var fd = new FormData();
+    fd.append('file', blob, 'photo.jpg');
+    return fetch('/api/chat/upload', { method: 'POST', body: fd }).then(function (resp) {
+      if (!resp.ok) throw new Error('Upload failed (' + resp.status + ')');
+      return resp.json();
+    }).then(function (data) {
+      if (!data.success || !data.url) throw new Error('Server rejected the image');
+      console.log('[CHAT IMAGE] uploaded → backend', data.url);
+      return data.url;
+    });
+  }
+
+  function upload(file, opts) {
+    opts = opts || {};
     var v = validate(file);
     if (!v.ok) return Promise.reject(new Error(v.reason));
     console.log('[CHAT IMAGE] compressing', file.name, file.type, file.size + 'B');
     return compress(file).then(function (blob) {
       console.log('[CHAT IMAGE] compressed to', blob.size + 'B — uploading');
-      var fd = new FormData();
-      fd.append('file', blob, 'photo.jpg');
-      return fetch('/api/chat/upload', { method: 'POST', body: fd });
-    }).then(function (resp) {
-      if (!resp.ok) throw new Error('Upload failed (' + resp.status + ')');
-      return resp.json();
-    }).then(function (data) {
-      if (!data.success || !data.url) throw new Error('Server rejected the image');
-      console.log('[CHAT IMAGE] uploaded →', data.url);
-      return data.url;
+      return _uploadToFirebaseStorage(blob, opts.pathPrefix).catch(function (e) {
+        console.warn('[CHAT IMAGE] Firebase Storage path failed (' +
+          ((e && (e.code || e.message)) || 'unknown') + ') — falling back to backend upload');
+        return _uploadToBackend(blob);
+      });
     });
   }
 
