@@ -86,6 +86,27 @@
     }).catch(function (e) { console.warn('[COACHING RESET] relationship retire failed (non-blocking)', e); });
   }
 
+  /* Wipes the athlete context previously published into
+     coaching_plans/{uid} (assessment, medical conditions, AI plans, goal).
+     Without this, a coach opening the workspace after the athlete's Goal
+     Reset still sees the PREVIOUS goal's data — e.g. medical conditions
+     the athlete never reported on their new assessment. The coach-authored
+     diet/training plans on the same doc are deliberately left untouched
+     (history). Fresh context is re-published automatically by cprofile.js/
+     diet.js the next time a coaching relationship is active. */
+  function _clearPublishedContext() {
+    if (typeof ZitlasDB === 'undefined' || typeof firebase === 'undefined') return Promise.resolve();
+    var uid = myUid();
+    if (!uid) return Promise.resolve();
+    return ZitlasDB.collection('coaching_plans').doc(uid).update({
+      athleteContext: firebase.firestore.FieldValue.delete(),
+      athleteContextUpdatedAt: firebase.firestore.FieldValue.delete(),
+    }).catch(function (e) {
+      /* Missing doc = nothing published = nothing stale. Non-blocking. */
+      if (!(e && e.code === 'not-found')) console.warn('[COACHING RESET] context clear failed (non-blocking)', e);
+    });
+  }
+
   function clearLocalReviewKeys() {
     LOCAL_KEYS.forEach(function (k) { localStorage.removeItem(k); });
   }
@@ -102,9 +123,15 @@
     var relationshipPromise = opts.relationshipStatus
       ? _retireCoachingRelationship(opts.relationshipStatus)
       : Promise.resolve();
+    /* Goal Reset flows (relationshipStatus set) also wipe the published
+       athlete context so the coach can never see the previous goal's
+       assessment/medical data. */
+    var contextPromise = opts.relationshipStatus
+      ? _clearPublishedContext()
+      : Promise.resolve();
     console.log('[COACHING RESET] cleared local review keys' +
-      (opts.relationshipStatus ? ' + retiring relationship to "' + opts.relationshipStatus + '"' : ''));
-    return Promise.all([dismissPromise, relationshipPromise]);
+      (opts.relationshipStatus ? ' + retiring relationship to "' + opts.relationshipStatus + '" + clearing published context' : ''));
+    return Promise.all([dismissPromise, relationshipPromise, contextPromise]);
   }
 
   win.ZitlasCoachingReset = { clearAll: clearAll, clearLocalReviewKeys: clearLocalReviewKeys };

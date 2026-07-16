@@ -40,11 +40,12 @@
     open: false,
     opts: null,
     plan: null,            /* coaching_plans doc data */
+    planLoaded: false,     /* first coaching_plans snapshot has arrived */
     tab: 'overview',
     dayIdx: 0,             /* viewer/editor selected day */
     unsubs: [],
-    dietDraft: null, dietDirty: false,
-    trainDraft: null, trainDirty: false,
+    dietDraft: null, dietDirty: false, dietDraftSeeded: false,
+    trainDraft: null, trainDirty: false, trainDraftSeeded: false,
     mealReqs: [],
     checkins: [],
     reviewDraft: null,   /* { reaction, score, comment } while the review sheet is open */
@@ -267,9 +268,9 @@
     S.opts = opts;
     S.tab = opts.initialTab || 'overview';
     S.dayIdx = todayIdx();
-    S.dietDraft = null; S.dietDirty = false;
-    S.trainDraft = null; S.trainDirty = false;
-    S.plan = null; S.mealReqs = []; S.chatMsgs = [];
+    S.dietDraft = null; S.dietDirty = false; S.dietDraftSeeded = false;
+    S.trainDraft = null; S.trainDirty = false; S.trainDraftSeeded = false;
+    S.plan = null; S.planLoaded = false; S.mealReqs = []; S.chatMsgs = [];
     S.open = true;
 
     console.log('[CW] open', opts.role, 'athlete:', opts.athleteId, 'coach:', opts.coachId, 'plan:', opts.planType);
@@ -335,6 +336,7 @@
     S.unsubs.push(d.collection('coaching_plans').doc(S.opts.athleteId)
       .onSnapshot(function (snap) {
         S.plan = snap.exists ? snap.data() : null;
+        S.planLoaded = true;
         console.log('[CW] plan snapshot — diet days:',
           S.plan && S.plan.diet && S.plan.diet.days ? S.plan.diet.days.length : 0,
           '| training days:',
@@ -394,10 +396,17 @@
   }
 
   /* Athlete device publishes its localStorage-derived context so the coach
-     never has to ask onboarding questions again. Merge-write, cheap. */
-  function publishAthleteContext() {
+     never has to ask onboarding questions again. Merge-write, cheap.
+     Every key is ALWAYS present (null when absent locally) so a fresh
+     publish fully overwrites a stale context from a previous goal —
+     e.g. old medical conditions can never outlive a new assessment.
+     `info` is optional: workspace-internal calls fall back to S.opts;
+     external callers (cprofile.js, diet.js) pass ids explicitly. */
+  function publishAthleteContext(info) {
     var d = db();
-    if (!d) return;
+    if (!d) return Promise.resolve();
+    var o = info || S.opts || {};
+    if (!o.athleteId) return Promise.resolve();
     var ctx = {};
     var keys = {
       assessment: 'zitlas_assessment', calculations: 'zitlas_calculations',
@@ -415,13 +424,15 @@
     if (ctx.workout_plan && (ctx.workout_plan.currentWorkoutPlan || ctx.workout_plan.originalWorkoutPlan)) {
       ctx.workout_plan = ctx.workout_plan.currentWorkoutPlan || ctx.workout_plan.originalWorkoutPlan;
     }
-    d.collection('coaching_plans').doc(S.opts.athleteId).set({
-      athleteId: S.opts.athleteId, athleteName: S.opts.athleteName || 'Athlete',
-      coachId: S.opts.coachId, coachName: S.opts.coachName || 'Coach',
-      planType: S.opts.planType || 'complete',
+    var patch = {
+      athleteId: o.athleteId,
       athleteContext: ctx,
       athleteContextUpdatedAt: new Date().toISOString(),
-    }, { merge: true })
+    };
+    if (o.athleteName) patch.athleteName = o.athleteName;
+    if (o.coachId) { patch.coachId = o.coachId; patch.coachName = o.coachName || 'Coach'; }
+    if (o.planType) patch.planType = o.planType;
+    return d.collection('coaching_plans').doc(o.athleteId).set(patch, { merge: true })
       .then(function () { console.log('[CW] athlete context published'); })
       .catch(function (e) { console.warn('[CW] context publish failed', e); });
   }
@@ -463,7 +474,7 @@
     };
   }
   function medBadges(med) {
-    if (!med.has) return '<span class="cw-med-badge cw-med-badge--healthy">🟢 No Condition — Healthy</span>';
+    if (!med.has) return '<span class="cw-med-badge cw-med-badge--healthy">🟢 No medical conditions reported.</span>';
     var icon = { critical: '🔴', moderate: '🟠', minor: '🟢' };
     return med.meta.map(function (m) {
       return '<span class="cw-med-badge cw-med-badge--' + m.severity + '">' +
@@ -577,9 +588,11 @@
       body.innerHTML =
         '<div class="cw-card"><div class="cw-empty">' +
           '<span class="cw-empty-icon">📡</span>' +
-          (S.opts.role === 'coach'
-            ? 'Waiting for the athlete’s data to sync.<br>It publishes automatically the first time they open their coaching workspace.'
-            : 'Your ZITLAS profile hasn’t synced yet.<br>Complete your assessment on the AI Coach page and reopen this workspace.') +
+          (!S.planLoaded
+            ? 'Loading athlete data…'
+            : (S.opts.role === 'coach'
+              ? 'Waiting for the athlete’s data to sync.<br>It publishes automatically when they visit their Diet page or open this workspace.'
+              : 'Your ZITLAS profile hasn’t synced yet.<br>Complete your assessment on the AI Coach page and reopen this workspace.')) +
         '</div></div>';
       return;
     }
@@ -1009,11 +1022,22 @@
 
   /* ── coach diet editor ── */
   function ensureDietDraft() {
-    if (S.dietDraft) return;
     var remote = S.plan && S.plan.diet;
-    S.dietDraft = remote && remote.days && remote.days.length
-      ? JSON.parse(JSON.stringify(remote))
-      : null;
+    var hasRemote = !!(remote && remote.days && remote.days.length);
+    /* A saved coach plan always beats an unsaved auto-seed (e.g. saved
+       from another device between snapshots). */
+    if (S.dietDraft && S.dietDraftSeeded && !S.dietDirty && hasRemote) S.dietDraft = null;
+    if (S.dietDraft) return;
+    if (hasRemote) {
+      S.dietDraft = JSON.parse(JSON.stringify(remote));
+      S.dietDraftSeeded = false;
+      return;
+    }
+    /* No coach plan yet — auto-preload the athlete's AI-generated diet so
+       the coach edits the real plan, never a blank template. Template is
+       the fallback ONLY when the AI plan genuinely doesn't exist. */
+    var ai = dietFromAiPlan();
+    if (ai) { S.dietDraft = ai; S.dietDraftSeeded = true; }
   }
 
   function renderDietEditor() {
@@ -1021,23 +1045,20 @@
     ensureDietDraft();
 
     if (!S.dietDraft) {
-      var hasAi = !!(S.plan && S.plan.athleteContext && S.plan.athleteContext.diet_plan &&
-        S.plan.athleteContext.diet_plan.days && S.plan.athleteContext.diet_plan.days.length);
+      if (!S.planLoaded) {
+        body.innerHTML = '<div class="cw-card"><div class="cw-empty"><span class="cw-empty-icon">🥗</span>Loading the athlete’s plan…</div></div>';
+        return;
+      }
       body.innerHTML =
         '<div class="cw-card"><div class="cw-empty"><span class="cw-empty-icon">🥗</span>' +
-          'No coach diet plan yet. Design the athlete’s complete week — every meal can have up to 3 options they can swap between.' +
+          'This athlete has no AI diet plan yet (they may not have completed their assessment). ' +
+          'You can still design their week from a template — every meal can have up to 3 options they can swap between.' +
         '</div>' +
         '<div class="cw-save-bar" style="position:static;background:none">' +
-          (hasAi ? '<button class="cw-ghost-btn" id="cwDietImport">Start from AI plan</button>' : '') +
           '<button class="cw-save-btn" id="cwDietBlank">Start with template</button>' +
         '</div></div>';
-      var imp = $('cwDietImport');
-      if (imp) imp.addEventListener('click', function () {
-        S.dietDraft = dietFromAiPlan() || emptyDietWeek();
-        S.dietDirty = true; renderDietEditor();
-      });
       $('cwDietBlank').addEventListener('click', function () {
-        S.dietDraft = emptyDietWeek();
+        S.dietDraft = emptyDietWeek(); S.dietDraftSeeded = false;
         S.dietDirty = true; renderDietEditor();
       });
       return;
@@ -1089,16 +1110,21 @@
         '</div>';
     }).join('');
 
+    var seededNote = (S.dietDraftSeeded && !S.dietDirty)
+      ? '<div class="cw-req-banner">🤖 Preloaded from the athlete’s AI-generated diet plan — review, adjust anything, then Save to publish your version.</div>'
+      : '';
+
     body.innerHTML =
       dayPillsHtml(S.dietDraft.days, S.dayIdx, pendingByDay) +
+      seededNote +
       medGuidanceBanner('diet') +
       reqBanner +
       mealsHtml +
       '<button class="cw-add-btn" id="cwAddMeal">+ Add custom meal to ' + esc(day.day) + '</button>' +
       '<div class="cw-save-bar">' +
         '<button class="cw-ghost-btn" id="cwDietHistory">🕘 History</button>' +
-        '<button class="cw-save-btn" id="cwDietSave"' + (S.dietDirty ? '' : ' disabled') + '>' +
-          (S.dietDirty ? 'Save Diet Plan' : 'Saved ✓') + '</button>' +
+        '<button class="cw-save-btn" id="cwDietSave"' + ((S.dietDirty || S.dietDraftSeeded) ? '' : ' disabled') + '>' +
+          ((S.dietDirty || S.dietDraftSeeded) ? 'Save Diet Plan' : 'Saved ✓') + '</button>' +
       '</div>';
 
     wireDayPills(body, renderDietEditor);
@@ -1188,6 +1214,7 @@
           : '🥗 ' + (S.opts.coachName || 'Your coach') + ' updated your diet plan.',
         'diet_update');
       S.dietDirty = false;
+      S.dietDraftSeeded = false;
       S.saving = false;
       console.log('[CW] diet saved v' + version);
       toast('✅ Diet plan published to ' + (S.opts.athleteName || 'the athlete'));
@@ -1546,11 +1573,20 @@
   }
 
   function ensureTrainDraft() {
-    if (S.trainDraft) return;
     var remote = S.plan && S.plan.training;
-    S.trainDraft = remote && remote.days && remote.days.length
-      ? JSON.parse(JSON.stringify(remote))
-      : null;
+    var hasRemote = !!(remote && remote.days && remote.days.length);
+    /* A saved coach plan always beats an unsaved auto-seed */
+    if (S.trainDraft && S.trainDraftSeeded && !S.trainDirty && hasRemote) S.trainDraft = null;
+    if (S.trainDraft) return;
+    if (hasRemote) {
+      S.trainDraft = JSON.parse(JSON.stringify(remote));
+      S.trainDraftSeeded = false;
+      return;
+    }
+    /* No coach plan yet — auto-preload the athlete's AI-generated workout
+       so the coach edits the real plan, never a blank template. */
+    var ai = trainingFromAiPlan();
+    if (ai) { S.trainDraft = ai; S.trainDraftSeeded = true; }
   }
 
   function renderTrainingEditor() {
@@ -1558,22 +1594,20 @@
     ensureTrainDraft();
 
     if (!S.trainDraft) {
-      var hasAi = !!trainingFromAiPlan();
+      if (!S.planLoaded) {
+        body.innerHTML = '<div class="cw-card"><div class="cw-empty"><span class="cw-empty-icon">💪</span>Loading the athlete’s plan…</div></div>';
+        return;
+      }
       body.innerHTML =
         '<div class="cw-card"><div class="cw-empty"><span class="cw-empty-icon">💪</span>' +
-          'No coach training plan yet. Build the athlete’s full week — exercises, sets, reps, duration and rest.' +
+          'This athlete has no AI workout plan yet (they may not have completed their assessment). ' +
+          'You can still build their full week from a template — exercises, sets, reps, duration and rest.' +
         '</div>' +
         '<div class="cw-save-bar" style="position:static;background:none">' +
-          (hasAi ? '<button class="cw-ghost-btn" id="cwTrainImport">Start from AI plan</button>' : '') +
           '<button class="cw-save-btn" id="cwTrainBlank">Start with template</button>' +
         '</div></div>';
-      var imp = $('cwTrainImport');
-      if (imp) imp.addEventListener('click', function () {
-        S.trainDraft = trainingFromAiPlan() || emptyTrainingWeek();
-        S.trainDirty = true; renderTrainingEditor();
-      });
       $('cwTrainBlank').addEventListener('click', function () {
-        S.trainDraft = emptyTrainingWeek();
+        S.trainDraft = emptyTrainingWeek(); S.trainDraftSeeded = false;
         S.trainDirty = true; renderTrainingEditor();
       });
       return;
@@ -1603,8 +1637,13 @@
       '</div>';
     }).join('');
 
+    var seededNote = (S.trainDraftSeeded && !S.trainDirty)
+      ? '<div class="cw-req-banner">🤖 Preloaded from the athlete’s AI-generated workout plan — review, adjust anything, then Save to publish your version.</div>'
+      : '';
+
     body.innerHTML =
       dayPillsHtml(S.trainDraft.days, S.dayIdx) +
+      seededNote +
       medGuidanceBanner('workout') +
       '<div class="cw-ed-meal">' +
         '<div class="cw-ed-row" style="margin-bottom:0">' +
@@ -1618,8 +1657,8 @@
       '<button class="cw-add-btn" id="cwAddEx">+ Add exercise</button>' +
       '<div class="cw-save-bar">' +
         '<button class="cw-ghost-btn" id="cwTrainHistory">🕘 History</button>' +
-        '<button class="cw-save-btn" id="cwTrainSave"' + (S.trainDirty ? '' : ' disabled') + '>' +
-          (S.trainDirty ? 'Save Training Plan' : 'Saved ✓') + '</button>' +
+        '<button class="cw-save-btn" id="cwTrainSave"' + ((S.trainDirty || S.trainDraftSeeded) ? '' : ' disabled') + '>' +
+          ((S.trainDirty || S.trainDraftSeeded) ? 'Save Training Plan' : 'Saved ✓') + '</button>' +
       '</div>';
 
     wireDayPills(body, renderTrainingEditor);
@@ -1700,6 +1739,7 @@
     }).then(function () {
       notify(S.opts.athleteId, '💪 ' + (S.opts.coachName || 'Your coach') + ' updated your workout plan.', 'training_update');
       S.trainDirty = false;
+      S.trainDraftSeeded = false;
       S.saving = false;
       console.log('[CW] training saved v' + version);
       toast('✅ Training plan published to ' + (S.opts.athleteName || 'the athlete'));
@@ -1962,7 +2002,7 @@
       var bits = [];
       bits.push(med.has
         ? '🏥 <b>' + esc(med.meta.map(function (m) { return m.label; }).join(', ') || med.raw) + '</b>'
-        : '🟢 No medical conditions');
+        : '🟢 No medical conditions reported.');
       if (g2.type) bits.push(esc(cap(g2.type)) + ' goal');
       if (c2.bmi) bits.push('BMI ' + esc(parseFloat(c2.bmi).toFixed(1)));
       if (a2.living_situation) bits.push(esc(cap(a2.living_situation)));
@@ -2077,5 +2117,9 @@
     close: close,
     attachNotifications: attachNotifications,
     isOpen: function () { return S.open; },
+    /* Athlete-side pages call this (with explicit ids) to keep the
+       coach's copy of assessment/plans/medical data current without
+       needing the workspace UI to be opened. */
+    publishAthleteContext: publishAthleteContext,
   };
 })(window);

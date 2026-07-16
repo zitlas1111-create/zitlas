@@ -215,6 +215,11 @@
       'modifiedBy', 'expertApproval', 'review_request',
       'expertDiet', 'expertOverride', 'dietOverride', 'reviewStatus',
       'expertReviewedPlan', 'approvedPlan', 'expertWorkoutOverride',
+      /* Nutritionist/coaching assignments — must be cleared so the UI
+         (diet.js, cprofile.js) reverts to showing "no coach assigned" */
+      'zitlas_nutritionists',
+      /* Workout modifications from experts */
+      'zitlas_workout_modifications',
     ];
     keys.forEach(k => localStorage.removeItem(k));
     console.log('[GOAL] clearAllGoalData — cleared', keys.length, 'keys; remaining zitlas_* keys:',

@@ -1608,6 +1608,22 @@
         _pcAttachCheckinsListener();
         renderDay(currentDay); /* inject Snap Meal rows into the AI view */
         _pcUpdateAskCoachUi();
+        /* Keep the coach's copy of this athlete's assessment + AI plans
+           current (once per page load). The diet page is the athlete's
+           daily surface, so this is what guarantees the coaching
+           workspace always reflects the LATEST assessment — never a
+           stale context from a previous goal. */
+        if (!initCoachDietMode._ctxPublished &&
+            typeof ZitlasCoachingWorkspace !== 'undefined' && ZitlasCoachingWorkspace.publishAthleteContext) {
+          initCoachDietMode._ctxPublished = true;
+          ZitlasCoachingWorkspace.publishAthleteContext({
+            athleteId: uid,
+            athleteName: _pcRel.athleteName,
+            coachId: _pcRel.coachId,
+            coachName: _pcRel.coachName,
+            planType: _pcRel.planType,
+          });
+        }
       }
       applyCoachDiet();
     }, function (e) { console.warn('[DIET COACH] rel listener error', e); });
@@ -2586,6 +2602,11 @@
           'modifiedBy', 'expertApproval', 'review_request',
           'expertDiet', 'expertOverride', 'dietOverride', 'reviewStatus',
           'expertReviewedPlan', 'approvedPlan', 'expertWorkoutOverride',
+          /* Nutritionist/coaching assignments — must clear so diet page
+             reverts to showing "no coach assigned" state */
+          'zitlas_nutritionists',
+          /* Workout modifications */
+          'zitlas_workout_modifications',
         ].forEach(function (k) { localStorage.removeItem(k); });
         console.log('[DIET] Goal reset — all expert review keys cleared');
 
