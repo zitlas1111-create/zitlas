@@ -2713,7 +2713,18 @@
       return _selectedService === 'verification' || _selectedService === 'verification_chat';
     }
 
+    function _pcvIsPremium() {
+      return typeof ZitlasPayment !== 'undefined' &&
+        typeof ZitlasPayment.isPremiumMember === 'function' && ZitlasPayment.isPremiumMember();
+    }
+
     function _computeTotalPrice() {
+      /* PREMIUM: review + expert-chat fees are PLATFORM charges → ₹0.
+         This zero also gets recorded as the request's totalPrice, so the
+         expert-side auto-charge attempts ₹0 (attemptCharge additionally
+         re-verifies premium from the athlete's users/{uid} doc inside
+         the transaction — this display value is never the authority). */
+      if (_pcvIsPremium()) return 0;
       var pricing = _getPricing(coach);
       var total = 0;
       if (_needsReviewType()) {
@@ -3078,6 +3089,7 @@
             profileBasics:  profileBasics,
             serviceType:    _selectedService,
             totalPrice:     s.price,
+            isPremium:      _pcvIsPremium(),
             paymentStatus:  'unpaid',
             bundleId:       s.bundleId   || null,
             bundleRole:     s.bundleRole || null,

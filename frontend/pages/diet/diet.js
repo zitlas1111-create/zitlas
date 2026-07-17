@@ -1530,6 +1530,10 @@
       return;
     }
 
+    /* PREMIUM: review fees are ₹0 — show it instead of the normal fee */
+    var _vnPremium = typeof ZitlasPayment !== 'undefined' &&
+      typeof ZitlasPayment.isPremiumMember === 'function' && ZitlasPayment.isPremiumMember();
+
     rail.innerHTML = _vnExperts.map(function(n) {
       var profileUrl = '../coaches/cprofile.html?id=' + n.id;
       var isRequested = !!(existing && existing.expertId === n.id);
@@ -1556,8 +1560,11 @@
             n.expertise.map(function(e) { return '<span class="vn-exp-tag">' + esc(e) + '</span>'; }).join('') +
           '</div>' +
           '<div class="vn-fee-row">' +
-            '<span class="vn-fee">₹' + n.fee + '</span>' +
-            '<span class="vn-fee-label">review fee</span>' +
+            (_vnPremium
+              ? '<span class="vn-fee">⭐ FREE</span>' +
+                '<span class="vn-fee-label">with Premium</span>'
+              : '<span class="vn-fee">₹' + n.fee + '</span>' +
+                '<span class="vn-fee-label">review fee</span>') +
             '<span class="vn-divider">·</span>' +
             '<span class="vn-duration">' + esc(n.duration) + '</span>' +
           '</div>' +
@@ -1620,6 +1627,12 @@
     var calc = safeJSON('zitlas_calculations', null);
     var now  = new Date().toISOString();
     var id   = 'PR_' + Date.now() + '_d_' + Math.random().toString(36).slice(2, 6);
+    /* PREMIUM: platform charges are ₹0 and the request is priority-pinned
+       in the expert's queue. The recorded totalPrice of 0 is display/
+       belt-and-braces — the charge itself re-verifies premium from the
+       athlete's users/{uid} doc inside attemptCharge's transaction. */
+    var _premium = typeof ZitlasPayment !== 'undefined' &&
+      typeof ZitlasPayment.isPremiumMember === 'function' && ZitlasPayment.isPremiumMember();
 
     var reviewDoc = {
       id:           id,
@@ -1659,8 +1672,9 @@
       goal:          safeJSON('zitlas_goal', null),
       planId:        localStorage.getItem('zitlas_plan_id') || null,
       serviceType:   'verification',
-      totalPrice:    (expert && expert.fee) || 0,
-      fee:           (expert && expert.fee) || 0,
+      totalPrice:    _premium ? 0 : ((expert && expert.fee) || 0),
+      fee:           _premium ? 0 : ((expert && expert.fee) || 0),
+      isPremium:     _premium,
       paymentStatus: 'unpaid',
       status:        'pending',
       createdAt:     now,

@@ -13,7 +13,7 @@
   /* ── Plan limits ── */
   var LIMITS = {
     basic:   { goalResets: 3,        mealSwaps: 5 },
-    premium: { goalResets: 5,        mealSwaps: Infinity },
+    premium: { goalResets: 5,        mealSwaps: 25 },
   };
 
   /* ── ISO week key: "YYYY-Www" ── */
@@ -209,9 +209,15 @@
         started_at: new Date().toISOString(),
       };
       try { localStorage.setItem(MEMBERSHIP_KEY, JSON.stringify(newMembership)); } catch (_) {}
+      /* Cloud-sync to users/{uid}.membership — the AUTHORITATIVE copy the
+         payment layer (attemptCharge's in-transaction premium check), the
+         backend coaching request (priority flag), and every other device
+         read. Without this write, premium would exist only on this
+         device and platform charges would NOT be waived. */
+      if (typeof ZitlasCloudSync !== 'undefined') ZitlasCloudSync.save('membership', newMembership);
 
       renderPlanUI(newMembership);
-      showToast('Upgraded to Premium! Payment integration coming soon.');
+      showToast('⭐ Premium unlocked — zero platform charges across ZITLAS!');
     });
   }
 
@@ -229,6 +235,14 @@
   function init() {
     loadTheme();
     var membership = window.ZitlasMembership.getMembership();
+    /* One-time migration/heal: existing premium members upgraded BEFORE
+       membership was cloud-synced have the plan only in this device's
+       localStorage — push it to users/{uid}.membership so their platform
+       charges actually get waived (the charge transaction reads ONLY the
+       cloud copy). Idempotent merge write, cheap to repeat. */
+    if (membership.plan === 'premium' && typeof ZitlasCloudSync !== 'undefined') {
+      ZitlasCloudSync.save('membership', membership);
+    }
     _billing = (membership.billing === 'yearly') ? 'yearly' : 'monthly';
     initBillingToggle();
     renderPlanUI(membership);

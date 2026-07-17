@@ -45,6 +45,12 @@
     personalInfo: 'zitlas_personal_info',
     wallet:       'zitlas_wallet',
     location:     'zitlas_location', /* Geo-Aware Food Intelligence — optional */
+    membership:   'zitlas_membership', /* Premium plan — read AUTHORITATIVELY from
+                                          users/{uid}.membership by payment flows
+                                          (platform charges are ₹0 for premium) and
+                                          the backend coaching request (priority
+                                          queue flag). Identity-scoped: NOT in
+                                          GOAL_SCOPED_FIELDS, survives Goal Reset. */
     planMeta:     null, /* virtual — see planGeneratedAt/planId below */
   };
   /* Small standalone string/number fields that don't warrant a whole

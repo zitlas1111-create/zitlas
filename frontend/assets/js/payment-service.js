@@ -62,6 +62,19 @@
   })();
   function isTrialMode() { return _trialMode; }
 
+  /* PREMIUM MEMBERSHIP — local, synchronous read of THIS device's user
+     (zitlas_membership, cloud-synced via users/{uid}.membership). For UI
+     display decisions only (price labels, "FREE with Premium" chips).
+     The MONEY decision never trusts this: attemptCharge() re-reads the
+     paying athlete's membership from their users/{uid} doc inside the
+     transaction, because charges can execute on the expert's device. */
+  function isPremiumMember() {
+    try {
+      var m = JSON.parse(localStorage.getItem('zitlas_membership') || 'null');
+      return !!(m && m.plan === 'premium' && m.active !== false);
+    } catch (_) { return false; }
+  }
+
   function _defaultWallet() {
     return { balance: 0, total_added: 0, total_spent: 0, transactions: [] };
   }
@@ -144,6 +157,30 @@
         var wallet  = (userSnap.exists && userSnap.data().wallet) ? userSnap.data().wallet : _defaultWallet();
         var balance = Number(wallet.balance || 0);
 
+        /* ── PREMIUM MEMBERSHIP: platform charges are ₹0 ──
+           Every service billed through attemptCharge (diet/workout review
+           fees, expert chat, meal reviews) is a PLATFORM charge, and the
+           product policy is: premium members (₹149/mo) pay zero platform
+           charges. The membership is read from the ATHLETE'S users/{uid}
+           doc INSIDE this transaction — never from this device's
+           localStorage — because this function also runs on the EXPERT'S
+           device (auto-charge on accept), where local membership would be
+           the expert's own plan, not the paying athlete's. users/{uid}.
+           membership is authoritative (cloud-synced from the membership
+           page). Note the one exception in the product policy — Personal
+           Coaching's professional fee — never flows through this function
+           at all (it's the backend escrow in routes/coaching.py), so no
+           service-type carve-out is needed here.
+           chargeAmount is transaction-LOCAL so Firestore retries recompute
+           it cleanly from the freshly-read user doc every attempt. */
+        var _memb = (userSnap.exists && userSnap.data().membership) || null;
+        var _premiumFree = !!(_memb && _memb.plan === 'premium' && _memb.active !== false) && amount > 0;
+        var chargeAmount = _premiumFree ? 0 : amount;
+        if (_premiumFree) {
+          console.log('[PAYMENT] PREMIUM MEMBER — platform charge ₹' + amount + ' waived to ₹0 for ' +
+            (opts.serviceLabel || opts.serviceType || 'service'));
+        }
+
         console.log('[WALLET]');
         console.log('[WALLET] uid=' + userId);
         console.log('[WALLET] walletPath=users/' + userId + '.wallet');
@@ -152,14 +189,14 @@
         console.log('[WALLET] rawData=', userSnap.exists ? userSnap.data() : null);
         console.log('[WALLET] balance=' + balance + ' (typeof stored value=' +
                     (userSnap.exists && userSnap.data().wallet ? typeof userSnap.data().wallet.balance : 'n/a') + ')');
-        console.log('[WALLET] required=' + amount);
-        console.log('[WALLET] comparison=' + (balance >= amount ? 'SUFFICIENT' : 'INSUFFICIENT') +
-                    ' (balance ' + balance + (balance >= amount ? ' >= ' : ' < ') + amount + ')');
+        console.log('[WALLET] required=' + chargeAmount + (_premiumFree ? ' (premium-waived from ' + amount + ')' : ''));
+        console.log('[WALLET] comparison=' + (balance >= chargeAmount ? 'SUFFICIENT' : 'INSUFFICIENT') +
+                    ' (balance ' + balance + (balance >= chargeAmount ? ' >= ' : ' < ') + chargeAmount + ')');
 
-        if (amount > 0 && balance < amount) {
+        if (chargeAmount > 0 && balance < chargeAmount) {
           outcome = {
             success: false, error: 'insufficient_balance',
-            balance: balance, required: amount, shortfall: amount - balance,
+            balance: balance, required: chargeAmount, shortfall: chargeAmount - balance,
             walletDocStatus: walletDocStatus,
           };
           // Deliberately does NOT apply onSuccessUpdate — payment failed, so
@@ -178,19 +215,19 @@
         }
 
         var walletBefore = balance;
-        var walletAfter  = balance - amount;
-        var platformFee  = Math.round(amount * PLATFORM_FEE_PERCENT);
-        var expertAmount = amount - platformFee;
+        var walletAfter  = balance - chargeAmount;
+        var platformFee  = Math.round(chargeAmount * PLATFORM_FEE_PERCENT);
+        var expertAmount = chargeAmount - platformFee;
 
         var newWallet = {
           balance:      walletAfter,
           total_added:  Number(wallet.total_added || 0),
-          total_spent:  Number(wallet.total_spent || 0) + amount,
+          total_spent:  Number(wallet.total_spent || 0) + chargeAmount,
           transactions: Array.isArray(wallet.transactions) ? wallet.transactions.slice() : [],
         };
-        if (amount > 0) {
+        if (chargeAmount > 0) {
           newWallet.transactions.push({
-            id: txnId, type: 'debit', amount: amount,
+            id: txnId, type: 'debit', amount: chargeAmount,
             description: (opts.serviceLabel || 'ZITLAS service') + (opts.expertName ? ' — ' + opts.expertName : ''),
             date: new Date().toISOString(),
           });
@@ -202,16 +239,19 @@
           serviceType:   opts.serviceType || 'unknown',
           expertId:      opts.expertId || null,
           userId:        userId,
-          amount:        amount,
+          amount:        chargeAmount,
           walletBefore:  walletBefore,
           walletAfter:   walletAfter,
-          grossAmount:   amount,
+          grossAmount:   chargeAmount,
           platformFee:   platformFee,
           expertAmount:  expertAmount,
           status:        'success',
           /* Audit trail: true when this charge was waived by the client
              trial (backend/trial_config.py) — amount is 0 by design. */
           trialWaived:   _trialFree,
+          /* Audit trail: true when waived because the athlete is a
+             Premium member (₹0 platform charges policy). */
+          premiumWaived: _premiumFree,
           createdAt:     new Date().toISOString(),
         });
         tx.update(requestRef, Object.assign({}, onSuccessUpdate, {
@@ -424,5 +464,8 @@
     /* true while the client trial is on (backend/trial_config.py) —
        coach services are free; Premium + wallet recharge unaffected. */
     isTrialMode: isTrialMode,
+    /* true when THIS device's user is a Premium member — UI display only;
+       the charge itself re-verifies from the athlete's users/{uid} doc. */
+    isPremiumMember: isPremiumMember,
   };
 })(window);

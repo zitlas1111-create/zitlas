@@ -204,6 +204,14 @@ async def create_request(body: RequestBody, caller: dict = Depends(verify_fireba
         tx.set(user_ref, {"wallet": wallet}, merge=True)
 
         athlete_name = (user_data or {}).get("name") or caller.get("name") or "Athlete"
+        # PREMIUM: priority flag for the expert's queue (premium requests
+        # pin to the top). Read server-side from the athlete's user doc —
+        # never client-supplied. Deliberately does NOT change `amount`:
+        # Premium waives PLATFORM charges only; the coaching price is the
+        # expert's own professional fee and stays fully payable.
+        _membership = (user_data or {}).get("membership") or {}
+        is_premium = (_membership.get("plan") == "premium"
+                      and _membership.get("active") is not False)
         tx.set(request_ref, {
             "requestId": request_id,
             "athleteId": athlete_uid, "athleteName": athlete_name,
@@ -211,6 +219,7 @@ async def create_request(body: RequestBody, caller: dict = Depends(verify_fireba
             "planType": body.planType, "planLabel": PLAN_LABELS[body.planType],
             "price": amount,
             "status": "pending",
+            "isPremium": is_premium,
             "createdAt": _now.isoformat(),
             "reservationAmount": amount,
             "reservedAt": _now.isoformat(),

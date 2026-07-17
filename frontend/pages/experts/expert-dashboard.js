@@ -1448,6 +1448,14 @@ function renderCoachingRequests() {
   wrap.querySelectorAll('.pc-req-card').forEach(function(el) { el.remove(); });
   if (empty) empty.style.display = bucket.length ? 'none' : '';
 
+  /* PRIORITY QUEUE: Premium athletes pin to the top (isPremium stamped
+     server-side by routes/coaching.py from the athlete's user doc). */
+  bucket = bucket.slice().sort(function(a, b) {
+    var prem = (b.isPremium ? 1 : 0) - (a.isPremium ? 1 : 0);
+    if (prem !== 0) return prem;
+    return (b.createdAt || '') < (a.createdAt || '') ? -1 : 1;
+  });
+
   bucket.forEach(function(req) {
     var icon = PC_PLAN_ICONS[req.planType] || '👨‍🏫';
     var name = req.athleteName || 'Athlete';
@@ -1460,12 +1468,15 @@ function renderCoachingRequests() {
       req.status === 'ended'    ? 'Coaching ended by athlete' :
       req.status === 'withdrawn'? 'Withdrawn by athlete' : 'Completed';
 
+    var _pcPremBadge = req.isPremium
+      ? ' <span style="background:linear-gradient(135deg,#FF8C00,#FFA726);color:#101010;font-weight:800;border-radius:999px;padding:1px 8px;font-size:9px;letter-spacing:.04em;vertical-align:middle;">⭐ PRIORITY</span>'
+      : '';
     var card = document.createElement('div');
     card.className = 'ed-athlete-card pc-req-card';
     card.innerHTML =
       '<div class="ed-athlete-av">' + esc(initials) + '</div>' +
       '<div class="ed-athlete-info">' +
-        '<span class="ed-athlete-name">' + esc(name) + '</span>' +
+        '<span class="ed-athlete-name">' + esc(name) + _pcPremBadge + '</span>' +
         '<span class="ed-athlete-sub">' + icon + ' ' + esc(req.planLabel || req.planType) +
           ' · ₹' + esc(String(req.price)) + '/mo</span>' +
         '<span class="ed-athlete-sub">' + esc(statusLine) + '</span>' +
@@ -4575,8 +4586,11 @@ function renderInbox(expert, expertUid) {
     return;
   }
 
-  /* Sort newest first */
+  /* PRIORITY QUEUE: Premium athletes' requests pin to the top (stamped
+     isPremium at request creation), then newest-first within each group. */
   bucket = bucket.slice().sort(function(a, b) {
+    var prem = (b.isPremium ? 1 : 0) - (a.isPremium ? 1 : 0);
+    if (prem !== 0) return prem;
     return new Date(b.createdAt || b.acceptedAt || 0) - new Date(a.createdAt || a.acceptedAt || 0);
   });
 
@@ -4631,11 +4645,17 @@ function _prBuildInboxCard(review, expert) {
     actionsHtml = '<span class="pr-inbox-stamp pr-inbox-stamp--rejected">✕ Rejected</span>';
   }
 
+  /* Premium athletes' requests are pinned first (see renderInbox sort) —
+     the badge tells the expert WHY this card outranks older ones. */
+  var premiumBadge = review.isPremium
+    ? '<span class="pr-inbox-stamp" style="background:linear-gradient(135deg,#FF8C00,#FFA726);color:#101010;font-weight:800;border-radius:999px;padding:2px 10px;font-size:10px;letter-spacing:.04em;">⭐ PRIORITY · PREMIUM</span>'
+    : '';
+
   card.innerHTML =
     '<div class="pr-inbox-card-top">' +
       '<div class="pr-inbox-avatar">' + esc(nameInit) + '</div>' +
       '<div class="pr-inbox-info">' +
-        '<div class="pr-inbox-name">' + esc(displayName) + '</div>' +
+        '<div class="pr-inbox-name">' + esc(displayName) + (premiumBadge ? ' ' + premiumBadge : '') + '</div>' +
         '<div class="pr-inbox-meta">' +
           '<span>' + typeLabel + '</span>' +
           (timeAgo ? '<span class="pr-inbox-meta-dot">·</span><span>' + esc(timeAgo) + '</span>' : '') +
