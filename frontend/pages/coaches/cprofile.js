@@ -3022,6 +3022,12 @@
         }
 
         var now = new Date().toISOString();
+        /* Athlete display name — the expert's Modify pages render
+           review.athleteName/userName; without this every review showed
+           the generic "Reviewing plan for Athlete". */
+        var _fbUsr = {};
+        try { _fbUsr = JSON.parse(localStorage.getItem('zitlas_firebase_user') || '{}') || {}; } catch (_) {}
+        var _athleteNm = _fbUsr.name || _fbUsr.displayName || 'Athlete';
         var profileBasics = {
           age:                  a.age                  || null,
           gender:               a.gender               || null,
@@ -3049,6 +3055,8 @@
           return {
             id:         s.id,
             userId:     userId,
+            athleteName: _athleteNm,
+            userName:    _athleteNm,
             expertId:   coach.id,
             expertName: coach.name,
             expertRole: coach.role,

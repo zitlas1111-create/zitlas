@@ -1547,42 +1547,124 @@
     section.style.display = '';
   }
 
+  /* ROOT CAUSE this rewrite fixes: this flow used to POST only to
+     /api/review/submit — an IN-MEMORY dict on the backend (routes/
+     review.py) that (a) nothing on the expert side ever reads (the expert
+     dashboard + Modify pages read Firestore review_requests exclusively)
+     and (b) evaporates on every server restart. The request also carried
+     no `userId` (only a possibly-random `athleteId`), so even if the doc
+     had reached Firestore, the athlete's own review-sync listener
+     (where('userId'==uid)) could never see its completion. Net effect:
+     the "Request Sent / PENDING" card sat stuck forever and the expert
+     never received anything — the diet page's Verify-by-Nutritionist
+     flow was broken end-to-end. It now writes the SAME Firestore
+     review_requests contract as cprofile.js's working paid flow (PR_
+     ids, userId, planData, assessmentData, profileBasics, planId), so
+     the entire downstream pipeline — expert dashboard inbox, Modify Diet
+     page, completion, review-sync, banner, accept — works identically no
+     matter which page the request started from. */
   function submitVerifyRequest(expertId) {
-    var expert     = _getSponsoredExperts().find(function(n) { return n.id === expertId; });
-    var athleteId  = localStorage.getItem('zitlas_athlete_id') || ('athlete_' + Date.now());
-    var fbUser     = safeJSON('zitlas_firebase_user', {});
+    var expert      = _getSponsoredExperts().find(function(n) { return n.id === expertId; });
+    var fbUser      = safeJSON('zitlas_firebase_user', {});
+    var userId      = fbUser && fbUser.uid;
     var athleteName = (fbUser && (fbUser.name || fbUser.displayName)) || 'Athlete';
 
-    var reviewRequest = {
-      id:           'rvw_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
-      athleteId:    athleteId,
+    if (!userId) { showToast('Please sign in first.'); return; }
+    if (typeof ZitlasDB === 'undefined') { showToast('Connection unavailable — please try again.'); return; }
+
+    /* The plan the expert will edit — the athlete's CURRENT plan,
+       unwrapped from the wrapper schema (validated: stale wrappers were
+       already discarded by loadDietStorage). */
+    var _st      = loadDietStorage();
+    var planData = _st ? (_st.currentDietPlan || _st.originalDietPlan) : null;
+    if (!planData || !planData.days || !planData.days.length) {
+      showToast('No diet plan found — generate your plan first.');
+      return;
+    }
+
+    var a    = safeJSON('zitlas_assessment', null) || safeJSON('zitlas_survey', {}) || {};
+    var calc = safeJSON('zitlas_calculations', null);
+    var now  = new Date().toISOString();
+    var id   = 'PR_' + Date.now() + '_d_' + Math.random().toString(36).slice(2, 6);
+
+    var reviewDoc = {
+      id:           id,
+      userId:       userId,
+      athleteId:    userId,
+      athleteName:  athleteName,
+      userName:     athleteName,
       athlete_name: athleteName,
       expertId:     expertId,
-      status:       'pending',
-      submittedAt:  new Date().toISOString(),
-      context: {
-        assessment:   safeJSON('zitlas_assessment', null) || safeJSON('zitlas_survey', null),
-        calculations: safeJSON('zitlas_calculations', null),
+      expertName:   (expert && expert.name) || 'Expert',
+      expertRole:   (expert && expert.role) || 'Nutritionist',
+      reviewType:   'diet',
+      planData:     planData,
+      assessmentData: {
+        assessment:   a,
+        calculations: calc,
         swot:         safeJSON('zitlas_swot', null),
-        diet_plan:    safeJSON('zitlas_diet_plan', null),
-        workout_plan: safeJSON('zitlas_workout_plan', null),
       },
-      goal:   safeJSON('zitlas_goal', null),
-      planId: localStorage.getItem('zitlas_plan_id'),
-      fee:    expert ? expert.fee : 149,
+      profileBasics: {
+        age:                  a.age                  || null,
+        gender:               a.gender               || null,
+        weight_kg:            a.weight_kg            || null,
+        height_cm:            a.height_cm            || null,
+        goal_weight_kg:       a.goal_weight_kg       || null,
+        activity_level:       a.activity_level       || null,
+        diet_preference:      a.diet_preference      || null,
+        workout_preference:   a.workout_preference   || null,
+        fitness_goal:         a.fitness_goal         || null,
+        transformation_goal:  a.transformation_goal  || null,
+        goal_duration_months: a.goal_duration_months || null,
+        fitness_level:        a.fitness_level        || null,
+        stress_level:         a.stress_level         || null,
+        available_time:       a.available_time       || null,
+        target_body_fat_pct:  a.target_body_fat_pct  || null,
+        biggest_struggle:     a.biggest_struggle     || a.struggle || null,
+      },
+      goal:          safeJSON('zitlas_goal', null),
+      planId:        localStorage.getItem('zitlas_plan_id') || null,
+      serviceType:   'verification',
+      totalPrice:    (expert && expert.fee) || 0,
+      fee:           (expert && expert.fee) || 0,
+      paymentStatus: 'unpaid',
+      status:        'pending',
+      createdAt:     now,
+      submittedAt:   now,
+      completedAt:   null,
     };
 
+    /* Active-request anchor — the same compact shape cprofile.js writes;
+       getCompletedPlanReview()/renderVerifyNutriSection() match on it. */
     try {
-      localStorage.setItem('zitlas_review_request', JSON.stringify(reviewRequest));
+      localStorage.setItem('zitlas_review_request', JSON.stringify({
+        id: id, expertId: expertId, planId: reviewDoc.planId, status: 'pending',
+      }));
     } catch (_) {}
 
+    ZitlasDB.collection('review_requests').doc(id)
+      .set(Object.assign({}, reviewDoc, {
+        serverTimestamp: firebase.firestore.FieldValue.serverTimestamp(),
+      }))
+      .then(function() {
+        console.log('[VERIFY] review_requests/' + id + ' created (diet page flow)');
+      })
+      .catch(function(e) {
+        console.error('[VERIFY] Firestore write failed', e);
+        showToast('Could not send request — please check your connection and try again.');
+      });
+
+    /* Legacy backend mirror — fire-and-forget, kept for API compatibility
+       only; Firestore above is the real pipeline. */
     fetch('/api/review/submit', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(reviewRequest),
+      body:    JSON.stringify({ id: id, athleteId: userId, athlete_name: athleteName,
+        expertId: expertId, status: 'pending', submittedAt: now,
+        goal: reviewDoc.goal, planId: reviewDoc.planId, fee: reviewDoc.fee }),
     }).catch(function() {});
 
-    updateVerifyStatusUI(reviewRequest);
+    updateVerifyStatusUI(reviewDoc);
 
     document.querySelectorAll('.vn-btn--primary[data-vn-expert]').forEach(function(btn) {
       if (btn.dataset.vnExpert === expertId) {
@@ -1708,13 +1790,36 @@
     return coachPlan.planId === current;
   }
 
+  /* PLAN PRIORITY (product spec): an expert-reviewed plan outranks the
+     coach plan, which outranks the raw AI plan.
+       1. expert-reviewed plan (completed review being previewed, or the
+          accepted expert wrapper in zitlas_diet_plan)
+       2. coach plan (active, or ended-but-kept)
+       3. AI plan
+     Without this yield, applyCoachDiet() unconditionally replaced
+     weeklyPlan on EVERY coaching_plans/personal_coaching snapshot — so a
+     nutritionist's reviewed plan (delivered via review-sync) rendered for
+     a moment and was then silently clobbered back to the coach's frozen
+     plan, and an ACCEPTED expert plan could never display at all while an
+     ended coaching relationship existed. That was the "expert reviewed
+     diet plan is not reflecting for users" bug whenever the athlete had
+     ever had a coach. */
+  function _pcExpertPlanActive() {
+    if (planSource === 'expert') return true;
+    /* loadDietStorage() is validated (stale/foreign-goal wrappers are
+       discarded inside it), so isExpertPlan here is trustworthy. */
+    var st = loadDietStorage();
+    return !!(st && st.isExpertPlan);
+  }
+
   function applyCoachDiet() {
     var coachDiet = _pcPlanDoc && _pcPlanDoc.diet;
     if (!_pcShowsCoachPlan() || !coachDiet || !coachDiet.days || !coachDiet.days.length ||
-        !_pcCoachPlanIsCurrent(coachDiet)) {
-      /* Not eligible / no coach plan — leave the AI flow exactly as-is.
-         If we had been showing a coach plan and it disappeared, reload to
-         restore the pristine AI pipeline rather than half-reverting state. */
+        !_pcCoachPlanIsCurrent(coachDiet) || _pcExpertPlanActive()) {
+      /* Not eligible / no coach plan / outranked by an expert-reviewed
+         plan — leave the AI/expert flow exactly as-is. If we had been
+         showing a coach plan and it lost eligibility, reload to restore
+         the pristine pipeline rather than half-reverting state. */
       if (_pcActive) { _pcActive = false; window.location.reload(); }
       return;
     }

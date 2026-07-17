@@ -91,6 +91,118 @@
     return meals;
   }
 
+  /* ── Athlete context panel ──
+     Renders everything the ZITLAS assessment knows about this athlete so
+     the expert reviews the plan in context (who is this person, what's
+     their goal, what are their restrictions/targets) instead of editing
+     meals blind. Data comes from the snapshot the request itself carries:
+     profileBasics + assessmentData (paid cprofile flow) or context
+     (diet-page flow) — older requests that predate those fields simply
+     render fewer rows. NOTE: deliberately NOT class mp-day-card —
+     collectEdited() iterates .mp-day-card and must never see this. */
+  function _ctxRow(label, value) {
+    if (value == null || value === '' || (Array.isArray(value) && !value.length)) return '';
+    var v = Array.isArray(value) ? value.join(', ') : String(value);
+    return '<div class="mp-ctx-row"><span class="mp-ctx-label">' + esc(label) + '</span>' +
+           '<span class="mp-ctx-value">' + esc(v) + '</span></div>';
+  }
+  function _ctxSection(title, rowsHtml) {
+    if (!rowsHtml) return '';
+    return '<div class="mp-ctx-section"><p class="mp-ctx-title">' + esc(title) + '</p>' + rowsHtml + '</div>';
+  }
+  function _pick(obj, keys) {
+    if (!obj) return null;
+    for (var i = 0; i < keys.length; i++) {
+      var v = obj[keys[i]];
+      if (v != null && v !== '') return v;
+    }
+    return null;
+  }
+
+  function buildContextPanel(review) {
+    var ad   = review.assessmentData || {};
+    var ctx  = review.context || {};
+    var assess = ad.assessment || ctx.assessment || {};
+    var p    = Object.assign({}, assess, review.profileBasics || {});
+    var calc = ad.calculations || ctx.calculations || {};
+    var goal = review.goal || {};
+
+    var userRows =
+      _ctxRow('Name',   review.athleteName || review.userName || review.athlete_name) +
+      _ctxRow('Age',    p.age) +
+      _ctxRow('Gender', p.gender) +
+      _ctxRow('Height', p.height_cm ? p.height_cm + ' cm' : null) +
+      _ctxRow('Weight', p.weight_kg ? p.weight_kg + ' kg' : null) +
+      _ctxRow('Goal Weight', p.goal_weight_kg ? p.goal_weight_kg + ' kg' : null) +
+      _ctxRow('Occupation', _pick(p, ['occupation', 'living_situation']));
+
+    var goalRows =
+      _ctxRow('Goal', goal.type || _pick(p, ['fitness_goal', 'transformation_goal'])) +
+      _ctxRow('Current → Target', (goal.currentVal != null && goal.targetVal != null)
+        ? goal.currentVal + ' → ' + goal.targetVal + ' ' + (goal.unit || '') : null) +
+      _ctxRow('Duration', p.goal_duration_months ? p.goal_duration_months + ' months' : null) +
+      _ctxRow('Target Body Fat', p.target_body_fat_pct ? p.target_body_fat_pct + '%' : null) +
+      _ctxRow('Biggest Struggle', p.biggest_struggle);
+
+    var assessRows =
+      _ctxRow('Activity Level',  p.activity_level) +
+      _ctxRow('Fitness Level',   p.fitness_level) +
+      _ctxRow('Diet Preference', p.diet_preference) +
+      _ctxRow('Workout Preference', p.workout_preference) +
+      _ctxRow('Available Time',  p.available_time) +
+      _ctxRow('Sleep',  _pick(p, ['sleep_hours', 'sleep', 'sleepHours'])) +
+      _ctxRow('Stress Level', p.stress_level) +
+      _ctxRow('Budget', _pick(p, ['budget', 'daily_budget'])) +
+      _ctxRow('⚕️ Medical Conditions', _pick(p, ['medical_conditions', 'health_conditions']) || 'None reported');
+
+    var targetRows =
+      _ctxRow('BMI',  _pick(calc, ['bmi'])) +
+      _ctxRow('BMR',  _pick(calc, ['bmr']) ? _pick(calc, ['bmr']) + ' kcal' : null) +
+      _ctxRow('TDEE', _pick(calc, ['tdee']) ? _pick(calc, ['tdee']) + ' kcal' : null) +
+      _ctxRow('Calorie Target', _pick(calc, ['daily_calories', 'calorie_target', 'target_calories', 'calories'])) +
+      _ctxRow('Protein Target', _pick(calc, ['protein_target', 'protein_g', 'daily_protein', 'protein'])) +
+      _ctxRow('Water Target',   _pick(calc, ['water_liters', 'water_target', 'hydration_liters'])) +
+      _ctxRow('Steps Target',   _pick(calc, ['daily_steps', 'steps_target', 'steps']));
+
+    var html =
+      _ctxSection('👤 Athlete Information', userRows) +
+      _ctxSection('🎯 Goal Summary', goalRows) +
+      _ctxSection('📋 Assessment Summary', assessRows) +
+      _ctxSection('🧮 Nutrition Targets', targetRows);
+    if (!html) return null;
+
+    var panel = document.createElement('div');
+    panel.className = 'mp-ctx-panel';
+    panel.innerHTML =
+      '<div class="mp-ctx-head">' +
+        '<span>Athlete Profile &amp; Assessment</span>' +
+        '<button class="mp-ctx-toggle" id="mpCtxToggle" type="button">Hide</button>' +
+      '</div>' +
+      '<div class="mp-ctx-body" id="mpCtxBody">' + html + '</div>';
+    panel.querySelector('#mpCtxToggle').addEventListener('click', function () {
+      var b = panel.querySelector('#mpCtxBody');
+      var hidden = b.style.display === 'none';
+      b.style.display = hidden ? '' : 'none';
+      this.textContent = hidden ? 'Hide' : 'Show';
+    });
+    return panel;
+  }
+
+  function buildNotesPanel(review) {
+    var wrap = document.createElement('div');
+    wrap.className = 'mp-notes-panel';
+    wrap.innerHTML =
+      '<p class="mp-ctx-title">📝 Review Notes for the Athlete</p>' +
+      '<textarea class="mp-notes-input" id="mpNotes" rows="3" ' +
+        'placeholder="Optional — explain your changes, add guidance (the athlete sees this with the reviewed plan)…"></textarea>';
+    wrap.querySelector('#mpNotes').value = review.expertNotes || '';
+    return wrap;
+  }
+  function getExpertNotes() {
+    var el = document.getElementById('mpNotes');
+    return el ? el.value.trim() : '';
+  }
+
   function renderPlan(days) {
     var body = document.getElementById('mpBody');
     if (!body) return;
@@ -268,6 +380,16 @@
 
     renderPlan(origDays);
 
+    /* Athlete context above the plan, Review Notes below it — both inside
+       the scroll container, both outside collectEdited()'s .mp-day-card
+       query so plan collection is untouched. */
+    var _mpBody = document.getElementById('mpBody');
+    if (_mpBody) {
+      var _ctxPanel = buildContextPanel(review);
+      if (_ctxPanel) _mpBody.insertBefore(_ctxPanel, _mpBody.firstChild);
+      _mpBody.appendChild(buildNotesPanel(review));
+    }
+
     document.getElementById('mpBack').addEventListener('click', function () {
       window.location.href = 'expert-dashboard.html';
     });
@@ -284,6 +406,7 @@
       patchReview(reviewId, {
         reviewedDietPlan:   edited,
         mealChangeHistory:  history,
+        expertNotes:        getExpertNotes(),
         savedAt:            new Date().toISOString(),
       });
 
@@ -291,6 +414,7 @@
         ZitlasDB.collection('review_requests').doc(reviewId).update({
           reviewedDietPlan:  edited,
           mealChangeHistory: history,
+          expertNotes:       getExpertNotes(),
           savedAt:           new Date().toISOString(),
         }).catch(function (e) { console.warn('[MODIFY-DIET] Firestore save sync failed:', e); });
       }
@@ -317,6 +441,7 @@
         completedAt:     nowIso,
         expertName:      expertName,
         expertId:        expertId,
+        expertNotes:     getExpertNotes(),
         athleteAccepted: false,
       });
 
@@ -327,6 +452,7 @@
           completedAt:       nowIso,
           expertName:        expertName,
           expertId:          expertId,
+          expertNotes:       getExpertNotes(),
           reviewedDietPlan:  _latest.reviewedDietPlan  || null,
           mealChangeHistory: _latest.mealChangeHistory || [],
         };
