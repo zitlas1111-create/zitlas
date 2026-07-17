@@ -477,6 +477,12 @@ function _addToExpertsStorage(uid, email, name) {
 }
 
 function syncFirebaseUser(user, role) {
+  /* ACCOUNT GUARD — claim the local cache for this uid BEFORE writing any
+     identity keys. If the cache belonged to a different account, every
+     user-scoped key (plans, goal, membership, wallet, reviews…) is purged
+     here, so the new session can never inherit — or re-upload — another
+     user's data. See ZitlasAccountGuard in assets/js/firebase-config.js. */
+  if (typeof ZitlasAccountGuard !== 'undefined') ZitlasAccountGuard.beginSession(user.uid);
   _clearAuthLocalStorage();
   console.log('[AUTH] syncFirebaseUser uid=' + user.uid + ' role=' + role);
 
@@ -515,6 +521,8 @@ function syncFirebaseUser(user, role) {
 
 
 function syncEmailUser(user, name, role) {
+  /* ACCOUNT GUARD — same isolation claim as syncFirebaseUser above. */
+  if (typeof ZitlasAccountGuard !== 'undefined') ZitlasAccountGuard.beginSession(user.uid);
   _clearAuthLocalStorage();
   console.log('[AUTH] syncEmailUser uid=' + user.uid + ' role=' + role);
 

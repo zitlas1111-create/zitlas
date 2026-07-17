@@ -241,7 +241,44 @@ record (like an email attachment — see the trade-offs below) and the
 `reviewedDietPlan` copy as review history; neither is read as the active
 plan by anything. The active plan has exactly one home: `users/{uid}`.
 
-## 7. Known accepted trade-offs
+## 7. Multi-user data isolation (Account Guard)
+
+localStorage is per-BROWSER, not per-user, and the entire app is
+localStorage-first with global key names. Historically login/logout cleared
+only ~10 auth keys, so a second account signing in on the same device
+inherited the first account's entire cache (goal, plans, premium, wallet,
+reviews) — and cloud-sync then uploaded those leftovers into the second
+account's `users/{uid}` doc, making the leak permanent.
+
+**`ZitlasAccountGuard`** (assets/js/firebase-config.js — loads on every
+Firebase page before all app scripts) enforces isolation:
+
+- `zitlas_cache_owner_uid` stamps which account owns this browser's cache.
+- On any uid≠owner condition the guard purges **every** localStorage key
+  except an explicit device/UI keep-list (`zitlas_theme`, `zitlas_language`,
+  `zitlas_trial_mode`, `zitlas_step_perm_state`, `zitlas_remember`) and the
+  Firebase SDK's own `firebase:*` persistence entries, plus clears
+  sessionStorage. Deny-by-default: a future feature that forgets to
+  namespace its key is still isolated.
+- Enforced three ways: parse-time (before any page script reads),
+  `onAuthStateChanged` (purge + reload if a mismatch surfaces mid-page),
+  and `beginSession(uid)` called by login.js the moment sign-in succeeds
+  (before identity keys are written).
+- Both logout flows (profile.js, expert-dashboard.js) call
+  `clearUserCache()` — full purge including identity keys.
+- First run after deploy adopts the current uid without purging, so
+  existing single-user devices keep their offline cache.
+
+**Rule: any new localStorage key is user data by default.** If it is
+genuinely device/UI-scoped, it must be added to the guard's KEEP_KEYS.
+
+Remediation for accounts contaminated BEFORE this fix: their `users/{uid}`
+docs may hold another user's uploaded data — fix by Goal Reset (clears all
+goal-scoped fields) plus manually correcting `membership`/`personalInfo`/
+`wallet` in the Firebase Console where needed; the guard prevents any new
+contamination.
+
+## 8. Known accepted trade-offs
 
 - A coach plan authored before this deploy (no `planId` stamp) stops rendering
   until the coach re-saves — one click, the editor auto-seeds/preserves content,

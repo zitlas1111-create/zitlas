@@ -3142,11 +3142,21 @@ async function logout() {
   try {
     if (typeof ZitlasAuth !== 'undefined') await ZitlasAuth.signOut();
   } catch (e) { console.warn('[ZITLAS] signOut error:', e); }
-  ['zitlas_token','zitlas_user','user','zitlas_user_role','zitlas_expert_id',
-   'zitlas_firebase_user','loggedIn','zitlas_expert_profile','currentUser',
-   'zitlas_expert_applied','zitlas_experts'].forEach(function (k) {
-    localStorage.removeItem(k);
-  });
+  /* ACCOUNT GUARD — full user-cache purge (plans, goal, membership,
+     wallet, reviews, chats… not just the handful of auth keys the old
+     list covered). The old partial clear was the multi-user data-leak
+     root cause: the next account to sign in on this browser inherited
+     everything the list missed. Fallback list kept for the (cached-page)
+     case where the guard isn't loaded. */
+  if (typeof ZitlasAccountGuard !== 'undefined') {
+    ZitlasAccountGuard.clearUserCache();
+  } else {
+    ['zitlas_token','zitlas_user','user','zitlas_user_role','zitlas_expert_id',
+     'zitlas_firebase_user','loggedIn','zitlas_expert_profile','currentUser',
+     'zitlas_expert_applied','zitlas_experts'].forEach(function (k) {
+      localStorage.removeItem(k);
+    });
+  }
   console.log('[LOCAL STORAGE CLEARED]');
   sessionStorage.removeItem('zitlas_guest');
   window.location.href = '../login/login.html';

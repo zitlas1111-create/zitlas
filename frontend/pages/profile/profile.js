@@ -130,12 +130,20 @@
         if (typeof ZitlasAuth !== 'undefined') await ZitlasAuth.signOut();
       } catch (e) { console.warn('[ZITLAS] signOut error:', e); }
 
-      /* Phase 9 — clear all session keys including new ones */
-      ['zitlas_token','zitlas_user','zitlas_firebase_user','zitlas_user_role',
-       'zitlas_expert_id','loggedIn','user','zitlas_expert_profile','currentUser',
-       'zitlas_expert_applied','zitlas_experts'].forEach(k => localStorage.removeItem(k));
+      /* ACCOUNT GUARD — full user-cache purge (plans, goal, membership,
+         wallet, reviews, chats… not just auth keys). The old partial
+         clear was the multi-user data-leak root cause: the next account
+         to sign in on this browser inherited everything the list missed.
+         Fallback list kept for the cached-page case. */
+      if (typeof ZitlasAccountGuard !== 'undefined') {
+        ZitlasAccountGuard.clearUserCache();
+      } else {
+        ['zitlas_token','zitlas_user','zitlas_firebase_user','zitlas_user_role',
+         'zitlas_expert_id','loggedIn','user','zitlas_expert_profile','currentUser',
+         'zitlas_expert_applied','zitlas_experts'].forEach(k => localStorage.removeItem(k));
+        ['zitlas_guest','zitlas_pending_action','user'].forEach(k => sessionStorage.removeItem(k));
+      }
       console.log('[LOCAL STORAGE CLEARED]');
-      ['zitlas_guest','zitlas_pending_action','user'].forEach(k => sessionStorage.removeItem(k));
 
       window.location.replace('../login/login.html');
     });

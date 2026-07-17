@@ -62,3 +62,138 @@ function getIdToken() {
 console.log('[FIREBASE] app options', firebase.app().options);
 console.log('[FIREBASE] apps', firebase.apps);
 console.log('[FIREBASE] firestore instance', ZitlasDB);
+
+/* ══════════════════════════════════════════════════════════
+   ZITLAS ACCOUNT GUARD — multi-user data isolation
+   ══════════════════════════════════════════════════════════
+   ROOT CAUSE THIS FIXES: the whole app is localStorage-first with
+   GLOBAL key names (zitlas_diet_plan, zitlas_membership, zitlas_goal,
+   zitlas_wallet, expert_plan_reviews, …), and login/logout only ever
+   cleared ~10 auth/identity keys. localStorage is per-BROWSER, not
+   per-user — so when account B signed in after account A on the same
+   device, B inherited A's entire cache (plans, goal, premium, wallet,
+   reviews), and cloud-sync then UPLOADED A's leftovers into
+   users/{B.uid}, making the leak permanent and cross-device.
+
+   THE FIX: one owner stamp (zitlas_cache_owner_uid) + one purge
+   choke point, enforced from this file because it loads on every
+   Firebase page BEFORE all app scripts. If the signed-in uid differs
+   from the cache owner, every user-scoped key is wiped before any
+   page code can read — or re-upload — another account's data.
+   Firestore itself was already correctly per-uid everywhere; this
+   closes the local-cache layer. Runs three ways:
+     1. parse-time (below) — before the page's own scripts read anything
+     2. onAuthStateChanged — catches a stale/absent local identity
+     3. beginSession(uid) — called by login.js the moment sign-in succeeds
+   Logout calls clearUserCache() (full purge, identity included). */
+var ZitlasAccountGuard = (function () {
+  var OWNER_KEY = 'zitlas_cache_owner_uid';
+
+  /* Device/UI-scoped keys that legitimately survive an account switch.
+     EVERYTHING else in localStorage is treated as user data and purged —
+     deny-by-default, so a future feature that forgets to namespace its
+     key is still isolated. */
+  var KEEP_KEYS = [
+    OWNER_KEY,
+    'zitlas_theme',           /* display preference */
+    'zitlas_language',        /* i18n preference */
+    'zitlas_trial_mode',      /* platform-wide flag, not user data */
+    'zitlas_step_perm_state', /* device sensor permission state */
+    'zitlas_remember',        /* login-form convenience */
+  ];
+  /* Identity keys login.js writes for the CURRENT session — preserved
+     during a switch-purge only when they already belong to the new uid
+     (login writes them before navigation; wiping them would render the
+     fresh session logged-out). */
+  var IDENTITY_KEYS = ['zitlas_user', 'zitlas_firebase_user', 'zitlas_token',
+    'zitlas_user_role', 'loggedIn', 'zitlas_expert_id', 'zitlas_expert_profile'];
+
+  function _localUid() {
+    try {
+      var fb = JSON.parse(localStorage.getItem('zitlas_firebase_user') || 'null');
+      return (fb && fb.uid) || null;
+    } catch (_) { return null; }
+  }
+
+  function purgeUserData(preserveIdentityForUid) {
+    var preserved = {};
+    if (preserveIdentityForUid && _localUid() === preserveIdentityForUid) {
+      IDENTITY_KEYS.forEach(function (k) {
+        var v = localStorage.getItem(k);
+        if (v !== null) preserved[k] = v;
+      });
+    }
+    var removed = 0;
+    for (var i = localStorage.length - 1; i >= 0; i--) {
+      var key = localStorage.key(i);
+      if (key == null) continue;
+      if (KEEP_KEYS.indexOf(key) !== -1) continue;
+      /* Never touch the Firebase SDK's own persistence entries — purging
+         them would sign the NEW user out mid-switch. */
+      if (key.indexOf('firebase:') === 0 || key.indexOf('__sak') === 0) continue;
+      localStorage.removeItem(key);
+      removed++;
+    }
+    Object.keys(preserved).forEach(function (k) {
+      try { localStorage.setItem(k, preserved[k]); } catch (_) {}
+    });
+    try { sessionStorage.clear(); } catch (_) {}
+    console.warn('[ACCOUNT GUARD] purged ' + removed + ' user-scoped storage key(s)');
+  }
+
+  /* Claim the cache for `uid`. Purges first if it belonged to a
+     different account. Returns true when a purge happened. */
+  function beginSession(uid) {
+    if (!uid) return false;
+    var owner = null;
+    try { owner = localStorage.getItem(OWNER_KEY); } catch (_) {}
+    if (owner === uid) return false;
+    var purged = false;
+    if (owner && owner !== uid) {
+      console.warn('[ACCOUNT GUARD] account switch detected (' + owner + ' → ' + uid + ') — isolating user data');
+      purgeUserData(uid);
+      purged = true;
+    }
+    /* No recorded owner (first run after this deploy): adopt the current
+       uid WITHOUT purging, so existing single-user devices keep their
+       offline cache. */
+    try { localStorage.setItem(OWNER_KEY, uid); } catch (_) {}
+    return purged;
+  }
+
+  /* Logout: full purge including identity keys + release ownership. */
+  function clearUserCache() {
+    purgeUserData(null);
+    try { localStorage.removeItem(OWNER_KEY); } catch (_) {}
+  }
+
+  /* 1 — parse-time enforcement: this file loads before every page's own
+     scripts, so a mismatch is resolved before anything renders. */
+  beginSession(_localUid());
+
+  /* 2 — auth-listener enforcement: authoritative uid from Firebase. If a
+     mismatch surfaces only now (stale/absent zitlas_firebase_user), the
+     page may already have rendered the previous account's data — purge
+     and reload so it re-boots clean and hydrates the right account. */
+  ZitlasAuth.onAuthStateChanged(function (user) {
+    if (!user) return;
+    var owner = null;
+    try { owner = localStorage.getItem(OWNER_KEY); } catch (_) {}
+    if (owner && owner !== user.uid) {
+      console.warn('[ACCOUNT GUARD] signed-in uid differs from cache owner — purging and reloading');
+      purgeUserData(user.uid);
+      try { localStorage.setItem(OWNER_KEY, user.uid); } catch (_) {}
+      window.location.reload();
+      return;
+    }
+    if (!owner) {
+      try { localStorage.setItem(OWNER_KEY, user.uid); } catch (_) {}
+    }
+  });
+
+  return {
+    beginSession:   beginSession,
+    purgeUserData:  purgeUserData,
+    clearUserCache: clearUserCache,
+  };
+})();
