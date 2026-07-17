@@ -311,8 +311,26 @@
     return null;
   }
 
+  /* ROOT CAUSE of "expert-reviewed plan doesn't persist after refresh /
+     doesn't reflect for the user": this function is the SINGLE place the
+     diet wrapper (AI plan, athlete swaps, and — critically — the expert-
+     accepted plan written by acceptExpertPlan()) is persisted, and until
+     now it only ever wrote localStorage. Per docs/GOAL_LIFECYCLE_
+     ARCHITECTURE.md Rule 1, `users/{uid}.dietPlan` on Firestore is the
+     canonical store; diet.js's own boot sequence (see the bottom of this
+     file) calls `ZitlasCloudSync.hydrateOnLoad()` BEFORE init() on every
+     page load, which OVERWRITES localStorage with whatever is in that
+     cloud field. Every save here was cloud-blind, so the very next
+     refresh (or any other device) pulled the stale pre-accept AI plan
+     back down and silently clobbered the athlete's just-accepted expert
+     plan — the plan was never actually lost, just permanently shadowed
+     by a cloud copy nothing ever updated. Routing through the same
+     ZitlasCloudSync.save() the delete path (discardDietStorage above)
+     already used closes this for all 7 call sites at once: accept,
+     athlete swaps, legacy-flat migration, and the planId adopt-stamp. */
   function saveDietStorage(storage) {
     try { localStorage.setItem('zitlas_diet_plan', JSON.stringify(storage)); } catch (_) {}
+    if (typeof ZitlasCloudSync !== 'undefined') ZitlasCloudSync.save('dietPlan', storage);
   }
 
   /* Apply expertModifications on top of currentDietPlan, returns deep-cloned effective plan */
@@ -2080,9 +2098,27 @@
   }
 
   function buildSnapMealRow(meal, dayName) {
-    /* Mutually exclusive with buildCoachMealRow — only render the
-       standalone AI-only flow when there's no active coach. */
-    if (typeof ZitlasCoachingGate !== 'undefined' && _pcRel && ZitlasCoachingGate.evaluate(_pcRel).active) return '';
+    /* Mutually exclusive with buildCoachMealRow, gated on the SAME single
+       source of truth that decides whether a coach-authored plan is on
+       screen at all: _pcShowsCoachPlan() (active OR ended — the function
+       that also gates applyCoachDiet()/_pcRenderBanner()'s "Coaching
+       ended — you're keeping your coach's last diet plan" banner).
+
+       THE BUG THIS FIXES: this used to check
+       `ZitlasCoachingGate.evaluate(_pcRel).active` — active-only, strictly
+       narrower than _pcShowsCoachPlan(). The instant a relationship's
+       status flipped from 'active' to 'ended', gate.active went false
+       while _pcShowsCoachPlan() stayed true (by design, so the athlete
+       keeps the frozen coach plan) — two different truth values deciding
+       two halves of the same screen. buildCoachMealRow's "Send Meal to
+       Coach" correctly disappeared (it's active-gated, as it should be —
+       there's no coach to send to anymore); but this function fell
+       through to the standalone AI-Snap-Meal branch, which is meant only
+       for athletes on a pure AI plan, not one still displaying — and
+       inviting further interaction on — a coach's authored plan. Gating
+       both rows on _pcShowsCoachPlan() means the banner and every
+       coaching-meal-action row can never disagree again. */
+    if (_pcShowsCoachPlan()) return '';
     if (dayName !== _pcTodayName()) return '';
     var mealType = (meal.meal_name || 'meal').toLowerCase();
     var log = _snapLogFor(dayName, mealType);

@@ -195,9 +195,24 @@
         if (changed) {
           try { localStorage.setItem(REVIEWS_KEY, JSON.stringify(all)); } catch (_) {}
         }
+        var anchorBefore = safeJSON(ANCHOR_KEY, null);
         reconcileAnchor(docs);
-        if (changed) {
-          console.log('[REVIEW SYNC]', docs.length, 'doc(s) merged — notifying page');
+        var anchorAfter = safeJSON(ANCHOR_KEY, null);
+        var anchorChanged = JSON.stringify(anchorBefore) !== JSON.stringify(anchorAfter);
+        /* Dispatch whenever EITHER the review cache OR the anchor changed —
+           not just the cache. reconcileAnchor() can silently heal a
+           missing/stale anchor (e.g. a review completed on another
+           device, or an in-tab anchor lost to a cache clear) with no
+           change to the reviews array itself (already fully synced from
+           an earlier snapshot) — that used to mean the anchor got fixed
+           in localStorage but the open diet page was never told, so
+           getCompletedPlanReview() kept reading the stale anchor until a
+           SECOND refresh happened to land after this snapshot. diet.js's
+           _onReviewsUpdated() is already a safe no-op when nothing
+           actually changed, so firing on either condition is free. */
+        if (changed || anchorChanged) {
+          console.log('[REVIEW SYNC]', docs.length, 'doc(s) processed — reviewsChanged:', changed,
+            'anchorChanged:', anchorChanged, '— notifying page');
           try { win.dispatchEvent(new CustomEvent('zitlas-review-updated')); } catch (_) {}
         }
       }, function (e) { console.warn('[REVIEW SYNC] listener error', e); });
