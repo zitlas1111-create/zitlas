@@ -2719,11 +2719,15 @@
     }
 
     function _computeTotalPrice() {
-      /* PREMIUM: review + expert-chat fees are PLATFORM charges → ₹0.
-         This zero also gets recorded as the request's totalPrice, so the
-         expert-side auto-charge attempts ₹0 (attemptCharge additionally
-         re-verifies premium from the athlete's users/{uid} doc inside
-         the transaction — this display value is never the authority). */
+      /* PLATFORM_CHARGES_FREE policy: review + expert-chat fees are ₹0
+         for EVERYONE — the only paid feature in ZITLAS is the Premium
+         subscription. The zero is also recorded as the request's
+         totalPrice, so the expert-side auto-charge attempts ₹0
+         (attemptCharge is additionally zero-gated by the same policy
+         inside the transaction — this display value is never the
+         authority). Premium check kept as a fallback trigger. */
+      if (typeof ZitlasPayment !== 'undefined' &&
+          typeof ZitlasPayment.isTrialMode === 'function' && ZitlasPayment.isTrialMode()) return 0;
       if (_pcvIsPremium()) return 0;
       var pricing = _getPricing(coach);
       var total = 0;

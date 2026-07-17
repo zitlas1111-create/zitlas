@@ -48,12 +48,22 @@
   ──────────────────────────────────────────── */
   window.ZitlasMembership = {
     getMembership: function () {
+      var fallback = { plan: 'basic', billing: 'monthly', active: true, started_at: new Date().toISOString() };
       try {
         var raw = localStorage.getItem(MEMBERSHIP_KEY);
-        if (!raw) return { plan: 'basic', billing: 'monthly', active: true, started_at: new Date().toISOString() };
-        return JSON.parse(raw);
+        if (!raw) return fallback;
+        var m = JSON.parse(raw);
+        /* Expired premium degrades to basic automatically — the paid
+           term (premium_expiry_date, written by the backend verify) is
+           the authority, never a client-set flag. */
+        if (m && m.plan === 'premium' && m.premium_expiry_date &&
+            new Date(m.premium_expiry_date) <= new Date()) {
+          return { plan: 'basic', billing: m.billing || 'monthly', active: true,
+                   started_at: m.started_at, premium_expired: true };
+        }
+        return m || fallback;
       } catch (_) {
-        return { plan: 'basic', billing: 'monthly', active: true, started_at: new Date().toISOString() };
+        return fallback;
       }
     },
 
@@ -198,27 +208,109 @@
     var btn = document.getElementById('mbBtnUpgrade');
     if (!btn) return;
 
+    /* REAL PAYMENT FLOW — Premium is NEVER granted before a verified
+       payment. Select billing → backend creates a Razorpay order with a
+       SERVER-authoritative price (₹149/mo, ₹999/yr) → Razorpay checkout →
+       backend verifies the HMAC signature and, only then, writes
+       users/{uid}.membership (plan, premium_plan, start/expiry dates,
+       payment_id, order_id, payment_status) inside a transaction. The
+       verified membership object returned by the backend is what gets
+       mirrored locally — the client never fabricates premium state.
+       (The old handler here activated premium instantly on click, no
+       payment — removed.) */
+    function _resetBtn() { btn.disabled = false; btn.textContent = 'Upgrade to Premium'; }
+
     btn.addEventListener('click', function () {
       var membership = window.ZitlasMembership.getMembership();
       if (membership.plan === 'premium') return;
+      if (typeof Razorpay === 'undefined') { showToast('Payment unavailable — please reload the page.'); return; }
+      if (typeof getIdToken !== 'function' ||
+          (typeof ZitlasAuth !== 'undefined' && !ZitlasAuth.currentUser)) {
+        showToast('Please sign in first.');
+        return;
+      }
 
-      var newMembership = {
-        plan:       'premium',
-        billing:    _billing,
-        active:     true,
-        started_at: new Date().toISOString(),
-      };
-      try { localStorage.setItem(MEMBERSHIP_KEY, JSON.stringify(newMembership)); } catch (_) {}
-      /* Cloud-sync to users/{uid}.membership — the AUTHORITATIVE copy the
-         payment layer (attemptCharge's in-transaction premium check), the
-         backend coaching request (priority flag), and every other device
-         read. Without this write, premium would exist only on this
-         device and platform charges would NOT be waived. */
-      if (typeof ZitlasCloudSync !== 'undefined') ZitlasCloudSync.save('membership', newMembership);
+      var billing = _billing === 'yearly' ? 'yearly' : 'monthly';
+      btn.disabled = true;
+      btn.textContent = 'Starting payment…';
 
-      renderPlanUI(newMembership);
-      showToast('⭐ Premium unlocked — zero platform charges across ZITLAS!');
+      getIdToken().then(function (token) {
+        return fetch('/api/payment/membership/create-order', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ billing: billing }),
+        });
+      }).then(function (res) {
+        return res.json().catch(function () { return {}; }).then(function (data) {
+          return { status: res.status, data: data };
+        });
+      }).then(function (result) {
+        if (result.status !== 200) {
+          console.error('[MEMBERSHIP] create-order failed', result);
+          showToast('Could not start payment — please try again.');
+          _resetBtn();
+          return;
+        }
+        var order = result.data;
+        var rzp = new Razorpay({
+          key: order.key_id, amount: order.amount, currency: order.currency, order_id: order.order_id,
+          name: 'ZITLAS Premium',
+          description: billing === 'yearly' ? 'Premium — ₹999/year' : 'Premium — ₹149/month',
+          handler: function (response) { _verifyMembershipPayment(response, _resetBtn); },
+          modal: { ondismiss: function () { showToast('Payment cancelled.'); _resetBtn(); } },
+          theme: { color: '#FF8C00' },
+        });
+        rzp.on('payment.failed', function (resp) {
+          console.error('[MEMBERSHIP] razorpay payment.failed', resp && resp.error);
+          showToast('Payment failed — ' + ((resp && resp.error && resp.error.description) || 'please try again.'));
+          _resetBtn();
+        });
+        rzp.open();
+      }).catch(function (e) {
+        console.error('[MEMBERSHIP] create-order failed', e);
+        showToast('Could not start payment — please try again.');
+        _resetBtn();
+      });
     });
+
+    function _verifyMembershipPayment(razorpayResponse, resetBtn) {
+      btn.textContent = 'Verifying payment…';
+      getIdToken().then(function (token) {
+        return fetch('/api/payment/membership/verify', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            razorpay_order_id:   razorpayResponse.razorpay_order_id,
+            razorpay_payment_id: razorpayResponse.razorpay_payment_id,
+            razorpay_signature:  razorpayResponse.razorpay_signature,
+          }),
+        });
+      }).then(function (res) {
+        return res.json().catch(function () { return {}; }).then(function (data) {
+          return { status: res.status, data: data };
+        });
+      }).then(function (result) {
+        if (result.status !== 200 || !result.data.success || !result.data.membership) {
+          console.error('[MEMBERSHIP] verification failed', result);
+          showToast('Payment could not be verified — contact support if money was deducted.');
+          resetBtn();
+          return;
+        }
+        /* The backend already wrote the authoritative users/{uid}.
+           membership inside its transaction — mirror the SAME object
+           locally so this session unlocks instantly; cloud-sync's
+           realtime listener keeps other devices in step. */
+        var m = result.data.membership;
+        try { localStorage.setItem(MEMBERSHIP_KEY, JSON.stringify(m)); } catch (_) {}
+        renderPlanUI(m);
+        resetBtn();
+        showToast('⭐ Premium activated — priority handling & higher limits unlocked!');
+      }).catch(function (e) {
+        console.error('[MEMBERSHIP] verification failed', e);
+        showToast('Payment could not be verified — contact support if money was deducted.');
+        resetBtn();
+      });
+    }
   }
 
   /* ── Back button ── */

@@ -1530,9 +1530,13 @@
       return;
     }
 
-    /* PREMIUM: review fees are ₹0 — show it instead of the normal fee */
-    var _vnPremium = typeof ZitlasPayment !== 'undefined' &&
-      typeof ZitlasPayment.isPremiumMember === 'function' && ZitlasPayment.isPremiumMember();
+    /* PLATFORM_CHARGES_FREE policy: expert services are ₹0 for EVERYONE
+       (basic and premium) — the only paid feature is the Premium
+       subscription. Premium membership remains a fallback trigger so the
+       FREE label still shows even if the policy fetch hasn't resolved. */
+    var _vnPremium = typeof ZitlasPayment !== 'undefined' && (
+      (typeof ZitlasPayment.isTrialMode === 'function' && ZitlasPayment.isTrialMode()) ||
+      (typeof ZitlasPayment.isPremiumMember === 'function' && ZitlasPayment.isPremiumMember()));
 
     rail.innerHTML = _vnExperts.map(function(n) {
       var profileUrl = '../coaches/cprofile.html?id=' + n.id;
@@ -1562,7 +1566,7 @@
           '<div class="vn-fee-row">' +
             (_vnPremium
               ? '<span class="vn-fee">⭐ FREE</span>' +
-                '<span class="vn-fee-label">with Premium</span>'
+                '<span class="vn-fee-label">no platform charges</span>'
               : '<span class="vn-fee">₹' + n.fee + '</span>' +
                 '<span class="vn-fee-label">review fee</span>') +
             '<span class="vn-divider">·</span>' +
@@ -1627,12 +1631,14 @@
     var calc = safeJSON('zitlas_calculations', null);
     var now  = new Date().toISOString();
     var id   = 'PR_' + Date.now() + '_d_' + Math.random().toString(36).slice(2, 6);
-    /* PREMIUM: platform charges are ₹0 and the request is priority-pinned
-       in the expert's queue. The recorded totalPrice of 0 is display/
-       belt-and-braces — the charge itself re-verifies premium from the
-       athlete's users/{uid} doc inside attemptCharge's transaction. */
+    /* isPremium → priority pinning in the expert's queue.
+       _free → PLATFORM_CHARGES_FREE policy (everyone) or premium: record
+       totalPrice 0. Belt-and-braces — the charge itself is zero-gated by
+       the same policy inside attemptCharge's transaction. */
     var _premium = typeof ZitlasPayment !== 'undefined' &&
       typeof ZitlasPayment.isPremiumMember === 'function' && ZitlasPayment.isPremiumMember();
+    var _free = _premium || (typeof ZitlasPayment !== 'undefined' &&
+      typeof ZitlasPayment.isTrialMode === 'function' && ZitlasPayment.isTrialMode());
 
     var reviewDoc = {
       id:           id,
@@ -1672,8 +1678,8 @@
       goal:          safeJSON('zitlas_goal', null),
       planId:        localStorage.getItem('zitlas_plan_id') || null,
       serviceType:   'verification',
-      totalPrice:    _premium ? 0 : ((expert && expert.fee) || 0),
-      fee:           _premium ? 0 : ((expert && expert.fee) || 0),
+      totalPrice:    _free ? 0 : ((expert && expert.fee) || 0),
+      fee:           _free ? 0 : ((expert && expert.fee) || 0),
       isPremium:     _premium,
       paymentStatus: 'unpaid',
       status:        'pending',

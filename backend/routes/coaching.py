@@ -42,7 +42,7 @@ from __future__ import annotations
 
 import time
 import traceback
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from google.cloud import firestore
@@ -58,7 +58,7 @@ from services.coaching_service import (
     now,
     release_reservation_txn,
 )
-from trial_config import CLIENT_TRIAL_MODE
+from trial_config import CLIENT_TRIAL_MODE, PLATFORM_CHARGES_FREE
 
 router = APIRouter()
 
@@ -145,14 +145,16 @@ async def create_request(body: RequestBody, caller: dict = Depends(verify_fireba
         print(f"[COACHING REQUEST] [4] expert loaded — expertId={body.expertId} "
               f"name={expert_name!r} planType={body.planType} amount={amount}")
 
-        # CLIENT TRIAL MODE (backend/trial_config.py — the single switch):
-        # coach hiring is free. Zeroing the amount HERE lets the entire
-        # existing escrow run unchanged — ₹0 is reserved, the wallet check
-        # (available < 0) can never fail, and /accept later debits the
-        # stored reservationAmount of ₹0. Flip the flag off and real
-        # pricing is live again with no other change.
-        if CLIENT_TRIAL_MODE:
-            print(f"[COACHING REQUEST] CLIENT_TRIAL_MODE active — amount {amount} -> 0 (free trial)")
+        # PLATFORM_CHARGES_FREE (permanent monetization policy) or
+        # CLIENT_TRIAL_MODE (temporary trial) — both from backend/
+        # trial_config.py: coaching is free; the only paid feature in
+        # ZITLAS is the Premium subscription. Zeroing the amount HERE lets
+        # the entire existing escrow run unchanged — ₹0 is reserved, the
+        # wallet check (available < 0) can never fail, and /accept later
+        # debits the stored reservationAmount of ₹0. Flip both flags off
+        # and real pricing is live again with no other change.
+        if CLIENT_TRIAL_MODE or PLATFORM_CHARGES_FREE:
+            print(f"[COACHING REQUEST] free-platform policy active — amount {amount} -> 0")
             amount = 0
 
         # Duplicate-request / double-spend guard: at most one open
@@ -210,8 +212,17 @@ async def create_request(body: RequestBody, caller: dict = Depends(verify_fireba
         # Premium waives PLATFORM charges only; the coaching price is the
         # expert's own professional fee and stays fully payable.
         _membership = (user_data or {}).get("membership") or {}
+        _expiry = _membership.get("premium_expiry_date")
+        _not_expired = True
+        if _expiry:
+            try:
+                _exp_dt = datetime.fromisoformat(str(_expiry).replace("Z", "+00:00"))
+                _not_expired = _exp_dt > now()
+            except (ValueError, TypeError):
+                _not_expired = True  # unparseable expiry — don't strip priority
         is_premium = (_membership.get("plan") == "premium"
-                      and _membership.get("active") is not False)
+                      and _membership.get("active") is not False
+                      and _not_expired)
         tx.set(request_ref, {
             "requestId": request_id,
             "athleteId": athlete_uid, "athleteName": athlete_name,

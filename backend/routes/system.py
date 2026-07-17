@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 
 from services.kb_manager import kb_manager
 from services import push_service
-from trial_config import CLIENT_TRIAL_MODE
+from trial_config import CLIENT_TRIAL_MODE, PLATFORM_CHARGES_FREE
 
 router = APIRouter()
 
@@ -21,13 +21,19 @@ router = APIRouter()
 @router.get("/trial-mode")
 async def trial_mode() -> dict[str, bool]:
     """
-    Single source of truth for the temporary client trial
+    Single source of truth for the platform charge policy
     (backend/trial_config.py). The frontend payment layer
-    (assets/js/payment-service.js) reads this at page load; when true,
-    every coach-related charge is granted free while Premium and wallet
-    recharge stay live.
+    (assets/js/payment-service.js) reads this at page load:
+      - clientTrialMode:     temporary 10-day client trial flag
+      - platformChargesFree: PERMANENT monetization policy — all expert
+        services free for everyone; only the Premium subscription is paid
+      - effectiveFree:       what the frontend actually gates on (either)
     """
-    return {"clientTrialMode": CLIENT_TRIAL_MODE}
+    return {
+        "clientTrialMode": CLIENT_TRIAL_MODE,
+        "platformChargesFree": PLATFORM_CHARGES_FREE,
+        "effectiveFree": CLIENT_TRIAL_MODE or PLATFORM_CHARGES_FREE,
+    }
 
 
 @router.get("/kb-status")

@@ -51,11 +51,20 @@
     try {
       fetch('/api/system/trial-mode').then(function (r) { return r.ok ? r.json() : null; })
         .then(function (data) {
-          if (!data || typeof data.clientTrialMode !== 'boolean') return;
-          _trialMode = data.clientTrialMode;
+          if (!data) return;
+          /* effectiveFree = CLIENT_TRIAL_MODE or PLATFORM_CHARGES_FREE
+             (the PERMANENT monetization policy: all expert services are
+             free for every user; only the Premium subscription is paid).
+             Older backends without the field fall back to the trial
+             flag alone. */
+          var eff = (typeof data.effectiveFree === 'boolean')
+            ? data.effectiveFree
+            : (typeof data.clientTrialMode === 'boolean' ? data.clientTrialMode : null);
+          if (eff === null) return;
+          _trialMode = eff;
           try { localStorage.setItem(_TRIAL_LS_KEY, String(_trialMode)); } catch (_) {}
-          console.log('[PAYMENT] CLIENT_TRIAL_MODE =', _trialMode,
-            _trialMode ? '— coach services are FREE (trial)' : '');
+          console.log('[PAYMENT] platform-free policy =', _trialMode,
+            _trialMode ? '— all expert services are FREE (subscription-only monetization)' : '');
         })
         .catch(function () { /* offline/unreachable — keep cached value */ });
     } catch (_) {}
@@ -68,10 +77,21 @@
      The MONEY decision never trusts this: attemptCharge() re-reads the
      paying athlete's membership from their users/{uid} doc inside the
      transaction, because charges can execute on the expert's device. */
+  /* Shared premium predicate — plan + active + not past expiry. Used for
+     both the local UI read below and the in-transaction authoritative
+     check inside attemptCharge (which passes the membership object from
+     the athlete's users/{uid} doc). */
+  function _membershipIsPremium(m) {
+    if (!m || m.plan !== 'premium' || m.active === false) return false;
+    if (m.premium_expiry_date) {
+      try { if (new Date(m.premium_expiry_date) <= new Date()) return false; } catch (_) {}
+    }
+    return true;
+  }
+
   function isPremiumMember() {
     try {
-      var m = JSON.parse(localStorage.getItem('zitlas_membership') || 'null');
-      return !!(m && m.plan === 'premium' && m.active !== false);
+      return _membershipIsPremium(JSON.parse(localStorage.getItem('zitlas_membership') || 'null'));
     } catch (_) { return false; }
   }
 
@@ -174,7 +194,7 @@
            chargeAmount is transaction-LOCAL so Firestore retries recompute
            it cleanly from the freshly-read user doc every attempt. */
         var _memb = (userSnap.exists && userSnap.data().membership) || null;
-        var _premiumFree = !!(_memb && _memb.plan === 'premium' && _memb.active !== false) && amount > 0;
+        var _premiumFree = _membershipIsPremium(_memb) && amount > 0;
         var chargeAmount = _premiumFree ? 0 : amount;
         if (_premiumFree) {
           console.log('[PAYMENT] PREMIUM MEMBER — platform charge ₹' + amount + ' waived to ₹0 for ' +

@@ -38,6 +38,26 @@ _DEFAULT = True  # <— flip to False after the 10-day client trial
 _env = os.getenv("CLIENT_TRIAL_MODE")
 CLIENT_TRIAL_MODE: bool = (_env.strip().lower() in ("1", "true", "yes", "on")) if _env else _DEFAULT
 
+# ══════════════════════════════════════════════════════════════════════
+# PLATFORM MONETIZATION POLICY (permanent — NOT the temporary trial above)
+# ══════════════════════════════════════════════════════════════════════
+# PLATFORM_CHARGES_FREE = True  →  ALL platform/expert-service charges are
+# ₹0 for EVERY user (basic and premium alike): diet/workout verification,
+# expert reviews, expert chat, coaching requests, nutritionist requests.
+# The ONLY payment in ZITLAS is the Premium Membership subscription
+# (₹149/month or ₹999/year via routes/payment.py membership endpoints).
+# Premium differentiates on priority handling, higher limits, and ad-free —
+# never on access or fees. The whole payment infrastructure stays intact;
+# flipping this to False re-enables per-service pricing with no other
+# code change (same single-switch pattern as CLIENT_TRIAL_MODE).
+_env_free = os.getenv("PLATFORM_CHARGES_FREE")
+PLATFORM_CHARGES_FREE: bool = (
+    _env_free.strip().lower() in ("1", "true", "yes", "on")
+) if _env_free else True
+
 print(f"[TRIAL CONFIG] CLIENT_TRIAL_MODE = {CLIENT_TRIAL_MODE}"
       f"{' (from env)' if _env else ''} — coach payments "
       f"{'DISABLED (free trial)' if CLIENT_TRIAL_MODE else 'ACTIVE'}")
+print(f"[TRIAL CONFIG] PLATFORM_CHARGES_FREE = {PLATFORM_CHARGES_FREE}"
+      f"{' (from env)' if _env_free else ''} — expert services are "
+      f"{'FREE for everyone (subscription-only monetization)' if PLATFORM_CHARGES_FREE else 'individually priced'}")
