@@ -347,7 +347,16 @@
     setText('pdWorkoutReview', '₹' + _pd.workoutReviewPrice);
     setText('pdBothReview',    '₹' + _pd.bothReviewPrice);
     setText('pdChat',          '₹' + _pd.chatPrice);
-    setText('pdCoaching',      'Starting ₹' + Math.min(_pd.coachingDietPrice, _pd.coachingTrainingPrice, _pd.coachingCompletePrice) + '/mo');
+    /* CLIENT TRIAL MODE — this "Starting ₹X/mo" summary reads the exact
+       same coaching prices the plan-selection modal shows; keeping it in
+       sync avoids a mismatch elsewhere on the same profile page. Real
+       prices (_pd.coaching*Price) are untouched — only this display
+       collapses to 0 while the trial flag is on. */
+    var _coachingIsFreeTrial = typeof ZitlasPayment !== 'undefined' &&
+      typeof ZitlasPayment.isTrialMode === 'function' && ZitlasPayment.isTrialMode();
+    setText('pdCoaching', _coachingIsFreeTrial
+      ? 'Starting ₹0/mo'
+      : 'Starting ₹' + Math.min(_pd.coachingDietPrice, _pd.coachingTrainingPrice, _pd.coachingCompletePrice) + '/mo');
 
     /* Stars */
     var fullStar = Math.round(parseFloat(coach.rating));
@@ -3796,13 +3805,31 @@
 
     /* Prices come from the expert's own Pricing & Services page (unlimited
        — spec's "No pricing limit, expert decides"); experts who haven't set
-       custom pricing yet see today's defaults (499/699/999), unchanged. */
+       custom pricing yet see today's defaults (499/699/999), unchanged.
+       .price ALWAYS holds this real, unmodified price — never zeroed —
+       so "the original prices return automatically" the instant
+       CLIENT_TRIAL_MODE goes off requires no code change here. Display
+       reads go through _coachingDisplayPrice(key) below instead of
+       .price directly, so the ₹0 override lives in exactly one place. */
     var _pricing = _getPricing(coach);
     var COACHING_PLANS = {
       diet:     { label: 'Diet Coaching',           icon: '🥗', price: _pricing.coachingDietPrice },
       training: { label: 'Training Coaching',       icon: '💪', price: _pricing.coachingTrainingPrice },
       complete: { label: 'Complete Transformation', icon: '🏆', price: _pricing.coachingCompletePrice },
     };
+    /* CLIENT TRIAL MODE (backend/trial_config.py, mirrored client-side by
+       ZitlasPayment.isTrialMode() — see assets/js/payment-service.js) —
+       single read point for "is coaching free right now", re-evaluated
+       live on every call (never cached at init time) so the modal is
+       always correct even if the trial flag's one-time /api/system/
+       trial-mode fetch resolves after this page has already loaded. */
+    function _coachingTrialActive() {
+      return typeof ZitlasPayment !== 'undefined' &&
+        typeof ZitlasPayment.isTrialMode === 'function' && ZitlasPayment.isTrialMode();
+    }
+    function _coachingDisplayPrice(key) {
+      return _coachingTrialActive() ? 0 : COACHING_PLANS[key].price;
+    }
 
     var _myCoaching   = null;  /* personal_coaching/{uid} doc */
     var _myRequests   = [];    /* all my personal_coach_requests */
@@ -3879,10 +3906,12 @@
       _selectedPlan = null;
       showStep('plans');
       /* Plan cards ship with static ₹499/699/999 markup — overwrite with
-         this expert's actual pricing every time the sheet opens. */
+         this expert's actual pricing (or ₹0 during the trial) every time
+         the sheet opens, so it's always current even if trial mode
+         flips between opens. */
       Object.keys(COACHING_PLANS).forEach(function(key) {
         var priceEl = backdrop.querySelector('.cp-plan-card[data-plan="' + key + '"] .cp-plan-price');
-        if (priceEl) priceEl.innerHTML = '₹' + COACHING_PLANS[key].price + '<em>/mo</em>';
+        if (priceEl) priceEl.innerHTML = '₹' + _coachingDisplayPrice(key) + '<em>/mo</em>';
       });
       backdrop.style.display = 'flex';
       requestAnimationFrame(function() {
@@ -3908,7 +3937,7 @@
           var sr = document.getElementById('pcSummaryPrice');
           if (se) se.textContent = coach.name || 'Expert';
           if (sp) sp.textContent = plan.icon + ' ' + plan.label;
-          if (sr) sr.textContent = '₹' + plan.price + ' / month';
+          if (sr) sr.textContent = '₹' + _coachingDisplayPrice(key) + ' / month';
           showStep('summary');
         });
       });
