@@ -203,7 +203,45 @@ flags, streaks, `zitlas_activity_*` (steps), `zitlas_health_today`,
 **Any new goal-scoped key or collection MUST (a) be added to the reset lists, and
 (b) carry + validate `planId`. (b) is what saves you when (a) is forgotten.**
 
-## 6. Known accepted trade-offs
+## 6. Diet Verification (one-time expert review) — delivery contract
+
+Diet Verification is a **one-time service**, fully separate from Personal
+Coaching (no relationship, no chat entitlement, no coaching workspace, no
+expiry). Its complete pipeline:
+
+1. Request (diet.js Verify-by-Nutritionist or cprofile.js Verify Plan) →
+   `review_requests/{PR_*}` with `userId`, `planId`, and an immutable
+   submission snapshot (`planData`/`assessmentData`/`profileBasics`).
+2. Expert opens `modify-diet.html` → reads the athlete's **LIVE**
+   `users/{uid}` doc (current plan + assessment + calculations + goal);
+   the request snapshot is only the legacy/offline fallback.
+3. Expert **Complete Review** → `applyReviewedDietToAthlete()` writes the
+   expert-modification wrapper straight to **`users/{uid}.dietPlan`** (the
+   single source of truth) with explicit metadata:
+   `{originalDietPlan, currentDietPlan, expertModifications, isExpertPlan,
+   expertId, expertName, expertNotes, reviewStatus:'completed',
+   planSource:'expert_reviewed', reviewId, version, lastUpdated, planId}`.
+   The review doc is then marked `review_completed` +
+   `autoApplied/athleteAccepted` (banner suppressed — plan is already live).
+   Legacy requests without `userId` fall back to the athlete-side Accept
+   banner; nothing dead-ends.
+4. Athlete delivery is cloud-sync itself: `attachRealtime` on `users/{uid}`
+   fires → localStorage mirror updates → diet page re-renders live (in
+   coach mode it exits via reload — expert plan outranks coach plan).
+   Refresh/logout/other devices all hydrate the same doc.
+5. The reviewed plan is replaced ONLY by: Goal Reset (`clearGoalData`),
+   a new assessment (`saveBulk` + new planId), or another expert review.
+   Renderers (badge "Expert Reviewed by <name>", verified banner) read the
+   wrapper itself, never a review cache. `modify-workout.js` mirrors all
+   of this via `users/{uid}.workoutPlan`.
+
+Deliberate deviation from "review_requests must store no diet data": the
+request keeps its plan/assessment **snapshot** as an immutable submission
+record (like an email attachment — see the trade-offs below) and the
+`reviewedDietPlan` copy as review history; neither is read as the active
+plan by anything. The active plan has exactly one home: `users/{uid}`.
+
+## 7. Known accepted trade-offs
 
 - A coach plan authored before this deploy (no `planId` stamp) stops rendering
   until the coach re-saves — one click, the editor auto-seeds/preserves content,

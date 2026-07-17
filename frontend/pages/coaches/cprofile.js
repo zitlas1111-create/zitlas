@@ -1916,7 +1916,14 @@
       expertModifications: _mods,
       isExpertPlan:        true,
       expertName:          _expName,
+      expertId:            review.expertId || null,
+      expertNotes:         review.expertNotes || null,
       reviewedAt:          _reviewedAt,
+      reviewStatus:        'completed',
+      planSource:          'expert_reviewed',
+      reviewId:            review.id || null,
+      version:             review.version || 1,
+      lastUpdated:         new Date().toISOString(),
       /* Goal-identity stamp — diet.js refuses to render an expert layer
          that can't prove it belongs to the current plan generation. */
       planId:              review.planId || localStorage.getItem('zitlas_plan_id') || null,

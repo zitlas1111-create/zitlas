@@ -490,16 +490,36 @@
     var nameEl        = document.getElementById('epiName');
     var dateEl        = document.getElementById('epiDate');
 
-    if (planSource === 'expert' && activePlanReview) {
+    /* Expert-reviewed state comes from the SINGLE SOURCE OF TRUTH (the
+       wrapper in zitlas_diet_plan / users/{uid}.dietPlan), with the
+       in-memory review object only as a richer-detail preference. The old
+       `planSource === 'expert' && activePlanReview` condition made the
+       badge depend on the review CACHE being populated — on a fresh
+       device, after logout/login, or after an expert auto-applied review
+       (no local Accept step ran) activePlanReview is null, so a fully
+       expert-reviewed plan still displayed "AI GENERATED". */
+    var _expertMeta = null;
+    if (planSource === 'expert') {
+      if (activePlanReview) {
+        _expertMeta = { name: activePlanReview.expertName, at: activePlanReview.reviewedAt, id: activePlanReview.expertId };
+      } else {
+        var _wrapForBadge = loadDietStorage();
+        if (_wrapForBadge && _wrapForBadge.isExpertPlan) {
+          _expertMeta = { name: _wrapForBadge.expertName, at: _wrapForBadge.reviewedAt, id: _wrapForBadge.expertId || null };
+        }
+      }
+    }
+
+    if (_expertMeta) {
       if (aiBadge)       aiBadge.style.display       = 'none';
       if (verifiedBadge) verifiedBadge.style.display = 'inline-flex';
       if (infoEl) {
         infoEl.style.display = 'flex';
-        if (nameEl) nameEl.textContent = activePlanReview.expertName || 'Expert';
-        if (dateEl && activePlanReview.reviewedAt) {
-          dateEl.textContent = new Date(activePlanReview.reviewedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+        if (nameEl) nameEl.textContent = _expertMeta.name || 'Expert';
+        if (dateEl && _expertMeta.at) {
+          dateEl.textContent = new Date(_expertMeta.at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
         }
-        _paintExpertBadge('epiNameBadge', activePlanReview.expertId);
+        if (_expertMeta.id) _paintExpertBadge('epiNameBadge', _expertMeta.id);
       }
     } else if (expertReview && expertReview.status === 'APPROVED') {
       if (aiBadge) aiBadge.style.display = 'none';
@@ -1487,6 +1507,20 @@
     if (review && review.status === 'APPROVED' &&
         review.planId && _vnPlanId && review.planId === _vnPlanId) {
       showVerifiedBanner(review);
+    } else {
+      /* Wrapper-driven "Expert Reviewed by <name>" — sourced from the
+         single source of truth itself (users/{uid}.dietPlan wrapper), so
+         the verified state survives refreshes, logout/login, and other
+         devices with no dependency on any review cache. loadDietStorage()
+         is planId-validated, so a stale wrapper can never light this up. */
+      var _vnWrap = loadDietStorage();
+      if (_vnWrap && _vnWrap.isExpertPlan && _vnWrap.expertName) {
+        showVerifiedBanner({
+          status: 'APPROVED',
+          reviewedBy: _vnWrap.expertName,
+          expertId: _vnWrap.expertId || null,
+        });
+      }
     }
 
     var _vnExperts = _getSponsoredExperts();
@@ -3317,7 +3351,16 @@
       expertModifications: _mods,
       isExpertPlan:        true,
       expertName:          _expName,
+      expertId:            review.expertId || null,
+      expertNotes:         review.expertNotes || null,
       reviewedAt:          review.reviewedAt || new Date().toISOString(),
+      /* Same explicit review metadata the expert-side auto-apply writes —
+         one schema regardless of which path delivered the plan. */
+      reviewStatus:        'completed',
+      planSource:          'expert_reviewed',
+      reviewId:            review.id || null,
+      version:             review.version || 1,
+      lastUpdated:         new Date().toISOString(),
       /* Goal-identity stamp — this accepted expert layer belongs to the
          plan generation the review was made for. */
       planId:              review.planId || _currentPlanId(),

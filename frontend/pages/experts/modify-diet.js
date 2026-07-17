@@ -116,8 +116,17 @@
       expertModifications: mods,
       isExpertPlan:        true,
       expertName:          expertName,
+      expertId:            rev.expertId || null,
       expertNotes:         getExpertNotes() || null,
       reviewedAt:          nowIso,
+      /* Explicit review metadata on the single source of truth — every
+         consumer can answer "whose plan is this and what state is it in"
+         from this one document alone. */
+      reviewStatus:        'completed',
+      planSource:          'expert_reviewed',
+      reviewId:            rev.id || null,
+      version:             (rev.version || 1),
+      lastUpdated:         nowIso,
       /* Goal-identity stamp — athlete-side readers fail closed on this,
          so a review completed after the athlete regenerated their plan
          retires silently instead of resurrecting a dead goal's plan. */
@@ -215,13 +224,17 @@
     return null;
   }
 
-  function buildContextPanel(review) {
+  function buildContextPanel(review, live) {
+    /* SOURCE OF TRUTH: the athlete's LIVE users/{uid} doc (fetched in
+       init) — the expert reviews who the athlete is NOW. The snapshot
+       the request carried (assessmentData/context/profileBasics) is the
+       fallback for legacy requests or offline reads. */
     var ad   = review.assessmentData || {};
     var ctx  = review.context || {};
-    var assess = ad.assessment || ctx.assessment || {};
-    var p    = Object.assign({}, assess, review.profileBasics || {});
-    var calc = ad.calculations || ctx.calculations || {};
-    var goal = review.goal || {};
+    var assess = (live && live.assessment) || ad.assessment || ctx.assessment || {};
+    var p    = Object.assign({}, review.profileBasics || {}, assess);
+    var calc = (live && live.calculations) || ad.calculations || ctx.calculations || {};
+    var goal = (live && live.goal) || review.goal || {};
 
     var userRows =
       _ctxRow('Name',   review.athleteName || review.userName || review.athlete_name) +
@@ -448,6 +461,28 @@
     return history;
   }
 
+  /* ── Live athlete data ──
+     users/{uid} is the documented single source of truth for the
+     athlete's plan + assessment. The expert reviews the athlete's
+     CURRENT state, not the snapshot frozen into the request at submit
+     time — the snapshot remains only as (a) an immutable record of what
+     was submitted and (b) the fallback for legacy requests without a
+     userId or when the fetch fails. One-shot get(), deliberately not a
+     live listener: the plan must not mutate under the expert mid-edit. */
+  function _fetchLiveAthlete(rev) {
+    if (typeof ZitlasDB === 'undefined' || !rev.userId) return Promise.resolve(null);
+    return ZitlasDB.collection('users').doc(rev.userId).get()
+      .then(function (snap) {
+        var data = snap.exists ? snap.data() : null;
+        console.log('[MODIFY-DIET] live athlete data', data ? 'loaded from users/' + rev.userId : 'not found — using request snapshot');
+        return data;
+      })
+      .catch(function (e) {
+        console.warn('[MODIFY-DIET] live athlete fetch failed — using request snapshot', e);
+        return null;
+      });
+  }
+
   /* ── Init ── */
 
   function init() {
@@ -467,24 +502,32 @@
     var athleteEl = document.getElementById('mpAthleteName');
     if (athleteEl) athleteEl.textContent = review.athleteName || review.userName || 'Athlete';
 
-    origDays = extractDays(review.planData);
+    _fetchLiveAthlete(review).then(function (live) {
+      /* Plan-to-edit priority:
+         1. reviewedDietPlan — the expert's own saved work-in-progress
+            always wins (never discard their edits).
+         2. the athlete's LIVE current plan (users/{uid}.dietPlan,
+            unwrapped) — what the athlete is actually eating today.
+         3. the request's planData snapshot — legacy fallback. */
+      if (review.reviewedDietPlan && review.reviewedDietPlan.days) {
+        origDays = review.reviewedDietPlan.days;
+      } else {
+        var liveDays = live ? extractDays(live.dietPlan) : [];
+        origDays = liveDays.length ? liveDays : extractDays(review.planData);
+      }
 
-    /* If expert already saved, use their saved version */
-    if (review.reviewedDietPlan && review.reviewedDietPlan.days) {
-      origDays = review.reviewedDietPlan.days;
-    }
+      renderPlan(origDays);
 
-    renderPlan(origDays);
-
-    /* Athlete context above the plan, Review Notes below it — both inside
-       the scroll container, both outside collectEdited()'s .mp-day-card
-       query so plan collection is untouched. */
-    var _mpBody = document.getElementById('mpBody');
-    if (_mpBody) {
-      var _ctxPanel = buildContextPanel(review);
-      if (_ctxPanel) _mpBody.insertBefore(_ctxPanel, _mpBody.firstChild);
-      _mpBody.appendChild(buildNotesPanel(review));
-    }
+      /* Athlete context above the plan, Review Notes below it — both inside
+         the scroll container, both outside collectEdited()'s .mp-day-card
+         query so plan collection is untouched. */
+      var _mpBody = document.getElementById('mpBody');
+      if (_mpBody) {
+        var _ctxPanel = buildContextPanel(review, live);
+        if (_ctxPanel) _mpBody.insertBefore(_ctxPanel, _mpBody.firstChild);
+        _mpBody.appendChild(buildNotesPanel(review));
+      }
+    });
 
     document.getElementById('mpBack').addEventListener('click', function () {
       window.location.href = 'expert-dashboard.html';
@@ -495,6 +538,13 @@
 
     /* Save Changes */
     saveBtn.addEventListener('click', function () {
+      /* renderPlan runs async (after the live-athlete fetch) — a Save
+         click before the day cards exist would collect an EMPTY plan and
+         overwrite the expert's saved work with nothing. */
+      if (!document.querySelector('.mp-day-card')) {
+        showToast('Plan is still loading — one moment…');
+        return;
+      }
       var expertName  = (expert && expert.name) || 'Expert';
       var edited      = collectEdited();
       var history     = buildHistory(edited, expertName);
