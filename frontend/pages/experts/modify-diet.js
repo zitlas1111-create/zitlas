@@ -58,6 +58,102 @@
     return key.replace(/_/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
   }
 
+  /* ── AUTO-APPLY: the reviewed plan becomes the athlete's ACTIVE plan ──
+     ROOT CAUSE this closes: Complete Review used to update ONLY
+     review_requests/{id} — a review inbox document. Nothing ever wrote the
+     reviewed meals into the athlete's actual plan storage, so the expert
+     saw "Review Sent to Athlete" while the athlete's diet page kept
+     rendering the old plan forever (unless they manually pressed the
+     Accept banner, which itself only worked when the review synced AND
+     the banner was noticed).
+
+     Target: users/{athleteUid}.dietPlan — the documented single source of
+     truth for the athlete's plan (docs/GOAL_LIFECYCLE_ARCHITECTURE.md
+     Rule 1). Every athlete page hydrates from it on load AND live-updates
+     from it via ZitlasCloudSync.attachRealtime, with or without any
+     coaching relationship. Deliberately NOT coaching_plans/{uid}: that
+     collection is the Personal Coaching plan (different meal schema —
+     options[], not foods[]) and only renders while a coaching
+     relationship exists — writing reviews there would corrupt the coach
+     pipeline and silently no-op for every athlete without a coach.
+
+     The written value is the standard expert-modification wrapper —
+     identical shape to what the athlete's own Accept button builds — so
+     every existing reader (buildEffectivePlan, planId fail-closed
+     validation, expert badges, swap flow) works unchanged. */
+  function buildAppliedDietWrapper(rev, edited, history, expertName, nowIso) {
+    var original = rev.planData || null;
+    if (original && (original.originalDietPlan || original.currentDietPlan)) {
+      original = original.currentDietPlan || original.originalDietPlan;
+    }
+    var mods = {};
+    (history || []).forEach(function (h) {
+      var dk = String(h.dayIndex != null ? h.dayIndex : 0);
+      var mk = h.mealKey || _mealKeyOf(h.mealName);
+      if (!mods[dk]) mods[dk] = {};
+      mods[dk][mk] = {
+        modified:   true,
+        modifiedBy: h.modifiedBy || expertName,
+        modifiedAt: h.modifiedAt || nowIso,
+        oldMeal: {
+          foods:     normalizeFoods(h.oldMeal && h.oldMeal.foods),
+          calories:  (h.oldMeal && h.oldMeal.calories)  || null,
+          protein_g: (h.oldMeal && h.oldMeal.protein_g) || null,
+        },
+        newMeal: {
+          foods:     normalizeFoods(h.newMeal && h.newMeal.foods),
+          calories:  (h.newMeal && h.newMeal.calories)  || null,
+          protein_g: (h.newMeal && h.newMeal.protein_g) || null,
+        },
+      };
+    });
+    return {
+      originalDietPlan:    original || edited,
+      /* currentDietPlan carries the expert's edits baked in — content is
+         correct even for a meal the change-history diff missed; applying
+         mods on top of it is idempotent and only adds the ✏️ badges. */
+      currentDietPlan:     edited,
+      expertModifications: mods,
+      isExpertPlan:        true,
+      expertName:          expertName,
+      expertNotes:         getExpertNotes() || null,
+      reviewedAt:          nowIso,
+      /* Goal-identity stamp — athlete-side readers fail closed on this,
+         so a review completed after the athlete regenerated their plan
+         retires silently instead of resurrecting a dead goal's plan. */
+      planId:              rev.planId || null,
+    };
+  }
+
+  function applyReviewedDietToAthlete(rev, expertName, nowIso) {
+    var athleteUid = rev.userId || null;
+    var edited     = rev.reviewedDietPlan;
+    if (typeof ZitlasDB === 'undefined') return Promise.resolve(false);
+    if (!athleteUid) {
+      /* Legacy request created before userId stamping — can't address the
+         athlete's user doc. The review itself still syncs; the athlete
+         can accept it from their Diet page banner. */
+      console.warn('[MODIFY-DIET] auto-apply skipped — review has no userId (legacy request)', reviewId);
+      return Promise.resolve(false);
+    }
+    if (!edited || !edited.days || !edited.days.length) {
+      console.warn('[MODIFY-DIET] auto-apply skipped — no reviewedDietPlan days', reviewId);
+      return Promise.resolve(false);
+    }
+    var wrapper = buildAppliedDietWrapper(rev, edited, rev.mealChangeHistory, expertName, nowIso);
+    console.log('[MODIFY-DIET] auto-applying reviewed plan → users/' + athleteUid + '.dietPlan');
+    return ZitlasDB.collection('users').doc(athleteUid)
+      .set({ dietPlan: wrapper, dietPlanUpdatedAt: nowIso }, { merge: true })
+      .then(function () {
+        console.log('[MODIFY-DIET] reviewed plan is now the athlete\'s ACTIVE diet plan');
+        return true;
+      })
+      .catch(function (e) {
+        console.error('[MODIFY-DIET] auto-apply write failed', e);
+        return false;
+      });
+  }
+
   /* Mirrors diet.js's _mealKey() exactly — must produce identical keys so
      the athlete-side accept flow can match meals by key. */
   function _mealKeyOf(name) {
@@ -459,7 +555,23 @@
         console.log('[COMPLETE REVIEW] reviewId', reviewId);
         console.log('[COMPLETE REVIEW] payload', _fsPayload);
         console.log('[COMPLETE REVIEW] before firestore update');
-        ZitlasDB.collection('review_requests').doc(reviewId).update(_fsPayload)
+        /* Auto-apply FIRST, then mark the review completed with
+           athleteAccepted/autoApplied reflecting what actually happened:
+           - applied → the plan is already live on the athlete's account;
+             athleteAccepted:true suppresses the now-redundant Accept
+             banner (their page just shows the new plan + change summary).
+           - not applied (legacy request without userId, or write failure)
+             → athleteAccepted stays false so the athlete's Accept-banner
+             fallback path still delivers the plan. */
+        applyReviewedDietToAthlete(_latest, expertName, nowIso).then(function (applied) {
+          _fsPayload.autoApplied = !!applied;
+          if (applied) {
+            _fsPayload.athleteAccepted = true;
+            _fsPayload.autoAppliedAt   = nowIso;
+            patchReview(reviewId, { athleteAccepted: true, autoApplied: true });
+          }
+          return ZitlasDB.collection('review_requests').doc(reviewId).update(_fsPayload);
+        })
           .then(function () { console.log('[COMPLETE REVIEW] firestore update success'); })
           .catch(function (err) {
             console.error('[COMPLETE REVIEW] firestore update failed', err);

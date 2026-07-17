@@ -180,6 +180,69 @@
     return history;
   }
 
+  /* ── AUTO-APPLY: the reviewed workout becomes the athlete's ACTIVE plan ──
+     Mirror of modify-diet.js's applyReviewedDietToAthlete() — Complete
+     Review used to update ONLY review_requests/{id}; the athlete's actual
+     plan storage (users/{uid}.workoutPlan, the documented single source
+     of truth every athlete page hydrates + live-syncs from) was never
+     touched, so the athlete kept the old workout forever. Writes the
+     standard workout-modification wrapper (identical shape to what the
+     athlete-side accept builds), planId-stamped so athlete-side readers
+     fail closed if the athlete regenerated their plan meanwhile. */
+  function buildAppliedWorkoutWrapper(rev, edited, history, expertName, nowIso) {
+    var original = rev.planData || null;
+    if (original && (original.originalWorkoutPlan || original.currentWorkoutPlan)) {
+      original = original.currentWorkoutPlan || original.originalWorkoutPlan;
+    }
+    var mods = {};
+    (history || []).forEach(function (h) {
+      if (h.dayIndex == null) return;
+      mods[String(h.dayIndex)] = {
+        modified:   true,
+        modifiedBy: h.modifiedBy || expertName,
+        modifiedAt: h.modifiedAt || nowIso,
+        oldWorkout: h.oldWorkout || null,
+        newWorkout: h.newWorkout || null,
+      };
+    });
+    return {
+      originalWorkoutPlan:  original || edited,
+      currentWorkoutPlan:   edited,
+      workoutModifications: mods,
+      workoutChangeHistory: history || [],
+      isExpertPlan:         true,
+      expertName:           expertName,
+      reviewedAt:           nowIso,
+      planId:               rev.planId || null,
+    };
+  }
+
+  function applyReviewedWorkoutToAthlete(rev, expertName, nowIso) {
+    var athleteUid = rev.userId || null;
+    var edited     = rev.reviewedWorkoutPlan;
+    if (typeof ZitlasDB === 'undefined') return Promise.resolve(false);
+    if (!athleteUid) {
+      console.warn('[MODIFY-WORKOUT] auto-apply skipped — review has no userId (legacy request)', reviewId);
+      return Promise.resolve(false);
+    }
+    if (!edited || !edited.weekly_plan || !edited.weekly_plan.length) {
+      console.warn('[MODIFY-WORKOUT] auto-apply skipped — no reviewedWorkoutPlan days', reviewId);
+      return Promise.resolve(false);
+    }
+    var wrapper = buildAppliedWorkoutWrapper(rev, edited, rev.workoutChangeHistory, expertName, nowIso);
+    console.log('[MODIFY-WORKOUT] auto-applying reviewed plan → users/' + athleteUid + '.workoutPlan');
+    return ZitlasDB.collection('users').doc(athleteUid)
+      .set({ workoutPlan: wrapper, workoutPlanUpdatedAt: nowIso }, { merge: true })
+      .then(function () {
+        console.log('[MODIFY-WORKOUT] reviewed plan is now the athlete\'s ACTIVE workout plan');
+        return true;
+      })
+      .catch(function (e) {
+        console.error('[MODIFY-WORKOUT] auto-apply write failed', e);
+        return false;
+      });
+  }
+
   /* ── Init ── */
 
   function init() {
@@ -276,7 +339,18 @@
         console.log('[COMPLETE REVIEW] reviewId', reviewId);
         console.log('[COMPLETE REVIEW] payload', _fsPayload);
         console.log('[COMPLETE REVIEW] before firestore update');
-        ZitlasDB.collection('review_requests').doc(reviewId).update(_fsPayload)
+        /* Auto-apply first; athleteAccepted mirrors whether it landed
+           (legacy requests without userId fall back to the athlete-side
+           accept flow) — same contract as modify-diet.js. */
+        applyReviewedWorkoutToAthlete(_latest, expertName, nowIso).then(function (applied) {
+          _fsPayload.autoApplied = !!applied;
+          if (applied) {
+            _fsPayload.athleteAccepted = true;
+            _fsPayload.autoAppliedAt   = nowIso;
+            patchReview(reviewId, { athleteAccepted: true, autoApplied: true });
+          }
+          return ZitlasDB.collection('review_requests').doc(reviewId).update(_fsPayload);
+        })
           .then(function () { console.log('[COMPLETE REVIEW] firestore update success'); })
           .catch(function (err) {
             console.error('[COMPLETE REVIEW] firestore update failed', err);

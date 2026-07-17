@@ -3685,7 +3685,20 @@
      Coach-mode rendering owns the screen while a coach is active — this
      only applies to the base AI plan. */
   function _reloadAndRenderPlan() {
-    if (planSource === 'coach') return;
+    if (planSource === 'coach') {
+      /* Expert-reviewed plan outranks the coach plan (product priority:
+         expert > coach > AI). When an expert-applied plan arrives
+         remotely (users/{uid}.dietPlan updated by the nutritionist's
+         Complete Review) while the coach plan owns the screen, exit
+         coach mode via the same clean full-reload transition
+         applyCoachDiet() itself uses — after reload, init() renders the
+         expert wrapper and applyCoachDiet() yields to it. Without this,
+         the guard below silently swallowed the live update whenever the
+         athlete had an active/ended coaching relationship. */
+      var _incoming = loadDietStorage();
+      if (_incoming && _incoming.isExpertPlan) { window.location.reload(); }
+      return;
+    }
     var storage = loadDietStorage();
     var effective = storage ? buildEffectivePlan(storage) : null;
     if (!effective || !effective.days || !effective.days.length) return;
