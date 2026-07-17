@@ -3788,6 +3788,11 @@
     var endBackdrop    = document.getElementById('endCoachingBackdrop');
     var endCancelBtn   = document.getElementById('endCoachingCancelBtn');
     var endConfirmBtn  = document.getElementById('endCoachingConfirmBtn');
+    var pcWithdrawWrap    = document.getElementById('pcWithdrawWrap');
+    var pcWithdrawBtn     = document.getElementById('pcWithdrawBtn');
+    var pcWithdrawBackdrop    = document.getElementById('pcWithdrawBackdrop');
+    var pcWithdrawCancelBtn   = document.getElementById('pcWithdrawCancelBtn');
+    var pcWithdrawConfirmBtn  = document.getElementById('pcWithdrawConfirmBtn');
 
     /* Prices come from the expert's own Pricing & Services page (unlimited
        — spec's "No pricing limit, expert decides"); experts who haven't set
@@ -3830,10 +3835,23 @@
         btn.classList.toggle('cp-coach-active', relMine || !!req);
         if (relMine)          btn.innerHTML = COACH_SVG + ' Your Coach ✓';
         else if (expiredMine) btn.innerHTML = COACH_SVG + ' 🔄 Renew Personal Coach';
-        else if (req)         btn.innerHTML = COACH_SVG + ' 🔒 Payment Reserved';
+        else if (req)         btn.innerHTML = COACH_SVG + ' ⏳ Under Review';
         else                  btn.innerHTML = COACH_SVG + ' Personal Coach';
       });
       if (endWrap) endWrap.style.display = relMine ? 'block' : 'none';
+      /* Withdraw Request — visible ONLY while a request to THIS expert is
+         genuinely pending. req is already status==='pending'-filtered by
+         _openRequestFor, so on its own this would hide automatically the
+         instant the request leaves 'pending' (declined/expired/withdrawn).
+         The explicit `&& !relMine` guard additionally covers the accept
+         path: personal_coaching (relMine) and personal_coach_requests
+         (req) are two SEPARATE onSnapshot listeners updated by the same
+         atomic server-side transaction, but Firestore delivers their
+         snapshots to the client independently — relMine can flip true a
+         tick before req flips to non-pending. Without this guard, Case 3
+         ("never show Withdraw once accepted") could flash-fail for one
+         render. */
+      if (pcWithdrawWrap) pcWithdrawWrap.style.display = (req && !relMine) ? 'block' : 'none';
 
       /* <7 days warning + days-remaining, computed once per relationship
          from the canonical gate — reused for both the athlete-facing
@@ -3940,16 +3958,23 @@
         if (typeof getIdToken !== 'function') { showToast('Connection unavailable — please try again.'); return; }
 
         var plan = COACHING_PLANS[_selectedPlan];
-        var w = {};
-        try { w = JSON.parse(localStorage.getItem('zitlas_wallet') || '{}') || {}; } catch (_) {}
-        var available = Number(w.balance || 0) - Number(w.reserved || 0);
-        if (available < plan.price) {
-          if (typeof ZitlasPayment !== 'undefined') {
-            ZitlasPayment.showLowBalancePopup({ balance: available, required: plan.price });
-          } else {
-            showToast('Insufficient wallet balance — please recharge.');
+        /* CLIENT TRIAL MODE (backend/trial_config.py) — coach hiring is
+           free: skip the wallet pre-check entirely; the backend reserves
+           ₹0. When the trial flag is off this check is live again. */
+        var _coachingTrial = (typeof ZitlasPayment !== 'undefined' &&
+          typeof ZitlasPayment.isTrialMode === 'function' && ZitlasPayment.isTrialMode());
+        if (!_coachingTrial) {
+          var w = {};
+          try { w = JSON.parse(localStorage.getItem('zitlas_wallet') || '{}') || {}; } catch (_) {}
+          var available = Number(w.balance || 0) - Number(w.reserved || 0);
+          if (available < plan.price) {
+            if (typeof ZitlasPayment !== 'undefined') {
+              ZitlasPayment.showLowBalancePopup({ balance: available, required: plan.price });
+            } else {
+              showToast('Insufficient wallet balance — please recharge.');
+            }
+            return;
           }
-          return;
         }
 
         sendBtn.disabled = true;
@@ -3969,7 +3994,9 @@
           if (result.status === 200 && result.data.success) {
             console.log('[COACHING] request reserved — personal_coach_requests/' + result.data.requestId);
             closeCoachingSheet();
-            showToast('📨 Request sent — ₹' + result.data.amount + ' reserved. You’ll only be charged if ' + (coach.name || 'the expert') + ' accepts.');
+            showToast(Number(result.data.amount) > 0
+              ? '📨 Request sent — ₹' + result.data.amount + ' reserved. You’ll only be charged if ' + (coach.name || 'the expert') + ' accepts.'
+              : '📨 Request sent — no charge. ' + (coach.name || 'The expert') + ' will confirm your coaching shortly.');
             return;
           }
           if (result.status === 402) {
@@ -4057,6 +4084,97 @@
         }).then(function() {
           endConfirmBtn.disabled = false;
           endConfirmBtn.textContent = 'End Coaching';
+        });
+      });
+    }
+
+    /* Withdraw Personal Coaching Request — athlete-initiated cancellation
+       of their OWN pending request. Mirrors End Coaching's modal pattern
+       exactly (JS-driven display + .open animation, 200ms close delay).
+       The actual release happens server-side (POST /api/coaching/withdraw,
+       routes/coaching.py) inside the same kind of Firestore transaction
+       /reject uses — the reserved amount is released back to `available`
+       atomically, never a client-side wallet write. */
+    function openPcWithdrawModal() {
+      if (!pcWithdrawBackdrop) return;
+      pcWithdrawBackdrop.style.display = 'flex';
+      requestAnimationFrame(function() {
+        requestAnimationFrame(function() { pcWithdrawBackdrop.classList.add('open'); });
+      });
+    }
+    function closePcWithdrawModal() {
+      if (!pcWithdrawBackdrop) return;
+      pcWithdrawBackdrop.classList.remove('open');
+      setTimeout(function() { pcWithdrawBackdrop.style.display = 'none'; }, 200);
+    }
+    if (pcWithdrawBtn)      pcWithdrawBtn.addEventListener('click', openPcWithdrawModal);
+    if (pcWithdrawCancelBtn) pcWithdrawCancelBtn.addEventListener('click', closePcWithdrawModal);
+    if (pcWithdrawBackdrop) pcWithdrawBackdrop.addEventListener('click', function(e) {
+      if (e.target === pcWithdrawBackdrop) closePcWithdrawModal();
+    });
+    if (pcWithdrawConfirmBtn) {
+      pcWithdrawConfirmBtn.addEventListener('click', function() {
+        var reqToWithdraw = _openRequestFor(coach.id);
+        /* Safety rule: only a PENDING request may be withdrawn — same
+           guard the review-withdraw flow uses. Covers the race where the
+           expert accepts/declines in the moments between opening this
+           modal and clicking Confirm. */
+        if (!reqToWithdraw) {
+          console.error('[COACHING WITHDRAW] blocked — no pending request to withdraw');
+          closePcWithdrawModal();
+          showToast('This request can no longer be withdrawn.');
+          updateCoachButtons();
+          return;
+        }
+        if (typeof getIdToken !== 'function') {
+          showToast('Connection unavailable — please try again.');
+          return;
+        }
+
+        pcWithdrawConfirmBtn.disabled = true;
+        pcWithdrawConfirmBtn.textContent = 'Withdrawing…';
+        console.log('[COACHING WITHDRAW] withdrawing', reqToWithdraw.requestId, '(expert:', coach.id + ')');
+
+        getIdToken().then(function(token) {
+          return fetch('/api/coaching/withdraw', {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ requestId: reqToWithdraw.requestId }),
+          });
+        }).then(function(res) {
+          return res.json().catch(function() { return {}; }).then(function(data) {
+            return { status: res.status, data: data };
+          });
+        }).then(function(result) {
+          if (result.status === 200 && result.data.success) {
+            console.log('[COACHING WITHDRAW] success —', reqToWithdraw.requestId);
+            /* Optimistic local update — flips the button back to "Personal
+               Coach" and hides the Withdraw action immediately, without
+               waiting for the Firestore listener (which confirms moments
+               later and is the eventual source of truth). */
+            var idx = _myRequests.findIndex(function(r) { return r.requestId === reqToWithdraw.requestId; });
+            if (idx !== -1) {
+              _myRequests[idx] = Object.assign({}, _myRequests[idx], { status: 'withdrawn' });
+            }
+            closePcWithdrawModal();
+            updateCoachButtons();
+            showToast('Request withdrawn. Any reserved amount has been released.');
+          } else if (result.status === 409) {
+            showToast('This request can no longer be withdrawn.');
+            closePcWithdrawModal();
+          } else if (result.status === 403 || result.status === 404) {
+            showToast('This request is no longer available.');
+            closePcWithdrawModal();
+          } else {
+            console.error('[COACHING WITHDRAW] failed', result);
+            showToast('Could not withdraw request — please try again.');
+          }
+        }).catch(function(err) {
+          console.error('[COACHING WITHDRAW] failed', err);
+          showToast(err && err.message === 'not_signed_in' ? 'Please sign in first.' : 'Could not withdraw request — please try again.');
+        }).then(function() {
+          pcWithdrawConfirmBtn.disabled = false;
+          pcWithdrawConfirmBtn.textContent = 'Withdraw Request';
         });
       });
     }

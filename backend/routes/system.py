@@ -2,6 +2,7 @@
 ZITLAS — System Routes
 
 GET  /api/system/kb-status   — Knowledge base lazy-loading cache status
+GET  /api/system/trial-mode  — Whether CLIENT_TRIAL_MODE is on (coach payments free)
 POST /api/system/test-push   — Send a test web-push notification to a token
 """
 
@@ -12,8 +13,21 @@ from pydantic import BaseModel, Field
 
 from services.kb_manager import kb_manager
 from services import push_service
+from trial_config import CLIENT_TRIAL_MODE
 
 router = APIRouter()
+
+
+@router.get("/trial-mode")
+async def trial_mode() -> dict[str, bool]:
+    """
+    Single source of truth for the temporary client trial
+    (backend/trial_config.py). The frontend payment layer
+    (assets/js/payment-service.js) reads this at page load; when true,
+    every coach-related charge is granted free while Premium and wallet
+    recharge stay live.
+    """
+    return {"clientTrialMode": CLIENT_TRIAL_MODE}
 
 
 @router.get("/kb-status")

@@ -29,6 +29,39 @@
   // Single configurable point — ZITLAS's cut of every payment.
   var PLATFORM_FEE_PERCENT = 0.20;
 
+  /* ══════════════════════════════════════════════════════════════════
+     CLIENT TRIAL MODE — coach payments disabled, Premium untouched.
+     The SINGLE switch lives in backend/trial_config.py; this module
+     mirrors it via GET /api/system/trial-mode (fetched once per page
+     load, cached in localStorage so later loads know synchronously).
+     While true:
+       - attemptCharge() (reviews / expert chat / any coach service
+         charged through it) grants access at ₹0 — no wallet deduction,
+         no insufficient-balance path, request advances exactly as paid
+       - showLowBalancePopup() is a no-op (its only callers are coach
+         service flows; wallet RECHARGE UI lives in wallet.js and stays)
+     Premium plan payments and Razorpay wallet recharge NEVER route
+     through this module's charge path, so they keep working normally.
+  ══════════════════════════════════════════════════════════════════ */
+  var _TRIAL_LS_KEY = 'zitlas_trial_mode';
+  var _trialMode = (function () {
+    try { return localStorage.getItem(_TRIAL_LS_KEY) === 'true'; } catch (_) { return false; }
+  })();
+  (function _refreshTrialFlag() {
+    try {
+      fetch('/api/system/trial-mode').then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (data) {
+          if (!data || typeof data.clientTrialMode !== 'boolean') return;
+          _trialMode = data.clientTrialMode;
+          try { localStorage.setItem(_TRIAL_LS_KEY, String(_trialMode)); } catch (_) {}
+          console.log('[PAYMENT] CLIENT_TRIAL_MODE =', _trialMode,
+            _trialMode ? '— coach services are FREE (trial)' : '');
+        })
+        .catch(function () { /* offline/unreachable — keep cached value */ });
+    } catch (_) {}
+  })();
+  function isTrialMode() { return _trialMode; }
+
   function _defaultWallet() {
     return { balance: 0, total_added: 0, total_spent: 0, transactions: [] };
   }
@@ -61,6 +94,21 @@
     }
 
     var amount = Math.max(0, Number(opts.amount) || 0);
+    /* CLIENT TRIAL MODE — every service charged through attemptCharge is a
+       coach/expert service (reviews, expert chat, expert-side auto-charge).
+       Zeroing the amount lets the ENTIRE existing transaction run
+       unchanged: the balance check can't fail, no wallet money moves, no
+       wallet-history entry is pushed (amount>0 guards both), and the
+       request doc still advances to paymentStatus 'paid' with
+       onSuccessUpdate applied + notifications sent — i.e. the athlete
+       experiences a successful payment. Fully reversible from
+       backend/trial_config.py. */
+    var _trialFree = isTrialMode() && amount > 0;
+    if (_trialFree) {
+      console.log('[PAYMENT] CLIENT_TRIAL_MODE — waiving ₹' + amount + ' for ' +
+        (opts.serviceLabel || opts.serviceType || 'coach service'));
+      amount = 0;
+    }
     var onSuccessUpdate = opts.onSuccessUpdate || {};
 
     var userRef    = db.collection('users').doc(userId);
@@ -161,6 +209,9 @@
           platformFee:   platformFee,
           expertAmount:  expertAmount,
           status:        'success',
+          /* Audit trail: true when this charge was waived by the client
+             trial (backend/trial_config.py) — amount is 0 by design. */
+          trialWaived:   _trialFree,
           createdAt:     new Date().toISOString(),
         });
         tx.update(requestRef, Object.assign({}, onSuccessUpdate, {
@@ -303,6 +354,16 @@
   }
 
   function showLowBalancePopup(opts) {
+    /* CLIENT TRIAL MODE — every caller of this popup is a coach-service
+       payment gate (coaching request, review/chat charge retry). During
+       the trial those services are free, so a "recharge to continue"
+       prompt must never appear. Wallet recharge itself stays available
+       via the wallet panel (components/wallet.js), which doesn't come
+       through here. */
+    if (isTrialMode()) {
+      console.log('[PAYMENT] CLIENT_TRIAL_MODE — low-balance popup suppressed (coach services are free)');
+      return;
+    }
     _injectCss();
     var balance   = Number(opts.balance || 0);
     var required  = Number(opts.required || 0);
@@ -360,5 +421,8 @@
     attemptCharge: attemptCharge,
     creditWallet: creditWallet,
     showLowBalancePopup: showLowBalancePopup,
+    /* true while the client trial is on (backend/trial_config.py) —
+       coach services are free; Premium + wallet recharge unaffected. */
+    isTrialMode: isTrialMode,
   };
 })(window);

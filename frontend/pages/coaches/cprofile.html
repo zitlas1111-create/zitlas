@@ -164,6 +164,16 @@
   </button>
 </div>
 
+<!-- Withdraw Personal Coaching Request (shown only while a coaching
+     request to this expert is pending — reuses the same withdraw
+     visual language as the Expert Plan Review withdraw below). -->
+<div class="cp-withdraw-wrap" id="pcWithdrawWrap" style="display:none">
+  <button class="cp-withdraw-btn" id="pcWithdrawBtn">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    Withdraw Request
+  </button>
+</div>
+
 <!-- Verify Again + Previous Reviews (shown only when a review is completed) -->
 <div class="cp-verify-again-wrap" id="verifyAgainWrap" style="display:none">
   <button class="cp-verify-again-btn" id="verifyAgainBtn">
@@ -245,6 +255,22 @@
     <div class="cp-end-coaching-actions">
       <button class="cp-end-coaching-cancel" id="endCoachingCancelBtn">Cancel</button>
       <button class="cp-end-coaching-confirm" id="endCoachingConfirmBtn">End Coaching</button>
+    </div>
+  </div>
+</div>
+
+<!-- Withdraw Personal Coaching Request confirmation dialog — same
+     defense-in-depth pattern as the Expert Plan Review withdraw dialog
+     below (inline display:none, JS-driven visibility + .open animation),
+     kept as a SEPARATE dialog (distinct ids) so the two withdraw flows
+     never interfere with each other. -->
+<div class="cp-withdraw-backdrop" id="pcWithdrawBackdrop" style="display:none" role="dialog" aria-modal="true" aria-labelledby="pcWithdrawTitle">
+  <div class="cp-withdraw-modal">
+    <p class="cp-withdraw-title" id="pcWithdrawTitle">Withdraw Coaching Request?</p>
+    <p class="cp-withdraw-sub">Are you sure you want to withdraw this Personal Coaching request?<br><br>Any reserved amount will be released back to your wallet immediately, and the expert will no longer be able to accept this request.</p>
+    <div class="cp-withdraw-actions">
+      <button class="cp-withdraw-cancel" id="pcWithdrawCancelBtn">Cancel</button>
+      <button class="cp-withdraw-confirm" id="pcWithdrawConfirmBtn">Withdraw Request</button>
     </div>
   </div>
 </div>
@@ -684,11 +710,11 @@
 
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 <script src="../../components/wallet.js?v=20260718"></script>
-<script src="../../assets/js/payment-service.js?v=20260718"></script>
+<script src="../../assets/js/payment-service.js?v=20260720"></script>
   <script src="../../components/navbar.js"></script>
 <script src="../../assets/js/expert-profile.js"></script>
 <script src="../../assets/js/certificate-manager.js?v=20260717"></script>
-<script src="cprofile.js?v=20260716c"></script>
+<script src="cprofile.js?v=20260716e"></script>
 <script src="../../assets/js/zino.js?v=20260711c"></script>
 </body>
 </html>

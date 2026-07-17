@@ -58,6 +58,7 @@ from services.coaching_service import (
     now,
     release_reservation_txn,
 )
+from trial_config import CLIENT_TRIAL_MODE
 
 router = APIRouter()
 
@@ -143,6 +144,16 @@ async def create_request(body: RequestBody, caller: dict = Depends(verify_fireba
         amount = int(pricing.get(PLAN_TO_FIELD[body.planType]) or PRICING_DEFAULTS[body.planType])
         print(f"[COACHING REQUEST] [4] expert loaded — expertId={body.expertId} "
               f"name={expert_name!r} planType={body.planType} amount={amount}")
+
+        # CLIENT TRIAL MODE (backend/trial_config.py — the single switch):
+        # coach hiring is free. Zeroing the amount HERE lets the entire
+        # existing escrow run unchanged — ₹0 is reserved, the wallet check
+        # (available < 0) can never fail, and /accept later debits the
+        # stored reservationAmount of ₹0. Flip the flag off and real
+        # pricing is live again with no other change.
+        if CLIENT_TRIAL_MODE:
+            print(f"[COACHING REQUEST] CLIENT_TRIAL_MODE active — amount {amount} -> 0 (free trial)")
+            amount = 0
 
         # Duplicate-request / double-spend guard: at most one open
         # (pending) reservation per athlete, platform-wide, at a time.
@@ -342,9 +353,11 @@ async def accept_request(body: ActionBody, caller: dict = Depends(verify_firebas
         try:
             req = (request_ref.get().to_dict() or {})
             amount = result["amount"]
+            _paid_msg = (f"Your coaching request has been accepted. ₹{int(amount)} has been "
+                         "automatically deducted. Your coaching starts now.")
+            _free_msg = "Your coaching request has been accepted. Your coaching starts now."
             notify(db, result["athleteId"], "Congratulations!",
-                   f"Your coaching request has been accepted. ₹{int(amount)} has been "
-                   "automatically deducted. Your coaching starts now.",
+                   _paid_msg if amount and int(amount) > 0 else _free_msg,
                    category="expert", type="coaching_accepted", action="expert_profile",
                    action_id=expert_uid, priority="high")
             notify(db, expert_uid, "Payment received",
@@ -354,6 +367,62 @@ async def accept_request(body: ActionBody, caller: dict = Depends(verify_firebas
             print(f"[COACHING ACCEPT] notification write failed (non-fatal) — requestId={body.requestId}")
             print(traceback.format_exc())
 
+    return {"success": True, "requestId": body.requestId, **result}
+
+
+@router.post("/withdraw")
+async def withdraw_request(body: ActionBody, caller: dict = Depends(verify_firebase_token)):
+    """Athlete-initiated cancellation of their OWN pending request — the
+    mirror of /reject (expert-initiated), reusing the exact same
+    release_reservation_txn() so the reserved amount is released back to
+    `available` identically either way. Only the caller identity check
+    differs: /reject requires expertId == caller, this requires
+    athleteId == caller. A request that already left 'pending' (accepted,
+    declined, expired, or already withdrawn) cannot be withdrawn — the
+    money has either moved or already been released."""
+    print(f"[COACHING WITHDRAW] request received — requestId={body.requestId} callerUid={caller['uid']}")
+    db = _db()
+    athlete_uid = caller["uid"]
+    request_ref = db.collection("personal_coach_requests").document(body.requestId)
+
+    @firestore.transactional
+    def _txn(tx):
+        req_snap = request_ref.get(transaction=tx)
+        if not req_snap.exists:
+            raise HTTPException(status_code=404, detail="request_not_found")
+        req = req_snap.to_dict()
+        if req.get("athleteId") != athlete_uid:
+            raise HTTPException(status_code=403, detail="not_your_request")
+        if req.get("status") != "pending":
+            if req.get("status") == "withdrawn":
+                return {"already": True, "expertId": req.get("expertId")}
+            raise HTTPException(status_code=409, detail="not_pending")
+
+        release_reservation_txn(tx, db, request_ref, req, "withdrawn", "released", "withdrawnAt")
+        return {"already": False, "expertId": req.get("expertId"), "expertName": req.get("expertName")}
+
+    try:
+        result = _txn(db.transaction())
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[COACHING WITHDRAW] UNEXPECTED transaction failure — athleteUid={athlete_uid} "
+              f"requestId={body.requestId}: {type(e).__name__}: {e}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500,
+                             detail=f"coaching_withdraw_failed: {type(e).__name__}: {e}")
+
+    if not result.get("already") and result.get("expertId"):
+        try:
+            athlete_name = caller.get("name") or "An athlete"
+            notify(db, result["expertId"], "Request withdrawn",
+                   f"{athlete_name} withdrew their coaching request before you responded.",
+                   category="expert", type="coaching_withdrawn", action="expert_dashboard")
+        except Exception:
+            print(f"[COACHING WITHDRAW] notification write failed (non-fatal) — requestId={body.requestId}")
+            print(traceback.format_exc())
+
+    print(f"[COACHING WITHDRAW] success — requestId={body.requestId} athleteUid={athlete_uid}")
     return {"success": True, "requestId": body.requestId, **result}
 
 
