@@ -2371,27 +2371,75 @@
     return uid || localStorage.getItem('zitlas_athlete_id') || null;
   }
 
+  /* ══════════════════════════════════════════
+     VERIFICATION STATE — SINGLE SOURCE OF TRUTH
+     The Verify Plan button (and its withdraw / re-request companions)
+     derive their state EXCLUSIVELY from: current user uid + current
+     expert uid + the newest review_request's status, interpreted by the
+     explicit whitelist below. Document existence alone never means
+     anything, and no status outside the whitelist may ever produce a
+     blocking/"Under Review" UI.
+
+     Status machine (spec: the ONLY allowed states):
+       ACTIVE   — pending / accepted / in_progress / expert_reviewing
+                  → blocking UI (Review Requested / Chat / Reviewing…)
+       TERMINAL-RENDERABLE — completed / review_completed / rejected
+                  → informational UI WITH a re-request path
+       EVERYTHING ELSE — withdrawn, superseded, dismissed, declined,
+                  expired, cancelled, ended, or any unknown/missing
+                  status → treated as NO REQUEST → "Request Review".
+
+     THE BUG THIS FIXES: the old fallback here was a BLOCKLIST
+     (`status !== 'superseded' && status !== 'withdrawn'`) — every other
+     historical/terminal status fell through to updateVerifyBtnState's
+     catch-all branch, which rendered a permanently disabled "Under
+     Review" with no re-request path. The killer instance: Goal Reset
+     (assets/js/coaching-reset.js) marks every live review_requests doc
+     'dismissed' — a status introduced AFTER this blocklist was written —
+     so any athlete who had ever had a review/chat request and then reset
+     their goal saw "Under Review" forever, on every refresh, with no
+     verification request active at all (the doc re-synced from Firestore
+     into the expert_plan_reviews cache on every page load, so clearing
+     localStorage couldn't help either). A blocklist can never be correct
+     here: any NEW terminal status ever written by any other feature
+     recreates the bug. Hence the whitelist. */
+  var _VP_ACTIVE_STATUSES   = ['pending', 'accepted', 'in_progress', 'expert_reviewing'];
+  var _VP_TERMINAL_RENDERED = ['completed', 'review_completed', 'rejected'];
+
   function _getAllMyPlanReviews(coach) {
     var reviews = [];
     try { reviews = JSON.parse(localStorage.getItem('expert_plan_reviews') || '[]'); } catch (_) {}
     var uid = _getMyUserId();
+    /* Fail-closed identity: no signed-in uid, or a cached doc without a
+       userId stamp, matches NOTHING — a stale cache entry from another
+       account/session on a shared device must never drive this UI. */
+    if (!uid) return [];
     return reviews.filter(function(r) {
-      return r.expertId === coach.id && (!uid || r.userId === uid);
+      return r && r.expertId === coach.id && r.userId === uid;
     });
   }
 
   function _getMyLatestPlanReview(coach) {
     var all = _getAllMyPlanReviews(coach);
     if (!all.length) return null;
-    /* An active (pending/in-progress/accepted) review blocks new submissions */
-    var active = all.find(function(r) {
-      return r.status === 'pending' || r.status === 'accepted' ||
-             r.status === 'in_progress' || r.status === 'expert_reviewing';
+    /* Newest-first — .find() on Firestore's unordered snapshot echo was
+       the same non-determinism bug the Personal Coaching button had:
+       whichever doc happened to sit first in the array won, letting an
+       old doc shadow the request's real, newer lifecycle state. */
+    var sorted = all.slice().sort(function(a, b) {
+      return new Date(b.createdAt || b.submittedAt || 0) -
+             new Date(a.createdAt || a.submittedAt || 0);
     });
-    /* 'superseded' and 'withdrawn' reviews are resolved history — they never
-       drive button state (a withdrawn request returns the athlete to idle) */
-    return active || all.find(function(r) {
-      return r.status !== 'superseded' && r.status !== 'withdrawn';
+    /* An active (pending/in-progress/accepted) review blocks new submissions */
+    var active = sorted.find(function(r) {
+      return _VP_ACTIVE_STATUSES.indexOf(r.status) !== -1;
+    });
+    if (active) return active;
+    /* Only terminal statuses the renderer has a real, non-blocking UI for
+       (each includes a re-request path). Everything else is dead history
+       and must read as "no request". */
+    return sorted.find(function(r) {
+      return _VP_TERMINAL_RENDERED.indexOf(r.status) !== -1;
     }) || null;
   }
 
@@ -2456,6 +2504,19 @@
     if (prevSection)  prevSection.style.display  = 'none';
     btn.disabled = false;
 
+    /* Step-4 debug trace — states exactly which document and status drove
+       this render, or why the idle state was chosen. */
+    console.log('[VERIFY BTN DEBUG]',
+      '\n  Current User:', _getMyUserId(),
+      '\n  Current Expert:', coach.id,
+      '\n  Source: localStorage expert_plan_reviews (echo of Firestore review_requests where userId==uid)',
+      '\n  Cached docs for this expert:', allRevs.length,
+      allRevs.map(function(r) { return (r.id || '?') + ':' + (r.status || 'NO_STATUS'); }),
+      '\n  Selected:', review ? (review.id + ' status=' + review.status) : 'none',
+      '\n  Reason:', review
+        ? 'newest doc whose status is in the active/terminal whitelist'
+        : 'no doc in an active or renderable-terminal status — idle "Request Review"');
+
     if (!review) {
       btn.dataset.vpStatus = '';
       btn.className = 'cp-cta cp-cta--verify';
@@ -2465,8 +2526,6 @@
 
     var st = review.status;
     btn.dataset.vpStatus = st;
-    console.log('[REVIEW] button state', st, '| reviewId:', review.id,
-      '| expertId:', review.expertId, '| athleteId:', review.userId);
 
     if (st === 'pending') {
       btn.disabled  = true;
@@ -2517,9 +2576,17 @@
       /* A rejected athlete must also be able to re-request */
       if (againWrap) againWrap.style.display = 'block';
     } else {
-      btn.disabled  = true;
-      btn.className = 'cp-cta cp-cta--verify cp-cta--vp-pending';
-      btn.innerHTML = VP_SVG.clock + ' Under Review';
+      /* Unreachable by design: _getMyLatestPlanReview only returns
+         whitelisted statuses, every one of which has an explicit branch
+         above. This is fail-closed defense in depth — an unknown status
+         must NEVER produce a blocking "Under Review" (the old behavior
+         here, which is how dismissed/declined/expired historical docs
+         froze the button forever). Default to the idle state instead. */
+      console.warn('[VERIFY BTN] unhandled status "' + st + '" (doc ' + review.id +
+        ') reached the renderer — failing closed to idle "Request Review"');
+      btn.dataset.vpStatus = '';
+      btn.className = 'cp-cta cp-cta--verify';
+      btn.innerHTML = VP_SVG.check + ' Request Review';
     }
 
     /* Show "View Previous Reviews" link when any review has been completed.
