@@ -354,6 +354,9 @@
     'goal', 'assessment', 'survey', 'calculations', 'swot',
     'dietPlan', 'workoutPlan', 'roadmap', 'precautions',
     'planGeneratedAt', 'planId',
+    /* Immutable per-generation master snapshots (ai-coach.js saveBulk) —
+       cloud-only recovery copies; goal-scoped, so a reset clears them. */
+    'dietPlanMaster', 'workoutPlanMaster',
   ];
   function clearGoalData() {
     /* Local first — the resetting tab is consistent immediately */

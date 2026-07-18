@@ -3050,6 +3050,16 @@
         var _fbUsr = {};
         try { _fbUsr = JSON.parse(localStorage.getItem('zitlas_firebase_user') || '{}') || {}; } catch (_) {}
         var _athleteNm = _fbUsr.name || _fbUsr.displayName || 'Athlete';
+        /* Goal-identity stamp for the request docs. THE PAID FLOW NEVER
+           STAMPED planId ON THE REVIEW DOCS THEMSELVES (only on the local
+           anchor) — so every PR_ review was unstamped, the expert-side
+           auto-apply couldn't verify it, and the athlete-side fail-closed
+           banner couldn't validate its completion. Fallback to the plan
+           wrapper's own planId covers a device where zitlas_plan_id
+           hasn't hydrated yet (this page historically didn't load
+           cloud-sync at all). */
+        var _reqPlanId = localStorage.getItem('zitlas_plan_id') ||
+          (ctx.diet_plan && ctx.diet_plan.planId) || null;
         var profileBasics = {
           age:                  a.age                  || null,
           gender:               a.gender               || null,
@@ -3084,6 +3094,7 @@
             expertRole: coach.role,
             reviewType: s.reviewType,
             version:    maxVersion + 1,
+            planId:     _reqPlanId,
             planData:   s.planData,
             assessmentData: {
               assessment:   ctx.assessment   || null,
@@ -3133,7 +3144,7 @@
           if (_anchorDoc) {
             localStorage.setItem('zitlas_review_request', JSON.stringify({
               id: _anchorDoc.id, expertId: coach.id,
-              planId: localStorage.getItem('zitlas_plan_id') || null,
+              planId: _reqPlanId,
               status: 'pending',
             }));
           }

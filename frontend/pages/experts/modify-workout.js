@@ -229,18 +229,32 @@
       console.warn('[MODIFY-WORKOUT] auto-apply skipped — no reviewedWorkoutPlan days', reviewId);
       return Promise.resolve(false);
     }
-    var wrapper = buildAppliedWorkoutWrapper(rev, edited, rev.workoutChangeHistory, expertName, nowIso);
-    console.log('[MODIFY-WORKOUT] auto-applying reviewed plan → users/' + athleteUid + '.workoutPlan');
-    return ZitlasDB.collection('users').doc(athleteUid)
-      .set({ workoutPlan: wrapper, workoutPlanUpdatedAt: nowIso }, { merge: true })
-      .then(function () {
-        console.log('[MODIFY-WORKOUT] reviewed plan is now the athlete\'s ACTIVE workout plan');
-        return true;
-      })
-      .catch(function (e) {
-        console.error('[MODIFY-WORKOUT] auto-apply write failed', e);
+    /* APPLY-GATE — same root-cause fix as modify-diet.js: the master
+       users/{uid}.workoutPlan may only be overwritten when this review
+       provably belongs to the athlete's CURRENT plan generation (both
+       planIds present and equal, checked LIVE at complete time). A
+       mismatched/unstamped review skips the apply and falls back to the
+       planId-gated athlete-side accept flow — the master plan can never
+       be destroyed by an expert action. */
+    return ZitlasDB.collection('users').doc(athleteUid).get().then(function (snap) {
+      var livePlanId = (snap.exists && snap.data().planId) || null;
+      if (!rev.planId || !livePlanId || rev.planId !== livePlanId) {
+        console.warn('[MODIFY-WORKOUT] auto-apply skipped — review planId (' + (rev.planId || 'null') +
+          ') does not match athlete\'s current planId (' + (livePlanId || 'null') + '). Master plan left untouched.');
         return false;
-      });
+      }
+      var wrapper = buildAppliedWorkoutWrapper(rev, edited, rev.workoutChangeHistory, expertName, nowIso);
+      console.log('[MODIFY-WORKOUT] auto-applying reviewed plan → users/' + athleteUid + '.workoutPlan');
+      return ZitlasDB.collection('users').doc(athleteUid)
+        .set({ workoutPlan: wrapper, workoutPlanUpdatedAt: nowIso }, { merge: true })
+        .then(function () {
+          console.log('[MODIFY-WORKOUT] reviewed plan is now the athlete\'s ACTIVE workout plan');
+          return true;
+        });
+    }).catch(function (e) {
+      console.error('[MODIFY-WORKOUT] auto-apply failed (master plan untouched)', e);
+      return false;
+    });
   }
 
   /* ── Init ── */

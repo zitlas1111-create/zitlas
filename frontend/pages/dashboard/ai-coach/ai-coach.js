@@ -2217,6 +2217,17 @@
         _bulk.precautions = _precautionsRaw ? JSON.parse(_precautionsRaw) : null;
         _bulk.planGeneratedAt = new Date().toISOString();
         _bulk.planId = _newPlanId;
+        /* IMMUTABLE MASTER SNAPSHOTS — written ONCE per generation and
+           never touched by any expert/coach/accept/swap flow (those all
+           write dietPlan/workoutPlan). If the working copy is ever lost
+           or corrupted (e.g. an expert modification gone wrong), diet.js
+           recovers the plan from here instead of showing "No Plan Yet".
+           Cloud-only (not in cloud-sync's FIELD_MAP): saveBulk writes
+           unknown keys straight to the users/{uid} patch without a
+           localStorage mirror, so local corruption can't reach them.
+           Cleared by Goal Reset via clearGoalData (goal-scoped). */
+        if (data.diet_plan)    _bulk.dietPlanMaster    = { plan: data.diet_plan,    planId: _newPlanId, generatedAt: _bulk.planGeneratedAt };
+        if (data.workout_plan) _bulk.workoutPlanMaster = { plan: data.workout_plan, planId: _newPlanId, generatedAt: _bulk.planGeneratedAt };
         ZitlasCloudSync.saveBulk(_bulk);
         console.log('[AI-COACH] plan synced to Firestore — visible on every device now');
       }

@@ -149,18 +149,44 @@
       console.warn('[MODIFY-DIET] auto-apply skipped — no reviewedDietPlan days', reviewId);
       return Promise.resolve(false);
     }
-    var wrapper = buildAppliedDietWrapper(rev, edited, rev.mealChangeHistory, expertName, nowIso);
-    console.log('[MODIFY-DIET] auto-applying reviewed plan → users/' + athleteUid + '.dietPlan');
-    return ZitlasDB.collection('users').doc(athleteUid)
-      .set({ dietPlan: wrapper, dietPlanUpdatedAt: nowIso }, { merge: true })
-      .then(function () {
-        console.log('[MODIFY-DIET] reviewed plan is now the athlete\'s ACTIVE diet plan');
-        return true;
-      })
-      .catch(function (e) {
-        console.error('[MODIFY-DIET] auto-apply write failed', e);
+    /* ══ APPLY-GATE (root-cause fix for "diet plan disappears") ══
+       Auto-apply may run ONLY when this review provably belongs to the
+       athlete's CURRENT plan generation: both planIds present AND equal,
+       verified against the athlete's LIVE users/{uid} doc at THIS moment
+       (not the page-load snapshot — the athlete may have regenerated
+       while the expert was editing).
+
+       Without this gate, completing an OLD request (or one created with
+       planId:null before the athlete's device had hydrated) OVERWROTE
+       users/{uid}.dietPlan — the master copy — with a wrapper the
+       athlete-side validator then judged stale and DELETED, leaving the
+       user with "No Plan Yet" as if they never generated anything.
+
+       Skipping is always safe: athleteAccepted stays false, so the
+       athlete-side Accept-banner fallback owns delivery — and that path
+       is itself planId-gated, so a current-goal review still surfaces
+       while a dead-goal review simply never renders. The master plan is
+       untouched either way. */
+    return ZitlasDB.collection('users').doc(athleteUid).get().then(function (snap) {
+      var livePlanId = (snap.exists && snap.data().planId) || null;
+      if (!rev.planId || !livePlanId || rev.planId !== livePlanId) {
+        console.warn('[MODIFY-DIET] auto-apply skipped — review planId (' + (rev.planId || 'null') +
+          ') does not match athlete\'s current planId (' + (livePlanId || 'null') +
+          '). Master plan left untouched; athlete-side accept flow will handle delivery if applicable.');
         return false;
-      });
+      }
+      var wrapper = buildAppliedDietWrapper(rev, edited, rev.mealChangeHistory, expertName, nowIso);
+      console.log('[MODIFY-DIET] auto-applying reviewed plan → users/' + athleteUid + '.dietPlan');
+      return ZitlasDB.collection('users').doc(athleteUid)
+        .set({ dietPlan: wrapper, dietPlanUpdatedAt: nowIso }, { merge: true })
+        .then(function () {
+          console.log('[MODIFY-DIET] reviewed plan is now the athlete\'s ACTIVE diet plan');
+          return true;
+        });
+    }).catch(function (e) {
+      console.error('[MODIFY-DIET] auto-apply failed (master plan untouched)', e);
+      return false;
+    });
   }
 
   /* Mirrors diet.js's _mealKey() exactly — must produce identical keys so

@@ -1692,7 +1692,12 @@
         biggest_struggle:     a.biggest_struggle     || a.struggle || null,
       },
       goal:          safeJSON('zitlas_goal', null),
-      planId:        localStorage.getItem('zitlas_plan_id') || null,
+      /* Wrapper fallback: the validated plan wrapper carries its own
+         planId — covers a device where the zitlas_plan_id scalar hasn't
+         hydrated yet. An unstamped request can never deliver (fail-closed
+         validators everywhere), so null here is never acceptable when a
+         plan exists. */
+      planId:        localStorage.getItem('zitlas_plan_id') || (_st && _st.planId) || null,
       serviceType:   'verification',
       totalPrice:    _free ? 0 : ((expert && expert.fee) || 0),
       fee:           _free ? 0 : ((expert && expert.fee) || 0),
@@ -2828,10 +2833,60 @@
       return;
     }
 
-    /* ── No plan found → show assessment CTA, never call old nutrition API ── */
-    console.log('[DIET CACHE] No diet plan found — showing assessment CTA');
-    showLoading(false);
-    renderAssessmentCta();
+    /* ── No plan found → try the immutable MASTER SNAPSHOT before ever
+       showing "No Plan Yet". users/{uid}.dietPlanMaster is written once
+       per generation (ai-coach.js) and never touched by expert/coach/
+       accept/swap flows — so even if the working copy (dietPlan wrapper)
+       was corrupted or destroyed by a failed modification, the user's
+       AI plan is recoverable as long as it belongs to the CURRENT plan
+       generation. This is the guarantee that an expert action can never
+       leave the user planless. ── */
+    _recoverFromMaster().then(function (recovered) {
+      if (recovered) return;
+      console.log('[DIET CACHE] No diet plan found (master recovery unavailable) — showing assessment CTA');
+      showLoading(false);
+      renderAssessmentCta();
+    });
+  }
+
+  function _recoverFromMaster() {
+    var currentPlanId = _currentPlanId();
+    var uid = _pcUid();
+    if (!currentPlanId || !uid || typeof ZitlasDB === 'undefined') return Promise.resolve(false);
+    return ZitlasDB.collection('users').doc(uid).get().then(function (snap) {
+      var master = snap.exists ? snap.data().dietPlanMaster : null;
+      if (!master || !master.plan || !master.plan.days || !master.plan.days.length) return false;
+      /* Same fail-closed goal-identity rule as everything else: the
+         master only restores the CURRENT generation's plan. */
+      if (master.planId !== currentPlanId) {
+        console.log('[DIET RECOVERY] master exists but belongs to plan', master.planId, '— not', currentPlanId);
+        return false;
+      }
+      console.warn('[DIET RECOVERY] working copy missing — restoring AI plan from users/' + uid + '.dietPlanMaster');
+      /* Rebuild the pure-AI wrapper; saveDietStorage also re-writes the
+         cloud working copy, healing every other device. */
+      saveDietStorage({
+        originalDietPlan:    master.plan,
+        currentDietPlan:     master.plan,
+        expertModifications: {},
+        isExpertPlan:        false,
+        expertName:          null,
+        reviewedAt:          null,
+        planId:              master.planId,
+      });
+      weeklyPlan = normalizePlan(JSON.parse(JSON.stringify(master.plan)));
+      planSource = 'ai';
+      showLoading(false);
+      renderPlanMeta();
+      renderFocusCard(weeklyPlan, null);
+      renderDay(currentDay);
+      renderVerifyNutriSection();
+      showToast('✅ Your diet plan was restored.');
+      return true;
+    }).catch(function (e) {
+      console.warn('[DIET RECOVERY] master lookup failed', e);
+      return false;
+    });
   }
 
   /* ══════════════════════════════════════════
