@@ -1617,6 +1617,22 @@
     if (!userId) { showToast('Please sign in first.'); return; }
     if (typeof ZitlasDB === 'undefined') { showToast('Connection unavailable — please try again.'); return; }
 
+    /* DUPLICATE-REQUEST GUARD — one live verification request at a time,
+       platform-wide (same rule cprofile.js's paid flow enforces via
+       _getMyLatestPlanReview). Without this, only the clicked card's
+       button was disabled — tapping a DIFFERENT expert's card created a
+       second concurrent pending request (ghost requests, double expert
+       work, ambiguous anchor). planId-scoped: a leftover anchor from a
+       dead goal never blocks a fresh request. */
+    var _activeAnchor = safeJSON('zitlas_review_request', null);
+    var _curPlan = localStorage.getItem('zitlas_plan_id') || null;
+    if (_activeAnchor && _curPlan && _activeAnchor.planId === _curPlan &&
+        (_activeAnchor.status === 'pending' || _activeAnchor.status === 'in_progress' ||
+         _activeAnchor.status === 'expert_reviewing')) {
+      showToast('You already have a review request in progress — withdraw it first to send a new one.');
+      return;
+    }
+
     /* The plan the expert will edit — the athlete's CURRENT plan,
        unwrapped from the wrapper schema (validated: stale wrappers were
        already discarded by loadDietStorage). */
