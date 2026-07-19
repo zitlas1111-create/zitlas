@@ -838,16 +838,10 @@
       });
     }
 
-    /* ── Skip ── */
-    const skipBtn = document.getElementById('lmSkipBtn');
-    if (skipBtn) {
-      skipBtn.addEventListener('click', () => {
-        sessionStorage.setItem('zitlas_guest', '1');
-        sessionStorage.removeItem('zitlas_pending_action');
-        closeLoginModal();
-        showToast('Browsing as guest');
-      });
-    }
+    /* "Skip for Now" (guest browsing without authentication) removed —
+       ZITLAS requires a signed-in account. The zitlas_guest gate in
+       isLoggedIn() remains only for the expert-application-under-review
+       flow, where the user is already Google-authenticated. */
 
     /* ── Password toggle ── */
     const pwToggle = document.getElementById('lmPwToggle');

@@ -52,7 +52,6 @@
       login_divider:          'or continue with',
       login_google:           'Continue with Google',
       login_create:           'Create Account',
-      login_skip:             'Skip for Now',
 
       /* â”€â”€ DASHBOARD â”€â”€ */
       dash_greeting_sub:      'Discipline today, victory tomorrow.',
@@ -110,7 +109,6 @@
       lm_divider:          'or continue with',
       lm_google:           'Continue with Google',
       lm_create:           'Create Account',
-      lm_skip:             'Skip for Now â†’',
 
       /* â”€â”€ WEEKLY PLAN â”€â”€ */
       wp_header_tag:    'WEEKLY PLAN',
@@ -365,7 +363,6 @@
       login_divider:         'à¤¯à¤¾ à¤œà¤¾à¤°à¥€ à¤°à¤–à¥‡à¤‚',
       login_google:          'Google à¤¸à¥‡ à¤œà¤¾à¤°à¥€ à¤°à¤–à¥‡à¤‚',
       login_create:          'à¤–à¤¾à¤¤à¤¾ à¤¬à¤¨à¤¾à¤à¤‚',
-      login_skip:             'Skip for Now',
 
       /* â”€â”€ DASHBOARD â”€â”€ */
       dash_greeting_sub:      'à¤†à¤œ à¤…à¤¨à¥à¤¶à¤¾à¤¸à¤¨, à¤•à¤² à¤œà¥€à¤¤à¥¤',
@@ -423,7 +420,6 @@
       lm_divider:         'à¤¯à¤¾ à¤œà¤¾à¤°à¥€ à¤°à¤–à¥‡à¤‚',
       lm_google:          'Google à¤¸à¥‡ à¤œà¤¾à¤°à¥€ à¤°à¤–à¥‡à¤‚',
       lm_create:          'à¤–à¤¾à¤¤à¤¾ à¤¬à¤¨à¤¾à¤à¤‚',
-      lm_skip:            'à¤…à¤­à¥€ à¤›à¥‹à¤¡à¤¼à¥‡à¤‚ â†’',
 
       /* â”€â”€ WEEKLY PLAN â”€â”€ */
       wp_header_tag:   'à¤¸à¤¾à¤ªà¥à¤¤à¤¾à¤¹à¤¿à¤• à¤¯à¥‹à¤œà¤¨à¤¾',

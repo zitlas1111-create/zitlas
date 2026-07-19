@@ -1282,15 +1282,6 @@ a   { text-decoration: none; }
 
 .lm-footer-sep { color: var(--text-muted); font-size: 14px; }
 
-.lm-skip-btn {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-sec);
-  transition: color var(--transition);
-}
-
-.lm-skip-btn:hover { color: var(--text); }
-
 /* =============================================
    RESPONSIVE
    ============================================= */

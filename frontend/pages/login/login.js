@@ -33,14 +33,11 @@ const expertHintBtn  = document.getElementById('expertHintBtn');
 const expertHint     = document.getElementById('expertHint');
 const loginCardTitle = document.getElementById('loginCardTitle');
 const loginCardSub   = document.getElementById('loginCardSub');
-const skipBtn        = document.getElementById('skipBtn');
-
 function setRole(role) {
   selectedRole = role;
   if (roleTabAthlete) roleTabAthlete.classList.toggle('active', role === 'athlete');
   if (roleTabExpert)  roleTabExpert.classList.toggle('active',  role === 'expert');
   if (expertHint)     expertHint.style.display = (role === 'expert' || isSignupMode) ? 'none' : '';
-  if (skipBtn)        skipBtn.style.display    = (role === 'expert' || isSignupMode) ? 'none' : '';
   if (loginCardTitle) loginCardTitle.textContent = isSignupMode
     ? (role === 'expert' ? 'Create Expert Account' : 'Create Account')
     : (role === 'expert' ? 'Expert Login' : 'Welcome Back');
@@ -83,7 +80,6 @@ function setSignupMode(on) {
     : (selectedRole === 'expert' ? 'Expert Login' : 'Sign In');
   if (createLink) createLink.textContent = on ? 'Already have an account? Sign In' : 'Create Account';
   if (expertHint) expertHint.style.display = (on || selectedRole === 'expert') ? 'none' : '';
-  if (skipBtn)    skipBtn.style.display    = on ? 'none' : (selectedRole === 'expert' ? 'none' : '');
 }
 
 
@@ -443,15 +439,10 @@ if (googleBtn) {
 
 
 
-if (skipBtn) {
-  skipBtn.addEventListener('click', () => {
-    sessionStorage.setItem('zitlas_guest', '1');
-    sessionStorage.removeItem('zitlas_pending_action');
-    window.location.href = getRedirectDestination();
-  });
-}
-
-
+/* "Skip for Now" (guest access without authentication) has been removed —
+   ZITLAS requires a signed-in account. The only remaining zitlas_guest
+   writer is the expert-application-under-review flow (grmReviewHomeBtn),
+   where the user IS authenticated via Google. */
 
 function _clearAuthLocalStorage() {
   ['zitlas_user','zitlas_user_role','zitlas_expert_profile','zitlas_expert_id',
