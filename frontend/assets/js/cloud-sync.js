@@ -58,6 +58,14 @@
   var SCALAR_FIELD_MAP = {
     planGeneratedAt: 'zitlas_plan_generated_at',
     planId:          'zitlas_plan_id',
+    /* Zino product-tour completion — PER-USER, cross-device. Lives on
+       users/{uid} so the tour shows exactly once per ACCOUNT lifetime:
+       logout/login, device changes, and cache clears can't resurrect it
+       (the localStorage copy alone is wiped by the Account Guard on
+       every logout/switch, which is precisely why a local-only flag
+       made the tour reappear for every returning user). Deliberately
+       NOT goal-scoped — a Goal Reset must not replay the tour. */
+    zinoTourCompleted: 'zitlas_zino_tutorial_completed',
   };
 
   function db() { return (typeof ZitlasDB !== 'undefined') ? ZitlasDB : null; }

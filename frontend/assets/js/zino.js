@@ -334,6 +334,69 @@
     function markDone() {
       localStorage.setItem(DONE_KEY, 'true');
       localStorage.removeItem(STATE_KEY);
+      /* Persist to users/{uid}.zinoTourCompleted — the AUTHORITATIVE,
+         cross-device copy (SCALAR_FIELD_MAP in cloud-sync.js). Without
+         this, the flag lived only in localStorage, which the Account
+         Guard wipes on every logout/switch — so returning users saw the
+         tour on every single login. Covers both Finish and Skip (skip()
+         funnels into finish() → here). Direct-Firestore fallback because
+         Skip can be pressed on ANY tour stop, including pages that don't
+         load cloud-sync (e.g. coaches.html). */
+      if (typeof ZitlasCloudSync !== 'undefined') {
+        ZitlasCloudSync.save('zinoTourCompleted', 'true');
+      } else if (typeof ZitlasDB !== 'undefined' && typeof ZitlasAuth !== 'undefined' && ZitlasAuth.currentUser) {
+        ZitlasDB.collection('users').doc(ZitlasAuth.currentUser.uid)
+          .set({ zinoTourCompleted: 'true', zinoTourCompletedUpdatedAt: new Date().toISOString() }, { merge: true })
+          .catch(function (e) { console.warn('[ZINO TOUR] cloud persist failed (local flag kept)', e); });
+      }
+    }
+
+    /* Resolves the signed-in uid, waiting for Firebase's async session
+       restore if needed (auth is rarely settled at DOMContentLoaded). */
+    function _uidWhenAuthSettles() {
+      return new Promise(function (resolve) {
+        if (typeof ZitlasAuth === 'undefined') { resolve(null); return; }
+        if (ZitlasAuth.currentUser) { resolve(ZitlasAuth.currentUser.uid); return; }
+        var settled = false;
+        var unsub = ZitlasAuth.onAuthStateChanged(function (u) {
+          if (settled) return;
+          settled = true;
+          try { unsub(); } catch (_) {}
+          resolve(u ? u.uid : null);
+        });
+        /* Auth never settling shouldn't wedge the decision forever */
+        setTimeout(function () { if (!settled) { settled = true; resolve(null); } }, 4000);
+      });
+    }
+
+    /* TRUE only when this account has verifiably never completed the tour.
+       maybeResume() runs at DOMContentLoaded — BEFORE cloud-sync's async
+       hydrate can mirror the flag locally — so the auto-start decision
+       must ask the authoritative users/{uid} doc directly. Fail-closed:
+       if the check errors, DON'T start (a returning user must never be
+       re-toured; a genuinely new user simply gets the tour on the next
+       page load when the read succeeds). */
+    function _confirmNeverToured() {
+      return _uidWhenAuthSettles().then(function (uid) {
+        if (isDone()) return false;              /* hydrate may have landed meanwhile */
+        if (!uid || typeof ZitlasDB === 'undefined') {
+          /* No signed-in account (guest/under-review session) — fall back
+             to the local-only behavior this flow always had. */
+          return !isDone();
+        }
+        return ZitlasDB.collection('users').doc(uid).get().then(function (snap) {
+          var done = snap.exists && String(snap.data().zinoTourCompleted) === 'true';
+          if (done) {
+            /* Heal the purged local mirror so every later check is sync */
+            try { localStorage.setItem(DONE_KEY, 'true'); } catch (_) {}
+            return false;
+          }
+          return true;
+        }).catch(function (e) {
+          console.warn('[ZINO TOUR] remote completion check failed — not auto-starting', e);
+          return false;
+        });
+      });
     }
 
     function currentPageMatches(stop) {
@@ -491,10 +554,19 @@
         if (stop && currentPageMatches(stop)) goToStop(state.index);
         return;
       }
-      /* Never started: auto-begin ONLY from the dashboard — the natural
-         first landing page — per "show ZINO only the very first time". */
+      /* Never started locally: auto-begin ONLY from the dashboard — the
+         natural first landing page — and ONLY after confirming against
+         users/{uid} that this ACCOUNT has never completed/skipped the
+         tour. The local flag alone is not evidence of a new user: the
+         Account Guard purges it on every logout/account switch, and a
+         new device never had it. */
       if (win.location.pathname.indexOf('dashboard.html') !== -1 || win.location.pathname === '/') {
-        goToStop(0);
+        _confirmNeverToured().then(function (neverToured) {
+          if (!neverToured) return;
+          /* Re-check in-progress state — another tab may have started */
+          if (isDone() || getState()) return;
+          goToStop(0);
+        });
       }
     }
 
