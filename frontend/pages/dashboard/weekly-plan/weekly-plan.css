@@ -69,12 +69,19 @@ body::before {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
+  height: 65px;
+  padding: 0 16px;
   background: rgba(255,255,255,0.92);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
   border-bottom: 1px solid var(--border);
   z-index: 100;
+}
+@media (min-width: 768px) {
+  .wp-header { height: 75px; }
+}
+@media (min-width: 1024px) {
+  .wp-header { height: 90px; }
 }
 
 .wp-back-btn {
@@ -104,12 +111,15 @@ body::before {
 }
 
 .wp-header-logo {
-  font-size: 13px;
-  font-weight: 900;
-  letter-spacing: 2px;
-  color: var(--text-muted);
-  min-width: 36px;
-  text-align: right;
+  height: 42px;
+  width: auto;
+  object-fit: contain;
+}
+@media (min-width: 768px) {
+  .wp-header-logo { height: 50px; }
+}
+@media (min-width: 1024px) {
+  .wp-header-logo { height: 60px; }
 }
 
 /* ══════════════════════════════════════════

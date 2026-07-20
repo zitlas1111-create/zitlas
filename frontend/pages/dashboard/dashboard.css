@@ -113,12 +113,19 @@ a   { text-decoration: none; }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 18px;
+  height: 65px;
+  padding: 0 18px;
   background: var(--bg);
   border-bottom: 1px solid var(--border-sub);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
   transition: background var(--transition), border-color var(--transition);
+}
+@media (min-width: 768px) {
+  .dash-header { height: 75px; }
+}
+@media (min-width: 1024px) {
+  .dash-header { height: 90px; }
 }
 
 .header-avatar-link {
@@ -138,11 +145,16 @@ a   { text-decoration: none; }
 .header-avatar:hover { transform: scale(1.08); }
 
 .logo-text {
-  font-size: 20px;
-  font-weight: 900;
-  letter-spacing: 4px;
-  color: var(--accent);
+  height: 42px;
+  width: auto;
+  object-fit: contain;
   user-select: none;
+}
+@media (min-width: 768px) {
+  .logo-text { height: 50px; }
+}
+@media (min-width: 1024px) {
+  .logo-text { height: 60px; }
 }
 
 .icon-btn {
@@ -1112,13 +1124,11 @@ a   { text-decoration: none; }
 }
 
 .lm-logo {
-  display: block;
-  font-size: 16px;
-  font-weight: 900;
-  letter-spacing: 4px;
-  color: var(--accent);
+  display: inline-block;
+  height: 44px;
+  width: auto;
+  object-fit: contain;
   margin-bottom: 10px;
-  text-shadow: 0 0 12px rgba(var(--primary-rgb),0.35);
 }
 
 .login-modal-card .modal-title    { margin-bottom: 3px; }

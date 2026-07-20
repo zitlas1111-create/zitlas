@@ -17,7 +17,13 @@
   --radius-sm:    10px;
   --shadow:       0 2px 12px rgba(var(--black-rgb),.45);
   --nav-h:        72px;
-  --header-h:     56px;
+  --header-h:     65px;
+}
+@media (min-width: 768px) {
+  :root { --header-h: 75px; }
+}
+@media (min-width: 1024px) {
+  :root { --header-h: 90px; }
 }
 
 /* ─── Reset ─────────────────────────────────────────────────────── */
@@ -190,13 +196,15 @@ html, body {
   border-bottom: 1px solid var(--border);
 }
 .logo-text {
-  font-size: 1.1rem;
-  font-weight: 900;
-  letter-spacing: .05em;
-  background: linear-gradient(135deg, var(--primary), var(--primary-hover));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  height: 42px;
+  width: auto;
+  object-fit: contain;
+}
+@media (min-width: 768px) {
+  .logo-text { height: 50px; }
+}
+@media (min-width: 1024px) {
+  .logo-text { height: 60px; }
 }
 .icon-btn {
   background: none;

@@ -51,7 +51,7 @@
     el.innerHTML =
       '<div class="zcall-glow"></div>' +
       '<div class="zcall-top">' +
-        '<span class="zcall-brand">ZITLAS</span>' +
+        '<img src="/assets/logo.png" alt="ZITLAS Logo" class="zcall-brand">' +
         '<span class="zcall-secure">🔒 Peer-to-peer voice call</span>' +
       '</div>' +
       '<div class="zcall-body">' +

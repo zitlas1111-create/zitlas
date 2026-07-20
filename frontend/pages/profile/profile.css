@@ -88,21 +88,32 @@ button:focus-visible {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 14px 20px;
+  height: 65px;
+  padding: 0 20px;
   background: var(--bg);
   border-bottom: 1px solid var(--border-subtle);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   transition: background-color var(--transition), border-color var(--transition);
 }
+@media (min-width: 768px) {
+  .app-bar { height: 75px; }
+}
+@media (min-width: 1024px) {
+  .app-bar { height: 90px; }
+}
 
 .logo-text {
-  font-size: 20px;
-  font-weight: 900;
-  letter-spacing: 4px;
-  color: var(--accent);
-  text-transform: uppercase;
+  height: 42px;
+  width: auto;
+  object-fit: contain;
   user-select: none;
+}
+@media (min-width: 768px) {
+  .logo-text { height: 50px; }
+}
+@media (min-width: 1024px) {
+  .logo-text { height: 60px; }
 }
 
 
