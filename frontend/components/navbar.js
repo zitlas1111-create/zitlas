@@ -259,9 +259,24 @@
   function isOffscreen(el) {
     var r = el.getBoundingClientRect();
     if (r.width === 0 && r.height === 0) return true;
-    return r.right <= 0 || r.bottom <= 0 ||
-      r.left >= (window.innerWidth || document.documentElement.clientWidth) ||
-      r.top >= (window.innerHeight || document.documentElement.clientHeight);
+    /* Measure against the LAYOUT viewport (documentElement.clientWidth/
+       Height — excludes scrollbars), never window.innerWidth/Height
+       (includes them). Fixed inset:0 elements are laid out in the layout
+       viewport, so a panel hidden via translateX(100%) has its left edge
+       at exactly clientWidth. Comparing that against innerWidth made the
+       hidden panel register as ~15px "on-screen" whenever a classic
+       desktop scrollbar was present — which flipped isAnyModalOpen() to
+       true → body.modal-open → overflow:hidden → scrollbar removed →
+       panel reflowed to the wider viewport → now "offscreen" → class
+       removed → scrollbar returned → …an infinite scrollbar-toggle loop
+       that reflowed the whole page every frame (the desktop-only
+       "page shakes until DevTools changes the viewport" bug). Using
+       clientWidth keeps the verdict identical in BOTH scrollbar states.
+       The 1px tolerance absorbs fractional-pixel layout positions. */
+    var vw = document.documentElement.clientWidth  || window.innerWidth;
+    var vh = document.documentElement.clientHeight || window.innerHeight;
+    return r.right <= 1 || r.bottom <= 1 ||
+      r.left >= vw - 1 || r.top >= vh - 1;
   }
 
   function isAnyModalOpen() {
