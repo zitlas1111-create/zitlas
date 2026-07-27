@@ -236,23 +236,29 @@
        mismatched/unstamped review skips the apply and falls back to the
        planId-gated athlete-side accept flow — the master plan can never
        be destroyed by an expert action. */
-    return ZitlasDB.collection('users').doc(athleteUid).get().then(function (snap) {
-      var livePlanId = (snap.exists && snap.data().planId) || null;
-      if (!rev.planId || !livePlanId || rev.planId !== livePlanId) {
-        console.warn('[MODIFY-WORKOUT] auto-apply skipped — review planId (' + (rev.planId || 'null') +
-          ') does not match athlete\'s current planId (' + (livePlanId || 'null') + '). Master plan left untouched.');
-        return false;
-      }
-      var wrapper = buildAppliedWorkoutWrapper(rev, edited, rev.workoutChangeHistory, expertName, nowIso);
-      console.log('[MODIFY-WORKOUT] auto-applying reviewed plan → users/' + athleteUid + '.workoutPlan');
-      return ZitlasDB.collection('users').doc(athleteUid)
-        .set({ workoutPlan: wrapper, workoutPlanUpdatedAt: nowIso }, { merge: true })
-        .then(function () {
-          console.log('[MODIFY-WORKOUT] reviewed plan is now the athlete\'s ACTIVE workout plan');
-          return true;
-        });
+    /* Cross-user write (expert → athlete's users/{uid}.workoutPlan) now runs
+       SERVER-SIDE via POST /api/review/apply (assigned-expert check + same
+       planId apply-gate, Admin SDK). Denied/mismatched → master plan untouched,
+       athlete-side accept flow delivers. See modify-diet.js for the rationale. */
+    var wrapper = buildAppliedWorkoutWrapper(rev, edited, rev.workoutChangeHistory, expertName, nowIso);
+    var auth = (typeof ZitlasAuth !== 'undefined') ? ZitlasAuth : null;
+    var user = auth && auth.currentUser;
+    if (!user || typeof user.getIdToken !== 'function') return Promise.resolve(false);
+    return user.getIdToken().then(function (token) {
+      return fetch('/api/review/apply', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reviewId: rev.reviewId || rev.id, athleteUid: athleteUid,
+          planType: 'workout', wrapper: wrapper }),
+      });
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (data) {
+        var applied = res.status === 200 && data.success && data.applied === true;
+        console.log('[MODIFY-WORKOUT] server apply →', res.status, data);
+        return applied;
+      });
     }).catch(function (e) {
-      console.error('[MODIFY-WORKOUT] auto-apply failed (master plan untouched)', e);
+      console.error('[MODIFY-WORKOUT] server apply failed (master plan untouched)', e);
       return false;
     });
   }

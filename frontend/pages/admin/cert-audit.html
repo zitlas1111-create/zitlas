@@ -78,6 +78,24 @@
 
     function db() { return (typeof ZitlasDB !== 'undefined') ? ZitlasDB : null; }
 
+    /* Verified-badge recompute is a PRIVILEGED write to experts/{uid}.verified
+       (backend-only under Security Rules). Route it through the admin-gated
+       backend endpoint instead of the old client ZitlasCertificates.
+       recomputeVerifiedFlag() Firestore write. */
+    function adminRecompute(expertId) {
+      var auth = (typeof ZitlasAuth !== 'undefined') ? ZitlasAuth : null;
+      var user = auth && auth.currentUser;
+      if (!user || !expertId || typeof user.getIdToken !== 'function') return Promise.resolve();
+      return user.getIdToken().then(function (t) {
+        return fetch('/api/admin/experts/recompute-verification', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + t, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ expertId: expertId }),
+        });
+      }).then(function (r) { if (!r.ok) console.warn('[CERT AUDIT] recompute failed HTTP', r.status); })
+        .catch(function (e) { console.warn('[CERT AUDIT] recompute error', e); });
+    }
+
     function probeStorage() {
       var banner = $('storageBanner');
       var bucket = (firebase.app().options.storageBucket) || 'zitlas-b8677.firebasestorage.app';
@@ -155,7 +173,7 @@
       d.collection('expert_certificates').doc(docId).delete()
         .then(function () {
           console.log('[CERT AUDIT] deleted', docId);
-          if (typeof ZitlasCertificates !== 'undefined' && expertId) return ZitlasCertificates.recomputeVerifiedFlag(expertId);
+          return adminRecompute(expertId);
         })
         .then(function () { audit(); })
         .catch(function (e) { alert('Delete failed: ' + e.message); });
@@ -172,8 +190,7 @@
         return d.collection('expert_certificates').doc(rec.docId).delete();
       }))
         .then(function () {
-          if (typeof ZitlasCertificates === 'undefined') return;
-          return Promise.all(Object.keys(experts).map(function (eid) { return ZitlasCertificates.recomputeVerifiedFlag(eid); }));
+          return Promise.all(Object.keys(experts).map(function (eid) { return adminRecompute(eid); }));
         })
         .then(function () { console.log('[CERT AUDIT] bulk delete complete'); audit(); })
         .catch(function (e) { alert('Bulk delete failed: ' + e.message); });

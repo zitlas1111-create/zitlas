@@ -19,3 +19,13 @@ node_modules/
 # OS
 .DS_Store
 Thumbs.db
+
+tests/firestore-rules/node_modules/
+
+# Firestore test generated files
+tests/firestore-rules/*.log
+tests/firestore-rules/node_modules/
+
+# Python generated cache
+__pycache__/
+*.pyc

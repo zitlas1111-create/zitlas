@@ -29,10 +29,30 @@ from fastapi import APIRouter, Depends, HTTPException
 from google.cloud import firestore
 from pydantic import BaseModel
 
+import trial_config
 from services import firestore_service, razorpay_service
 from services.auth_service import verify_firebase_token
 
 router = APIRouter()
+
+# Fee split kept identical to the old client-side attemptCharge (10% platform).
+_PLATFORM_FEE_PERCENT = 0.10
+
+
+def _membership_is_premium(membership: dict | None) -> bool:
+    """Mirror of payment-service.js _membershipIsPremium — premium & unexpired."""
+    if not membership or not isinstance(membership, dict):
+        return False
+    if membership.get("plan") != "premium" or not membership.get("active"):
+        return False
+    exp = membership.get("premium_expiry_date")
+    if exp:
+        try:
+            if datetime.fromisoformat(str(exp).replace("Z", "+00:00")) <= _now():
+                return False
+        except Exception:
+            pass
+    return True
 
 # ── Premium Membership pricing (SERVER-authoritative — the client sends
 #    only 'monthly'|'yearly'; the price can never be manipulated) ──
@@ -65,6 +85,36 @@ class VerifyBody(BaseModel):
 
 class MembershipOrderBody(BaseModel):
     billing: str  # 'monthly' | 'yearly' — price resolved server-side
+
+
+class ChargeBody(BaseModel):
+    # The athlete whose wallet is charged (may differ from the caller when the
+    # assigned expert accepts a review on their own device — see /charge).
+    athleteUid: str
+    requestCollection: str   # e.g. 'review_requests'
+    requestId: str
+    amount: float = 0.0
+    serviceType: str = "unknown"
+    serviceLabel: str | None = None
+    expertId: str | None = None
+    expertName: str | None = None
+    # Fields merged onto the request doc ONLY on a successful charge (e.g.
+    # {status:'in_progress', chatUnlocked:true}). Never applied on the
+    # insufficient-balance path.
+    onSuccessUpdate: dict = {}
+    # "Both" bundle: a linked review the same charge covers. Mirrored to the
+    # SAME paid outcome SERVER-SIDE (was a client write of paymentStatus:'paid'
+    # — a forgeable payment-state flag). Only mirrored when it belongs to the
+    # same athlete.
+    siblingRequestId: str | None = None
+
+
+# Only these request collections may be advanced by a charge — a hard allowlist
+# so onSuccessUpdate can never be aimed at an arbitrary collection/document.
+_CHARGEABLE_COLLECTIONS = {"review_requests", "coaching_meal_requests"}
+# Field on the request doc that identifies the assigned expert (used to
+# authorize an expert-initiated charge).
+_REQUEST_EXPERT_FIELDS = ("expertId", "coachId")
 
 
 @router.post("/create-order")
@@ -308,3 +358,168 @@ async def verify_membership_payment(body: VerifyBody, caller: dict = Depends(ver
 
     print(f"[MEMBERSHIP VERIFY] premium activated — uid={uid} already={result.get('already')}")
     return {"success": True, **result}
+
+
+# ══════════════════════════════════════════════════════════════════════
+# PLATFORM-SERVICE CHARGE — server-authoritative replacement for the old
+# client-side ZitlasPayment.attemptCharge() Firestore transaction.
+#
+# WHY THIS MOVED SERVER-SIDE: the wallet lives in users/{uid}.wallet, and the
+# old flow debited it from the BROWSER. Under production Security Rules the
+# client can no longer write users/{uid}.wallet or wallet_transactions (see
+# FIRESTORE_SECURITY_AUDIT.md V2), so the balance check + debit + audit record
+# + request-advance must happen here, where the Admin SDK bypasses rules and
+# the amount/policy can't be tampered with.
+#
+# AUTHORIZATION: the caller must be either the athlete themselves (paying for
+# their own request) OR the expert assigned to the request (auto-charge on
+# accept). Verified by reading the request doc's expert/coach field — never
+# trusted from the body.
+#
+# PRICING/POLICY: the charge is forced to ₹0 whenever CLIENT_TRIAL_MODE or
+# PLATFORM_CHARGES_FREE is on (both default True), or the athlete is a Premium
+# member — same policy the client used to apply, now enforced where it can't be
+# bypassed. At ₹0 no wallet field or wallet_transactions doc is written at all.
+# ══════════════════════════════════════════════════════════════════════
+
+@router.post("/charge")
+async def charge_service(body: ChargeBody, caller: dict = Depends(verify_firebase_token)):
+    caller_uid = caller["uid"]
+    athlete_uid = body.athleteUid
+    coll = body.requestCollection
+
+    if coll not in _CHARGEABLE_COLLECTIONS:
+        raise HTTPException(status_code=400, detail="invalid_request_collection")
+    if not athlete_uid or not body.requestId:
+        raise HTTPException(status_code=400, detail="missing_params")
+
+    amount = max(0.0, float(body.amount or 0))
+    db = _db()
+    request_ref = db.collection(coll).document(body.requestId)
+    user_ref = db.collection("users").document(athlete_uid)
+    txn_id = "txn_" + str(int(time.time() * 1000)) + "_" + body.requestId[-6:]
+
+    @firestore.transactional
+    def _txn(tx):
+        req_snap = request_ref.get(transaction=tx)
+        if not req_snap.exists:
+            raise HTTPException(status_code=404, detail="request_missing")
+        req = req_snap.to_dict() or {}
+
+        # ── Authorization (server-side, from the stored request) ──
+        assigned_expert = next(
+            (req.get(f) for f in _REQUEST_EXPERT_FIELDS if req.get(f)), None
+        )
+        if caller_uid != athlete_uid and caller_uid != assigned_expert:
+            raise HTTPException(status_code=403, detail="not_authorized_for_request")
+        # The request must actually belong to the athlete being charged.
+        req_athlete = req.get("athleteId") or req.get("userId")
+        if req_athlete and req_athlete != athlete_uid:
+            raise HTTPException(status_code=403, detail="athlete_mismatch")
+
+        if req.get("paymentStatus") == "paid":
+            return {"success": True, "alreadyPaid": True,
+                    "walletTransactionId": req.get("walletTransactionId")}
+
+        # ── Server-authoritative pricing ──
+        user_snap = user_ref.get(transaction=tx)
+        user_data = user_snap.to_dict() if user_snap.exists else {}
+        membership = (user_data or {}).get("membership")
+        free = (trial_config.CLIENT_TRIAL_MODE
+                or trial_config.PLATFORM_CHARGES_FREE
+                or _membership_is_premium(membership))
+        charge_amount = 0.0 if free else amount
+
+        wallet = dict((user_data or {}).get("wallet") or {})
+        balance = float(wallet.get("balance", 0) or 0)
+
+        if charge_amount > 0 and balance < charge_amount:
+            # Payment failed — record the expert's decision but do NOT advance
+            # the request to a serving state (no onSuccessUpdate).
+            tx.update(request_ref, {
+                "status": "accepted",
+                "paymentStatus": "awaiting_payment",
+                "paymentAttemptedAt": _now().isoformat(),
+            })
+            return {"success": False, "error": "insufficient_balance",
+                    "balance": balance, "required": charge_amount,
+                    "shortfall": charge_amount - balance}
+
+        wallet_before = balance
+        wallet_after = balance - charge_amount
+
+        if charge_amount > 0:
+            platform_fee = round(charge_amount * _PLATFORM_FEE_PERCENT)
+            wallet["balance"] = wallet_after
+            wallet["total_spent"] = float(wallet.get("total_spent", 0) or 0) + charge_amount
+            txns = list(wallet.get("transactions", []))
+            txns.append({
+                "id": txn_id, "type": "debit", "amount": charge_amount,
+                "description": (body.serviceLabel or "ZITLAS service")
+                               + (f" — {body.expertName}" if body.expertName else ""),
+                "date": _now().isoformat(),
+            })
+            wallet["transactions"] = txns
+            tx.set(user_ref, {"wallet": wallet, "walletUpdatedAt": _now().isoformat()}, merge=True)
+            tx.set(db.collection("wallet_transactions").document(txn_id), {
+                "transactionId": txn_id, "serviceType": body.serviceType,
+                "expertId": body.expertId, "userId": athlete_uid,
+                "amount": charge_amount, "walletBefore": wallet_before, "walletAfter": wallet_after,
+                "grossAmount": charge_amount, "platformFee": platform_fee,
+                "expertAmount": charge_amount - platform_fee, "status": "success",
+                "createdAt": _now().isoformat(),
+            })
+
+        # Advance the request. onSuccessUpdate is client-supplied but written
+        # only to THIS request doc, which the caller is authorized on.
+        update = dict(body.onSuccessUpdate or {})
+        update.update({
+            "paymentStatus": "paid",
+            "walletTransactionId": txn_id if charge_amount > 0 else None,
+            "paidAt": _now().isoformat(),
+            "chargeWaived": charge_amount == 0,
+        })
+        tx.update(request_ref, update)
+
+        return {"success": True, "transactionId": txn_id if charge_amount > 0 else None,
+                "walletBefore": wallet_before, "walletAfter": wallet_after,
+                "charged": charge_amount}
+
+    try:
+        result = _txn(db.transaction())
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[PAYMENT CHARGE] failed — caller={caller_uid} athlete={athlete_uid} "
+              f"req={coll}/{body.requestId}: {type(e).__name__}: {e}")
+        raise HTTPException(status_code=500, detail=f"charge_failed: {type(e).__name__}: {e}")
+
+    # ── "Both" bundle sibling mirror (server-side) ──
+    # Only when the primary genuinely reached a paid state, and only onto a
+    # sibling that belongs to the SAME athlete (verified from the stored doc).
+    if body.siblingRequestId and result.get("success"):
+        try:
+            sib_ref = db.collection(coll).document(body.siblingRequestId)
+            sib = sib_ref.get()
+            if sib.exists:
+                sd = sib.to_dict() or {}
+                sib_athlete = sd.get("athleteId") or sd.get("userId")
+                if sib_athlete == athlete_uid:
+                    mirror = dict(body.onSuccessUpdate or {})
+                    mirror.update({
+                        "paymentStatus": "paid",
+                        "walletTransactionId": result.get("transactionId"),
+                        "paidAt": _now().isoformat(),
+                    })
+                    sib_ref.update(mirror)
+                    print(f"[PAYMENT CHARGE] sibling mirrored req={coll}/{body.siblingRequestId}")
+                else:
+                    print(f"[PAYMENT CHARGE] sibling mirror SKIPPED (athlete mismatch) "
+                          f"sibling={body.siblingRequestId}")
+        except Exception as e:
+            # Non-fatal — the primary charge already succeeded.
+            print(f"[PAYMENT CHARGE] sibling mirror failed (non-fatal): {type(e).__name__}: {e}")
+
+    print(f"[PAYMENT CHARGE] uid={athlete_uid} req={coll}/{body.requestId} "
+          f"result={ {k: result[k] for k in result if k != 'transactions'} }")
+    return result

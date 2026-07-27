@@ -43,6 +43,8 @@ from routes import certificates
 from routes import coaching
 from routes import meal_ai
 from routes import payment
+from routes import admin
+from routes import review_apply
 from services import rag_service
 
 # ── Directory paths ──────────────────────────────────────────────────────────
@@ -173,12 +175,14 @@ app.include_router(ai.router,         prefix="/api/ai",         tags=["AI"])
 app.include_router(rag.router,        prefix="/api/rag",        tags=["RAG"])
 app.include_router(support.router,    prefix="/api/support",    tags=["Support"])
 app.include_router(review.router,     prefix="/api/review",     tags=["Review"])
+app.include_router(review_apply.router, prefix="/api/review",    tags=["Review Apply"])
 app.include_router(system.router,     prefix="/api/system",     tags=["System"])
 app.include_router(chat.router,       prefix="/api/chat",       tags=["Chat"])
 app.include_router(certificates.router, prefix="/api/certificates", tags=["Certificates"])
 app.include_router(coaching.router,     prefix="/api/coaching",    tags=["Coaching"])
 app.include_router(meal_ai.router,      prefix="/api/meal",        tags=["Meal AI"])
 app.include_router(payment.router,      prefix="/api/payment",     tags=["Payment"])
+app.include_router(admin.router,        prefix="/api/admin",       tags=["Admin"])
 
 # ── Root redirect ────────────────────────────────────────────────────────────
 @app.get("/")

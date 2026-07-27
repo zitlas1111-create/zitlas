@@ -2473,18 +2473,16 @@
       userId: uid, expertId: review.expertId, amount: amount,
       serviceType: isChatOnly ? 'chat' : 'review', serviceLabel: serviceLabel, expertName: review.expertName,
       requestCollection: 'review_requests', requestId: review.id,
+      /* "Both" bundle sibling is mirrored to the paid outcome SERVER-SIDE by
+         /api/payment/charge (no client paymentStatus:'paid' write — that flag
+         is now backend-only on review_requests). */
+      siblingRequestId: review.siblingId || null,
       onSuccessUpdate: { status: 'in_progress', chatUnlocked: chatIncluded },
       notifyUser: { title: 'Payment successful', message: 'Your ' + serviceLabel.toLowerCase() + ' has started.' },
       notifyExpert: { title: 'Payment received', message: (review.userName || 'An athlete') + "'s payment succeeded — you may begin." },
     }).then(function (result) {
       if (result.success) {
         showToast('✅ Payment successful!');
-        if (review.siblingId && typeof ZitlasDB !== 'undefined') {
-          ZitlasDB.collection('review_requests').doc(review.siblingId).update({
-            status: 'in_progress', paymentStatus: 'paid',
-            walletTransactionId: result.transactionId || null, chatUnlocked: chatIncluded,
-          }).catch(function (e) { console.warn('[REVIEW] sibling mirror failed', e); });
-        }
         updateVerifyBtnState(coach);
       } else if (result.error === 'insufficient_balance') {
         ZitlasPayment.showLowBalancePopup({ balance: result.balance, required: result.required, walletDocStatus: result.walletDocStatus });

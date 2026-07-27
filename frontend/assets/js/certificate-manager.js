@@ -193,64 +193,43 @@
       certificateNumber: result.certificateNumber,
       issuedDate: result.issuedDate, expiryDate: result.expiryDate,
       verificationScore: result.verificationScore,
-      verificationStatus: result.verificationStatus,
+      /* The client NEVER asserts a verified badge. Regardless of the AI's
+         verdict, a freshly-uploaded cert is stored as 'pending_review' and
+         only an admin (backend, Admin SDK) can promote it to 'verified'
+         (FIRESTORE_SECURITY_AUDIT.md V4; the create rule enforces this). The
+         AI's own verdict is preserved as advisory context for the admin. */
+      aiVerificationStatus: result.verificationStatus,
+      verificationStatus: 'pending_review',
       flags: result.flags || {}, analysisNotes: result.analysisNotes || '',
       uploadedAt: new Date().toISOString(),
       reviewedBy: null, reviewedAt: null, rejectionReason: null,
     };
     console.log('[CERT] saving certId=' + id + ' firestorePath=expert_certificates/' + id +
                 ' certificateUrl=' + doc.certificateUrl + ' storageProvider=' + doc.storageProvider);
+    /* Note: no recomputeVerifiedFlag() here anymore. experts/{uid}.verified
+       and .verification are backend-authoritative (set only by the admin
+       approval endpoint via the Admin SDK) — a client write to them is now
+       denied by Security Rules, and a freshly-uploaded PENDING certificate
+       never changes verified status anyway. The badge is recomputed
+       server-side when an admin approves. */
     return d.collection('expert_certificates').doc(id).set(doc)
-      .then(function () { return recomputeVerifiedFlag(expertId); })
       .then(function () { return doc; });
   }
 
-  /* ── SINGLE SOURCE OF TRUTH for the ZITLAS Verified Expert badge ──
-     Writes experts/{uid}.verification, the one object every surface that
-     shows a badge (listing, profile, chat, coach banners, review banners,
-     notifications) reads from — never re-derived client-side elsewhere.
-
-     Eligibility (all four collapse into one real signal today): identity
-     verified + at least one certificate uploaded + certificate approved
-     by admin + verificationStatus === 'verified'. This codebase has no
-     separate identity/KYC step — admin approval of an uploaded certificate
-     IS the manual human check that confirms both the document AND the
-     person behind it, so "identity verified" and "certificate verified"
-     are the same event here, not two independently-tracked booleans. If
-     a real separate identity-check pipeline is added later, this is the
-     one function that would gain a second condition.
-
-     verificationLevel is a plain string key into ZitlasBadge's LEVELS
-     config (assets/js/verified-badge.js) — future badge tiers (gold/
-     elite/medical/founder) are new config entries there, not new fields
-     or branches here or in any UI. Only one level exists today. */
+  /* ── Verified-badge recompute — MOVED SERVER-SIDE ──
+     experts/{uid}.verification / .verified are the badge's source of truth and
+     are now BACKEND-ONLY (Security Rules deny client writes, per
+     FIRESTORE_SECURITY_AUDIT.md V4). The recompute (derive verified from the
+     expert's certificates and persist it) runs in the Admin SDK on the
+     backend: automatically inside POST /api/admin/certificates/{approve,reject}
+     and on demand via POST /api/admin/experts/recompute-verification (used by
+     the admin cert-audit page). This client function is retained only as a
+     no-op guard so any legacy caller resolves cleanly instead of attempting a
+     now-denied Firestore write. */
   function recomputeVerifiedFlag(expertId) {
-    var d = db();
-    if (!d) return Promise.resolve();
-    return d.collection('expert_certificates').where('expertId', '==', expertId).get()
-      .then(function (snap) {
-        var verifiedCerts = snap.docs.map(function (x) { return x.data(); })
-          .filter(function (c) { return c.verificationStatus === 'verified'; });
-        var isVerified = verifiedCerts.length > 0;
-        var verifiedAt = null;
-        if (isVerified) {
-          verifiedAt = verifiedCerts
-            .map(function (c) { return c.reviewedAt || c.uploadedAt; })
-            .filter(Boolean)
-            .sort()[0] || null; // earliest verification event, not the latest cert added
-        }
-        var verification = {
-          isVerified: isVerified,
-          verificationLevel: isVerified ? 'professional' : null,
-          verifiedAt: verifiedAt,
-          verifiedCertificates: verifiedCerts.length,
-        };
-        return d.collection('experts').doc(expertId).set({
-          verification: verification,
-          verified: isVerified, // legacy flat flag — kept in sync for any reader not yet migrated to .verification
-        }, { merge: true });
-      })
-      .catch(function (e) { console.warn('[CERT] recomputeVerifiedFlag failed', e); });
+    console.warn('[CERT] recomputeVerifiedFlag is a no-op — verification is recomputed ' +
+                 'server-side (/api/admin/experts/recompute-verification). expertId=' + expertId);
+    return Promise.resolve();
   }
 
   /* ── Realtime listener: all certs for one expert ── */
@@ -277,22 +256,42 @@
       }, function (e) { console.warn('[CERT] pending listener error', e); });
   }
 
-  /* ── Admin actions — the ONLY place verificationStatus changes post-upload ── */
-  function approveCertificate(cert, adminUid) {
-    var d = db();
-    if (!d) return Promise.reject(new Error('Database unavailable'));
-    return d.collection('expert_certificates').doc(cert.certId).update({
-      verificationStatus: 'verified',
-      reviewedBy: adminUid, reviewedAt: new Date().toISOString(), rejectionReason: null,
-    }).then(function () { return recomputeVerifiedFlag(cert.expertId); });
+  /* ── Admin actions — now SERVER-authoritative ──
+     verificationStatus / experts.verified used to be written straight from
+     the admin's browser, gated only by a client-writable users/{uid}.role
+     (FIRESTORE_SECURITY_AUDIT.md V3/V4 — trivially spoofable, and blocked
+     outright by production Security Rules). They now go through
+     POST /api/admin/certificates/{approve,reject}, which re-checks the caller
+     is a real admin (custom claim / ZITLAS_ADMIN_UIDS) and writes via the
+     Admin SDK, and ALSO grants/revokes the expert's Firebase custom claim so
+     Security Rules recognize them. The admin UI is unchanged — same function
+     signatures, same returned promise. */
+  function _adminFetch(path, payload) {
+    var auth = (typeof ZitlasAuth !== 'undefined') ? ZitlasAuth : null;
+    var user = auth && auth.currentUser;
+    if (!user || typeof user.getIdToken !== 'function') {
+      return Promise.reject(new Error('Not signed in'));
+    }
+    return user.getIdToken().then(function (token) {
+      return fetch(path, {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (data) {
+        if (res.status !== 200 || !data.success) {
+          throw new Error((data && data.detail) || ('request_failed_' + res.status));
+        }
+        return data;
+      });
+    });
+  }
+  function approveCertificate(cert /*, adminUid (server derives from token) */) {
+    return _adminFetch('/api/admin/certificates/approve', { certId: cert.certId });
   }
   function rejectCertificate(cert, adminUid, reason) {
-    var d = db();
-    if (!d) return Promise.reject(new Error('Database unavailable'));
-    return d.collection('expert_certificates').doc(cert.certId).update({
-      verificationStatus: 'rejected',
-      reviewedBy: adminUid, reviewedAt: new Date().toISOString(), rejectionReason: reason,
-    }).then(function () { return recomputeVerifiedFlag(cert.expertId); });
+    return _adminFetch('/api/admin/certificates/reject', { certId: cert.certId, reason: reason });
   }
 
   var REJECT_REASONS = [

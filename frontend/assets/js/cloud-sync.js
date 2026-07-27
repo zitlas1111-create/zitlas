@@ -284,6 +284,14 @@
     }, function (e) { console.warn('[CLOUD SYNC] realtime listener error', e); });
   }
 
+  /* Fields on users/{uid} that the CLIENT may READ (hydrate) but must NEVER
+     WRITE — production Security Rules make them backend-authoritative
+     (FIRESTORE_SECURITY_AUDIT.md V2): wallet balance is credited/debited only
+     by routes/payment.py, and premium membership is activated only by
+     /api/payment/membership/verify. A client cloud write here would be denied
+     by rules AND is a self-credit / self-upgrade hole, so save*/
+  var _BACKEND_ONLY_FIELDS = { wallet: true, membership: true };
+
   /* The ONE function every feature should call instead of a bare
      localStorage.setItem for anything in FIELD_MAP/SCALAR_FIELD_MAP.
      Writes local first (so the calling tab is instant), then Firestore. */
@@ -298,6 +306,10 @@
           ? value : JSON.stringify(value));
       } catch (_) {}
     }
+    /* Backend-only fields: local cache above is fine (instant UI), but never
+       push to the cloud — the backend owns them. Hydrate/realtime still READ
+       them into local. */
+    if (_BACKEND_ONLY_FIELDS[cloudKey]) return Promise.resolve();
     var d = db();
     var uid = myUid();
     if (!d || !uid) return Promise.resolve();
@@ -314,6 +326,10 @@
      copy; letting save() touch localStorage here would immediately
      overwrite that fuller local object with the stripped-down one. */
   function saveCloudOnly(cloudKey, value) {
+    if (_BACKEND_ONLY_FIELDS[cloudKey]) {
+      /* No-op: wallet/membership are backend-authoritative (see save()). */
+      return Promise.resolve();
+    }
     var d = db();
     var uid = myUid();
     if (!d || !uid) return Promise.resolve();
@@ -343,9 +359,13 @@
     var patch = {};
     var now = new Date().toISOString();
     Object.keys(fields).forEach(function (cloudKey) {
+      /* Skip backend-only fields in the CLOUD patch (local cache above still
+         happened). wallet/membership are never client-written. */
+      if (_BACKEND_ONLY_FIELDS[cloudKey]) return;
       patch[cloudKey] = fields[cloudKey];
       patch[cloudKey + 'UpdatedAt'] = now;
     });
+    if (!Object.keys(patch).length) return Promise.resolve();
     return d.collection('users').doc(uid).set(patch, { merge: true })
       .catch(function (e) { console.warn('[CLOUD SYNC] saveBulk failed', e); });
   }

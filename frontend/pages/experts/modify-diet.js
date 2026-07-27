@@ -167,24 +167,33 @@
        is itself planId-gated, so a current-goal review still surfaces
        while a dead-goal review simply never renders. The master plan is
        untouched either way. */
-    return ZitlasDB.collection('users').doc(athleteUid).get().then(function (snap) {
-      var livePlanId = (snap.exists && snap.data().planId) || null;
-      if (!rev.planId || !livePlanId || rev.planId !== livePlanId) {
-        console.warn('[MODIFY-DIET] auto-apply skipped — review planId (' + (rev.planId || 'null') +
-          ') does not match athlete\'s current planId (' + (livePlanId || 'null') +
-          '). Master plan left untouched; athlete-side accept flow will handle delivery if applicable.');
-        return false;
-      }
-      var wrapper = buildAppliedDietWrapper(rev, edited, rev.mealChangeHistory, expertName, nowIso);
-      console.log('[MODIFY-DIET] auto-applying reviewed plan → users/' + athleteUid + '.dietPlan');
-      return ZitlasDB.collection('users').doc(athleteUid)
-        .set({ dietPlan: wrapper, dietPlanUpdatedAt: nowIso }, { merge: true })
-        .then(function () {
-          console.log('[MODIFY-DIET] reviewed plan is now the athlete\'s ACTIVE diet plan');
-          return true;
-        });
+    /* Auto-apply is a CROSS-USER write (expert → athlete's users/{uid}.dietPlan),
+       which production Security Rules deny (users writes are owner-only). It now
+       runs SERVER-SIDE via POST /api/review/apply, which re-verifies (from the
+       stored review_requests doc) that the caller is the assigned expert AND
+       enforces the SAME planId apply-gate before writing via the Admin SDK. If
+       it can't apply (planId mismatch, or backend/Firestore unavailable), the
+       master plan is left untouched and the planId-gated athlete-side accept
+       flow owns delivery — exactly the prior fallback contract. */
+    var wrapper = buildAppliedDietWrapper(rev, edited, rev.mealChangeHistory, expertName, nowIso);
+    var auth = (typeof ZitlasAuth !== 'undefined') ? ZitlasAuth : null;
+    var user = auth && auth.currentUser;
+    if (!user || typeof user.getIdToken !== 'function') return Promise.resolve(false);
+    return user.getIdToken().then(function (token) {
+      return fetch('/api/review/apply', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reviewId: rev.reviewId || rev.id, athleteUid: athleteUid,
+          planType: 'diet', wrapper: wrapper }),
+      });
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (data) {
+        var applied = res.status === 200 && data.success && data.applied === true;
+        console.log('[MODIFY-DIET] server apply →', res.status, data);
+        return applied;
+      });
     }).catch(function (e) {
-      console.error('[MODIFY-DIET] auto-apply failed (master plan untouched)', e);
+      console.error('[MODIFY-DIET] server apply failed (master plan untouched)', e);
       return false;
     });
   }

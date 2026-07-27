@@ -11,5 +11,6 @@ pymupdf
 email-validator==2.2.0
 psutil
 google-cloud-firestore
+firebase-admin>=6.5.0,<7.0.0
 apscheduler
 requests

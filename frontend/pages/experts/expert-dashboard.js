@@ -3249,36 +3249,31 @@ async function _deaDeleteAccountPermanently(backdrop2, confirmBtn, cancelBtn, op
       throw Object.assign(new Error('Not an expert account'), { code: 'zitlas/not-expert' });
     }
 
-    console.log('[DELETE EXPERT] deleting reviews');
-    await deleteCollectionWhere('review_requests', 'expertId', uid);
-    await deleteCollectionWhere('expert_reviews', 'expertId', uid);
-
-    console.log('[DELETE EXPERT] deleting expert profile');
-    await ZitlasDB.collection('experts').doc(uid).delete();
-
-    /* users/{uid} is shared with the athlete side of the same account
-       (every expert signup also gets roles:['athlete', ...]) — strip the
-       expert role instead of deleting the whole doc so athlete data on
-       the same uid survives. Only a pure legacy expert-only doc (no
-       roles[] array, role === 'expert') is removed outright. */
-    var userRef  = ZitlasDB.collection('users').doc(uid);
-    var userSnap = await userRef.get();
-    if (userSnap.exists) {
-      var udata = userSnap.data() || {};
-      if (Array.isArray(udata.roles)) {
-        var roles = udata.roles.filter(function (r) { return r !== 'expert' && r !== 'expert_pending'; });
-        await userRef.update({ roles: roles, expert_status: 'none' });
-      } else if (udata.role === 'expert') {
-        await userRef.delete();
-      }
+    /* Privileged Firestore offboarding now runs SERVER-SIDE (Admin SDK). The
+       old client writes/deletes here (experts doc, users role/expert_status,
+       review_requests/expert_reviews) are denied by production Security Rules
+       (FIRESTORE_SECURITY_AUDIT.md V3). The backend deletes experts/{uid},
+       downgrades users/{uid} (strips expert role, sets expert_status='none' —
+       never deleting the shared athlete doc), and revokes the expert claim,
+       while PRESERVING audit/referential data (expert_reviews, review_requests,
+       certificates, chats). See routes/admin.py POST /experts/deactivate. */
+    console.log('[DELETE EXPERT] server-side deactivation');
+    var _tok  = await user.getIdToken();
+    var _resp = await fetch('/api/admin/experts/deactivate', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + _tok, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ expertId: uid }),
+    });
+    var _data = await _resp.json().catch(function () { return {}; });
+    if (!_resp.ok || !_data.success) {
+      throw Object.assign(new Error((_data && _data.detail) || 'deactivation_failed'),
+                          { code: 'zitlas/deactivation-failed' });
     }
+    console.log('[DELETE EXPERT] server deactivation result', _data);
 
-    console.log('[DELETE EXPERT] deleting chats');
-    console.log('[DELETE EXPERT] deleting notifications');
-    /* No Firestore chats/notifications/availability/sessions/ratings
-       collections exist in this project's schema — chats live only in
-       the local zitlas_chats cache, cleared below. */
-
+    /* Firebase Auth account deletion is a SEPARATE, explicitly-intended step
+       of this "Delete Account" button — it is an Auth operation, not a
+       Firestore write, so it is unaffected by the rules and is kept as-is. */
     console.log('[DELETE EXPERT] deleting auth account');
     await user.delete();
 
@@ -4754,6 +4749,9 @@ function _prAcceptReview(reviewId, review, expert) {
     userId: review.userId, expertId: expert.id, amount: amount,
     serviceType: isChatOnly ? 'chat' : 'review', serviceLabel: serviceLabel, expertName: expert.name,
     requestCollection: 'review_requests', requestId: reviewId,
+    /* "Both" bundle sibling mirrored SERVER-SIDE by /api/payment/charge
+       (no client paymentStatus:'paid' write). */
+    siblingRequestId: review.siblingId || null,
     onSuccessUpdate: { status: 'in_progress', acceptedAt: _now, expertId: expert.id, chatId: convId, chatUnlocked: chatIncluded },
     notifyUser: {
       title: 'Expert accepted your request',
@@ -4767,16 +4765,9 @@ function _prAcceptReview(reviewId, review, expert) {
     },
   }).then(function (result) {
     if (result.success) {
-      /* "Both" bundle: mirror the paid/in_progress outcome onto the linked
-         workout doc — the bundle is charged once (on this, the primary,
-         doc) and the sibling never runs its own attemptCharge at all. */
-      if (review.siblingId && typeof ZitlasDB !== 'undefined') {
-        ZitlasDB.collection('review_requests').doc(review.siblingId).update({
-          status: 'in_progress', paymentStatus: 'paid',
-          walletTransactionId: result.transactionId || null,
-          chatUnlocked: chatIncluded, acceptedAt: _now, expertId: expert.id,
-        }).catch(function (e) { console.warn('[REVIEW] sibling mirror failed', e); });
-      }
+      /* "Both" bundle sibling is mirrored to the paid/in_progress outcome
+         SERVER-SIDE by /api/payment/charge (charged once on the primary doc);
+         no client paymentStatus:'paid' write remains. */
       _finishAccept();
       return;
     }
@@ -5172,7 +5163,10 @@ function _initInboxTabs(expert) {
             role:     'expert',
             speciality: '',
             photo:    data.photo || firebaseUser.photoURL || '',
-            verified: false, approved: false, rating: 0, reviews: 0,
+            /* verified/approved intentionally omitted — backend-only trust
+               fields (Security Rules deny client writes to them). Absent reads
+               as unverified/unapproved, the correct default. */
+            rating: 0, reviews: 0,
             createdAt: firebase.firestore.FieldValue.serverTimestamp(),
           };
           try { await ZitlasDB.collection('experts').doc(uid).set(expertData, { merge: true }); } catch (_) {}

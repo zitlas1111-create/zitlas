@@ -38,10 +38,16 @@
   function available(w) { return Math.max(0, Number(w.balance || 0) - Number(w.reserved || 0)); }
 
   function saveWallet(w) {
+    /* LOCAL CACHE ONLY. The authoritative wallet balance lives in
+       users/{uid}.wallet and is written EXCLUSIVELY by the backend
+       (POST /api/payment/verify credits, POST /api/payment/charge debits) —
+       production Security Rules make users/{uid}.wallet backend-only
+       (FIRESTORE_SECURITY_AUDIT.md V2), so the client must never write it. We
+       still cache to localStorage for instant UI; the real balance is
+       hydrated read-only from the cloud by cloud-sync.js (hydrateOnLoad /
+       attachRealtime), which is why the old ZitlasCloudSync.saveCloudOnly(
+       'wallet', w) call was removed here. */
     try { localStorage.setItem(KEY, JSON.stringify(w)); } catch (_) {}
-    /* Cross-device sync — wallet balance was 100% localStorage before this;
-       gracefully no-ops on any page that doesn't load Firebase/cloud-sync. */
-    if (typeof ZitlasCloudSync !== 'undefined') ZitlasCloudSync.saveCloudOnly('wallet', w);
   }
 
   /* ══════════════════════════════════════════

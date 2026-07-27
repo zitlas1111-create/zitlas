@@ -116,9 +116,6 @@
    *                transactionId?, walletBefore?, walletAfter?, platformFee?, expertAmount?}>
    */
   function attemptCharge(opts) {
-    var db = win.ZitlasDB;
-    if (!db) return Promise.resolve({ success: false, error: 'no_db' });
-
     var userId    = opts.userId;
     var requestId = opts.requestId;
     var reqColl   = opts.requestCollection;
@@ -126,168 +123,55 @@
       return Promise.resolve({ success: false, error: 'missing_params' });
     }
 
-    var amount = Math.max(0, Number(opts.amount) || 0);
-    /* CLIENT TRIAL MODE — every service charged through attemptCharge is a
-       coach/expert service (reviews, expert chat, expert-side auto-charge).
-       Zeroing the amount lets the ENTIRE existing transaction run
-       unchanged: the balance check can't fail, no wallet money moves, no
-       wallet-history entry is pushed (amount>0 guards both), and the
-       request doc still advances to paymentStatus 'paid' with
-       onSuccessUpdate applied + notifications sent — i.e. the athlete
-       experiences a successful payment. Fully reversible from
-       backend/trial_config.py. */
-    var _trialFree = isTrialMode() && amount > 0;
-    if (_trialFree) {
-      console.log('[PAYMENT] CLIENT_TRIAL_MODE — waiving ₹' + amount + ' for ' +
-        (opts.serviceLabel || opts.serviceType || 'coach service'));
-      amount = 0;
+    /* SERVER-AUTHORITATIVE CHARGE (was a client-side Firestore transaction).
+       The wallet lives in users/{uid}.wallet and is no longer client-writable
+       under production Security Rules (FIRESTORE_SECURITY_AUDIT.md V2), so the
+       balance check + debit + wallet_transactions audit record + request
+       advance now happen in backend/routes/payment.py POST /charge, where the
+       Admin SDK bypasses rules and the amount/free-policy can't be tampered
+       with. The ₹0 platform-charge policy (CLIENT_TRIAL_MODE /
+       PLATFORM_CHARGES_FREE / Premium) is re-applied there, not trusted from
+       here. Return shape is unchanged so every caller keeps working:
+       {success, alreadyPaid?, error?, balance?, required?, shortfall?,
+        transactionId?, walletBefore?, walletAfter?}. */
+    var auth = win.ZitlasAuth;
+    var user = auth && auth.currentUser;
+    if (!user || typeof user.getIdToken !== 'function') {
+      return Promise.resolve({ success: false, error: 'not_signed_in' });
     }
-    var onSuccessUpdate = opts.onSuccessUpdate || {};
 
-    var userRef    = db.collection('users').doc(userId);
-    var requestRef = db.collection(reqColl).doc(requestId);
-    var txnId      = _newTxnId();
-    var txnRef     = db.collection('wallet_transactions').doc(txnId);
-
-    var outcome = { success: false };
-
-    return db.runTransaction(function (tx) {
-      return Promise.all([tx.get(userRef), tx.get(requestRef)]).then(function (results) {
-        var userSnap    = results[0];
-        var requestSnap = results[1];
-
-        if (!requestSnap.exists) { outcome = { success: false, error: 'request_missing' }; return; }
-
-        var reqData = requestSnap.data();
-        if (reqData.paymentStatus === 'paid') {
-          // Already charged by an earlier run of this exact transaction —
-          // treat as success so the caller's UI doesn't show a false error.
-          outcome = { success: true, alreadyPaid: true, walletTransactionId: reqData.walletTransactionId };
-          return;
-        }
-
-        /* Audit requirement: never silently default to 0 without saying so.
-           userSnap.exists=false or .wallet undefined are DIFFERENT diagnoses
-           from "balance genuinely is 0" — walletDocStatus carries that
-           distinction through to the caller so the UI can say "your wallet
-           hasn't synced yet" instead of implying the athlete has no money. */
-        var walletDocStatus = !userSnap.exists ? 'user_doc_missing'
-                             : !userSnap.data().wallet ? 'wallet_field_missing'
-                             : 'ok';
-        var wallet  = (userSnap.exists && userSnap.data().wallet) ? userSnap.data().wallet : _defaultWallet();
-        var balance = Number(wallet.balance || 0);
-
-        /* ── PREMIUM MEMBERSHIP: platform charges are ₹0 ──
-           Every service billed through attemptCharge (diet/workout review
-           fees, expert chat, meal reviews) is a PLATFORM charge, and the
-           product policy is: premium members (₹149/mo) pay zero platform
-           charges. The membership is read from the ATHLETE'S users/{uid}
-           doc INSIDE this transaction — never from this device's
-           localStorage — because this function also runs on the EXPERT'S
-           device (auto-charge on accept), where local membership would be
-           the expert's own plan, not the paying athlete's. users/{uid}.
-           membership is authoritative (cloud-synced from the membership
-           page). Note the one exception in the product policy — Personal
-           Coaching's professional fee — never flows through this function
-           at all (it's the backend escrow in routes/coaching.py), so no
-           service-type carve-out is needed here.
-           chargeAmount is transaction-LOCAL so Firestore retries recompute
-           it cleanly from the freshly-read user doc every attempt. */
-        var _memb = (userSnap.exists && userSnap.data().membership) || null;
-        var _premiumFree = _membershipIsPremium(_memb) && amount > 0;
-        var chargeAmount = _premiumFree ? 0 : amount;
-        if (_premiumFree) {
-          console.log('[PAYMENT] PREMIUM MEMBER — platform charge ₹' + amount + ' waived to ₹0 for ' +
-            (opts.serviceLabel || opts.serviceType || 'service'));
-        }
-
-        console.log('[WALLET]');
-        console.log('[WALLET] uid=' + userId);
-        console.log('[WALLET] walletPath=users/' + userId + '.wallet');
-        console.log('[WALLET] documentExists=' + userSnap.exists);
-        console.log('[WALLET] walletFieldStatus=' + walletDocStatus);
-        console.log('[WALLET] rawData=', userSnap.exists ? userSnap.data() : null);
-        console.log('[WALLET] balance=' + balance + ' (typeof stored value=' +
-                    (userSnap.exists && userSnap.data().wallet ? typeof userSnap.data().wallet.balance : 'n/a') + ')');
-        console.log('[WALLET] required=' + chargeAmount + (_premiumFree ? ' (premium-waived from ' + amount + ')' : ''));
-        console.log('[WALLET] comparison=' + (balance >= chargeAmount ? 'SUFFICIENT' : 'INSUFFICIENT') +
-                    ' (balance ' + balance + (balance >= chargeAmount ? ' >= ' : ' < ') + chargeAmount + ')');
-
-        if (chargeAmount > 0 && balance < chargeAmount) {
-          outcome = {
-            success: false, error: 'insufficient_balance',
-            balance: balance, required: chargeAmount, shortfall: chargeAmount - balance,
-            walletDocStatus: walletDocStatus,
-          };
-          // Deliberately does NOT apply onSuccessUpdate — payment failed, so
-          // the request must not advance to an active/serving state. `status`
-          // is fixed at 'accepted' here (not caller-controlled) so the
-          // expert's decision is recorded in the SAME transaction as the
-          // failed charge — no separate out-of-transaction write is needed,
-          // which would otherwise race against this one and risk landing
-          // out of order.
-          tx.update(requestRef, {
-            status: 'accepted',
-            paymentStatus: 'awaiting_payment',
-            paymentAttemptedAt: new Date().toISOString(),
-          });
-          return;
-        }
-
-        var walletBefore = balance;
-        var walletAfter  = balance - chargeAmount;
-        var platformFee  = Math.round(chargeAmount * PLATFORM_FEE_PERCENT);
-        var expertAmount = chargeAmount - platformFee;
-
-        var newWallet = {
-          balance:      walletAfter,
-          total_added:  Number(wallet.total_added || 0),
-          total_spent:  Number(wallet.total_spent || 0) + chargeAmount,
-          transactions: Array.isArray(wallet.transactions) ? wallet.transactions.slice() : [],
-        };
-        if (chargeAmount > 0) {
-          newWallet.transactions.push({
-            id: txnId, type: 'debit', amount: chargeAmount,
-            description: (opts.serviceLabel || 'ZITLAS service') + (opts.expertName ? ' — ' + opts.expertName : ''),
-            date: new Date().toISOString(),
-          });
-        }
-
-        tx.set(userRef, { wallet: newWallet, walletUpdatedAt: new Date().toISOString() }, { merge: true });
-        tx.set(txnRef, {
-          transactionId: txnId,
-          serviceType:   opts.serviceType || 'unknown',
-          expertId:      opts.expertId || null,
-          userId:        userId,
-          amount:        chargeAmount,
-          walletBefore:  walletBefore,
-          walletAfter:   walletAfter,
-          grossAmount:   chargeAmount,
-          platformFee:   platformFee,
-          expertAmount:  expertAmount,
-          status:        'success',
-          /* Audit trail: true when this charge was waived by the client
-             trial (backend/trial_config.py) — amount is 0 by design. */
-          trialWaived:   _trialFree,
-          /* Audit trail: true when waived because the athlete is a
-             Premium member (₹0 platform charges policy). */
-          premiumWaived: _premiumFree,
-          createdAt:     new Date().toISOString(),
-        });
-        tx.update(requestRef, Object.assign({}, onSuccessUpdate, {
-          paymentStatus: 'paid',
-          walletTransactionId: txnId,
-          paidAt: new Date().toISOString(),
-        }));
-
-        outcome = {
-          success: true, transactionId: txnId,
-          walletBefore: walletBefore, walletAfter: walletAfter,
-          platformFee: platformFee, expertAmount: expertAmount,
-        };
+    return user.getIdToken().then(function (token) {
+      return fetch('/api/payment/charge', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          athleteUid: userId,
+          requestCollection: reqColl,
+          requestId: requestId,
+          amount: Math.max(0, Number(opts.amount) || 0),
+          serviceType: opts.serviceType || 'unknown',
+          serviceLabel: opts.serviceLabel || null,
+          expertId: opts.expertId || null,
+          expertName: opts.expertName || null,
+          onSuccessUpdate: opts.onSuccessUpdate || {},
+          /* "Both" bundle sibling — mirrored to the paid outcome SERVER-SIDE
+             (no client paymentStatus write). */
+          siblingRequestId: opts.siblingRequestId || null,
+        }),
       });
-    }).then(function () {
-      if (outcome.success && !outcome.alreadyPaid && typeof win.ZitlasNotify !== 'undefined') {
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (data) {
+        return { status: res.status, data: data || {} };
+      });
+    }).then(function (r) {
+      /* Backend returns 200 for both success AND the graceful
+         insufficient-balance outcome ({success:false, shortfall,...}); a
+         non-200 is an auth/config/server error surfaced via `detail`. */
+      if (r.status !== 200) {
+        return { success: false, error: (r.data && r.data.detail) || ('charge_failed_' + r.status) };
+      }
+      var out = r.data || {};
+      if (out.success && !out.alreadyPaid && typeof win.ZitlasNotify !== 'undefined') {
         if (opts.notifyUser) {
           win.ZitlasNotify.send(userId, Object.assign({ category: 'payment', type: 'service_payment' }, opts.notifyUser));
         }
@@ -295,93 +179,30 @@
           win.ZitlasNotify.send(opts.expertId, Object.assign({ category: 'payment', type: 'service_payment' }, opts.notifyExpert));
         }
       }
-      return outcome;
+      return out;
     }).catch(function (err) {
-      console.error('[PAYMENT] attemptCharge failed', err);
+      console.error('[PAYMENT] attemptCharge (server) failed', err);
       return { success: false, error: (err && err.message) || 'transaction_failed' };
     });
   }
 
   /**
-   * creditWallet({ userId, amount, method, description }) -> Promise<{success, balance, transactionId, error?}>
+   * creditWallet(opts) -> Promise<{success:false, error:'client_credit_disabled'}>
    *
-   * THE single place money is ADDED to a wallet — the credit-side sibling of
-   * attemptCharge() above. Runs inside the same db.runTransaction() pattern
-   * (atomic read-then-write against the live Firestore balance, never a
-   * blind "local cache + amount" increment), so it is correct regardless of
-   * which page calls it and never depends on cloud-sync.js being loaded.
-   *
-   * ROOT CAUSE THIS REPLACES: wallet.js's old creditFunds() computed
-   * getWallet().balance + amount from localStorage and wrote the result via
-   * ZitlasCloudSync.saveCloudOnly(), which (a) silently no-ops when
-   * cloud-sync.js isn't loaded on the page — true for coaches.html,
-   * cprofile.html, dietitian.html, help-support.html, and membership.html,
-   * confirmed by grepping every page that loads wallet.js — and (b) even
-   * when it IS loaded, swallows any write failure into a console.warn with
-   * no user-facing signal. The result: the Add Funds button could show
-   * "✅ Added to wallet!" while the money never reached the users/{uid}
-   * document that attemptCharge() actually reads at charge time — exactly
-   * the "Wallet page shows a balance, payment popup shows ₹0" symptom this
-   * fixes. Audited live: 0 of 13 real user documents in production had a
-   * wallet field at all before this fix.
+   * DISABLED — client-side wallet crediting is a self-credit hole
+   * (FIRESTORE_SECURITY_AUDIT.md V2) and is blocked by production Security
+   * Rules (users/{uid}.wallet is backend-only). The ONLY legitimate way money
+   * enters a wallet is Razorpay → POST /api/payment/verify, which credits the
+   * balance server-side after an HMAC signature check (see wallet.js
+   * creditFunds()/_verifyAndCreditWallet). This stub is retained so any stray
+   * caller fails loudly and safely instead of throwing. Grepped: the only
+   * caller was ZitlasWallet.credit(), which has no real callers itself.
    */
   function creditWallet(opts) {
-    var db = win.ZitlasDB;
-    if (!db) return Promise.resolve({ success: false, error: 'no_db' });
-    var userId = opts.userId;
-    if (!userId) return Promise.resolve({ success: false, error: 'missing_user' });
-    var amount = Math.max(0, Number(opts.amount) || 0);
-    if (amount <= 0) return Promise.resolve({ success: false, error: 'invalid_amount' });
-
-    var userRef = db.collection('users').doc(userId);
-    var txnId   = _newTxnId();
-    var txnRef  = db.collection('wallet_transactions').doc(txnId);
-    var result  = null;
-
-    return db.runTransaction(function (tx) {
-      return tx.get(userRef).then(function (userSnap) {
-        var wallet       = (userSnap.exists && userSnap.data().wallet) ? userSnap.data().wallet : _defaultWallet();
-        var walletBefore = Number(wallet.balance || 0);
-        var walletAfter  = walletBefore + amount;
-
-        console.log('[WALLET]');
-        console.log('[WALLET] operation=credit (recharge)');
-        console.log('[WALLET] uid=' + userId);
-        console.log('[WALLET] walletPath=users/' + userId + '.wallet');
-        console.log('[WALLET] documentExists=' + userSnap.exists);
-        console.log('[WALLET] rawData(before)=', userSnap.exists ? userSnap.data() : null);
-        console.log('[WALLET] balance(before)=' + walletBefore);
-        console.log('[WALLET] amount=' + amount);
-        console.log('[WALLET] balance(after)=' + walletAfter);
-
-        var newWallet = {
-          balance:      walletAfter,
-          total_added:  Number(wallet.total_added || 0) + amount,
-          total_spent:  Number(wallet.total_spent || 0),
-          transactions: Array.isArray(wallet.transactions) ? wallet.transactions.slice() : [],
-        };
-        newWallet.transactions.push({
-          id: txnId, type: 'credit', amount: amount,
-          description: opts.description || ('Added Funds via ' + (opts.method || 'wallet')),
-          date: new Date().toISOString(),
-        });
-
-        tx.set(userRef, { wallet: newWallet, walletUpdatedAt: new Date().toISOString() }, { merge: true });
-        tx.set(txnRef, {
-          transactionId: txnId, serviceType: 'wallet_recharge', userId: userId,
-          amount: amount, walletBefore: walletBefore, walletAfter: walletAfter,
-          method: opts.method || null, status: 'success', createdAt: new Date().toISOString(),
-        });
-
-        result = { walletBefore: walletBefore, walletAfter: walletAfter };
-      });
-    }).then(function () {
-      return { success: true, transactionId: txnId, balance: result.walletAfter, walletBefore: result.walletBefore };
-    }).catch(function (err) {
-      console.error('[WALLET] creditWallet FAILED — uid=' + userId + ' amount=' + amount +
-                    ' code=' + (err && err.code) + ' message=' + (err && err.message));
-      return { success: false, error: (err && err.message) || 'transaction_failed' };
-    });
+    console.warn('[PAYMENT] creditWallet is disabled — wallet credit is server-only ' +
+                 '(Razorpay → /api/payment/verify). Ignoring client credit request for uid=' +
+                 (opts && opts.userId));
+    return Promise.resolve({ success: false, error: 'client_credit_disabled' });
   }
 
   /* ══════════════════════════════════════════

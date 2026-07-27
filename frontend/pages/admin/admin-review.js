@@ -47,14 +47,24 @@
     if (typeof ZitlasAuth === 'undefined') { showAccessDenied(); return; }
     ZitlasAuth.onAuthStateChanged(function (user) {
       if (!user) { showAccessDenied(); return; }
-      ZitlasDB.collection('users').doc(user.uid).get().then(function (doc) {
-        var data = doc.exists ? doc.data() : {};
-        if (!isAdmin(data)) { showAccessDenied(); return; }
+      /* AUTHORITATIVE admin signal is the `admin` CUSTOM CLAIM baked into the
+         ID token (backend-set, not client-writable) — the ONLY thing trusted
+         here. It matches what the pending-certificates Security Rule requires
+         and what the backend approval endpoints enforce. The old
+         users/{uid}.role=='admin' fallback was removed: that field is
+         client-writable, and a spoofed role would render the shell but the
+         Firestore cert listing (rule needs the claim) and every backend
+         approval (require_admin) would reject anyway — so the fallback was a
+         useless spoof surface. Bootstrap the first admin via ZITLAS_ADMIN_UIDS
+         + POST /api/admin/grant-admin, then re-login. */
+      user.getIdTokenResult().then(function (res) {
+        var claimAdmin = !!(res && res.claims && res.claims.admin);
+        if (!claimAdmin) { showAccessDenied(); return; }
         _adminUid = user.uid;
         renderShell();
         ZitlasCertificates.listenForPendingCertificates(onCertsUpdate);
       }).catch(function (e) {
-        console.error('[ADMIN] role check failed', e);
+        console.error('[ADMIN] admin claim check failed', e);
         showAccessDenied();
       });
     });
