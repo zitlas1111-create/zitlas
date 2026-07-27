@@ -988,15 +988,27 @@ def load_profile_for_user(player_profile: dict, lifestyle_data: dict | None) -> 
     return load_profile(goal_key, lifestyle_key)
 
 
+# A diet PREFERENCE is what the user is ALLOWED to eat, not a requirement that
+# every food carry that trait. A non-vegetarian eats vegetarian food too, so a
+# non-veg preference must admit BOTH tags — otherwise a regional non-veg dish
+# (e.g. Kolhapuri Mutton, a side_dish) can't be plated with its rice/roti/dal
+# base (those are tagged Vegetarian), producing an incomplete meal. Diet is a
+# hard filter (never relaxed) and combined by UNION in _pipeline_ids, so:
+#   Vegetarian  -> only vegetarian foods (meat never served to a vegetarian)
+#   Non-Veg     -> vegetarian ∪ non-vegetarian foods (veg staples + proteins)
+#   Vegan       -> vegan only (stricter than veg: no dairy/egg — never widened)
+#   Eggitarian  -> the dataset already tags every Vegetarian food Eggitarian
+#                  (Vegetarian ⊆ Eggitarian, verified), so this already means
+#                  "veg + egg" and correctly excludes meat/fish.
 _DIET_STRING_TO_TAGS: dict[str, list[str]] = {
     "vegan": ["Vegan"],
     "eggitarian": ["Eggitarian"],
     "jain": ["Jain"],
     "halal": ["Halal"],
     "satvik": ["Satvik"],
-    "non-vegetarian": ["Non Vegetarian"],
-    "non vegetarian": ["Non Vegetarian"],
-    "nonveg": ["Non Vegetarian"],
+    "non-vegetarian": ["Vegetarian", "Non Vegetarian"],
+    "non vegetarian": ["Vegetarian", "Non Vegetarian"],
+    "nonveg": ["Vegetarian", "Non Vegetarian"],
     "vegetarian": ["Vegetarian"],
     "mixed": ["Vegetarian", "Non Vegetarian"],
 }

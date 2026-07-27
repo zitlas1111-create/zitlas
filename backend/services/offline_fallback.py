@@ -613,9 +613,13 @@ def _engine_context(player_profile: dict | None, lifestyle_data: dict | None):
     ld = lifestyle_data or {}
     pp = player_profile or {}
     # Region boost (geo-aware food intelligence) — additive only; a user with
-    # no saved location gets profile=None, i.e. unchanged offline behavior.
+    # no saved location gets profile=None + no favorites, i.e. unchanged offline
+    # behavior. Now folds in BOTH the regional categories (profile) AND the
+    # regional keyword favorites, matching the main groq path
+    # (_engine_query_context) instead of the weaker categories-only signal.
     region_boost = location_food_engine.build_region_boost(pp.get("location") or ld.get("location"))
     profile = {"preferredCategories": region_boost["preferred_categories"]} if region_boost else None
+    favorite_foods = list(region_boost["preferred_keywords"]) if region_boost else []
     return {
         "goal_tags": food_engine.goal_tags_from_profile(pp),
         "diet_tags": food_engine.diet_tags_from_lifestyle(ld.get("diet_type", "")),
@@ -625,21 +629,38 @@ def _engine_context(player_profile: dict | None, lifestyle_data: dict | None):
             pp.get("medical_conditions") or pp.get("medical_condition") or ""),
         "allergens": food_engine.FoodRecommendationEngine.resolve_allergens(ld.get("allergies", [])),
         "profile": profile,
+        "favorite_foods": favorite_foods,
     }
 
 
 def _engine_foods_for_slot(engine, meal_name: str, ctx: dict, usage_counts: dict, rejected: set) -> list[str] | None:
     slot = _OFFLINE_SLOT_MAP.get(meal_name.lower(), "lunch")
-    picks = engine.recommend(
+    # Rank a WIDER pool, then COMPOSE a complete plate for main slots via the
+    # same build_meal_combo/validate_meal_combo the main path uses — so a
+    # side dish (e.g. Poha Chivda) can never stand alone as a lunch/dinner in
+    # offline mode (the "Sweet Corn dinner" failure pattern). Snack/breakfast
+    # slots keep the top pick(s). This closes the offline-only completeness gap
+    # without changing the online behavior at all.
+    pool = engine.recommend(
         meal_slot=slot, goal_tags=ctx["goal_tags"], diet_tags=ctx["diet_tags"],
         living_situation=ctx["living_tag"], budget_tier=ctx["budget_tier"],
         disease_tags=ctx["disease_tags"], allergens=ctx["allergens"],
+        favorite_foods=ctx.get("favorite_foods") or [],
         disliked_foods=list(rejected), usage_counts=usage_counts,
-        top_n=2 if slot in ("lunch", "dinner") else 1,
+        top_n=10 if slot in ("lunch", "dinner") else 3,
         profile=ctx.get("profile"),
     )
-    if not picks:
+    if not pool:
         return None
+
+    if slot in ("lunch", "dinner"):
+        combo = engine.build_meal_combo(pool, slot, None)
+        # If the composed plate still fails validation (tiny/edge pools), fall
+        # back to the top 2 ranked picks rather than returning nothing.
+        picks = combo if combo and not engine.validate_meal_combo(combo, slot) else pool[:2]
+    else:
+        picks = pool[:1]
+
     for f in picks:
         usage_counts[f["id"]] = usage_counts.get(f["id"], 0) + 1
     return [food_engine.format_food_line(f) for f in picks]

@@ -904,12 +904,18 @@
     const athleteProfile = safeJSON('athlete_profile', {});
     const lifestyleData  = safeJSON('lifestyle_data', {});
 
-    /* Geo-Aware Food Intelligence: optional, only present once the user has
-       granted location permission. Absent -> lifestyleData.location stays
-       unset -> backend behaves exactly as before. */
+    /* Geo-Aware Food Intelligence: prefer GPS location; fall back to the
+       City/State the user typed on Personal Info so regional swaps do NOT
+       depend exclusively on GPS permission. Absent both -> location stays
+       unset -> backend behaves exactly as before (region boost = no-op). */
     const _savedLoc = safeJSON('zitlas_location', null);
-    if (_savedLoc && typeof _savedLoc === 'object') {
+    if (_savedLoc && typeof _savedLoc === 'object' && (_savedLoc.city || _savedLoc.state || _savedLoc.latitude)) {
       lifestyleData.location = _savedLoc;
+    } else {
+      const _pi = safeJSON('zitlas_personal_info', null);
+      if (_pi && typeof _pi === 'object' && (_pi.city || _pi.state)) {
+        lifestyleData.location = { city: _pi.city || '', state: _pi.state || '', source: 'manual' };
+      }
     }
 
     /* Supplement preference lives on the assessment (new flow) — merge it in

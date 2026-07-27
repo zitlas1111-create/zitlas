@@ -1326,8 +1326,21 @@
   function _savedLocation() {
     try {
       var v = JSON.parse(localStorage.getItem('zitlas_location') || 'null');
-      return (v && typeof v === 'object') ? v : {};
-    } catch (_) { return {}; }
+      if (v && typeof v === 'object' && (v.city || v.state || v.latitude)) return v;
+    } catch (_) {}
+    /* FALLBACK — regional personalization must NOT depend exclusively on GPS.
+       When the user denied/skipped location but typed a City/State on the
+       Personal Info page (personal-info.js -> personalInfo.{city,state}), use
+       that. The backend region boost (location_food_engine.resolve_state) reads
+       city/state exactly the same way whether they came from GPS or manual
+       entry, so this is a pure input-source widening — no backend change. */
+    try {
+      var pi = JSON.parse(localStorage.getItem('zitlas_personal_info') || 'null');
+      if (pi && typeof pi === 'object' && (pi.city || pi.state)) {
+        return { city: pi.city || '', state: pi.state || '', source: 'manual' };
+      }
+    } catch (_) {}
+    return {};
   }
 
   function _supplementsUsed(a) {
