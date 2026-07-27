@@ -467,22 +467,18 @@ if (googleBtn) {
       const provider = new firebase.auth.GoogleAuthProvider();
       provider.setCustomParameters({ prompt: "select_account" });
 
-      // Detect WebView or Mobile User-Agent to automatically use Redirect
-      const isWebView = /wv|Android.*Version\/[0-9]\.[0-9]/i.test(
-        navigator.userAgent,
-      );
+      // Robust check covering Android, iOS mobile browsers, and embedded WebViews
+      const isMobileOrWebView = /Android|iPhone|iPad|iPod|wv/i.test(navigator.userAgent);
 
-      if (isWebView) {
-        // Safe for Flutter WebViews: Navigates back after login without relying on popups
+      if (isMobileOrWebView) {
+        // Redirect avoids popup window dependencies completely
         await ZitlasAuth.signInWithRedirect(provider);
       } else {
-        // Works in standard Chrome/Desktop Browsers
         const result = await ZitlasAuth.signInWithPopup(provider);
         await handleGoogleUserSuccess(result.user);
       }
     } catch (err) {
       setGoogleLoading(false);
-
       if (
         err.code === "auth/popup-closed-by-user" ||
         err.code === "auth/cancelled-popup-request"
