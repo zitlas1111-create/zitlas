@@ -1,4 +1,4 @@
-﻿
+﻿﻿
 
 'use strict';
 
@@ -741,10 +741,3 @@ function showToast(msg) {
   _toastEl.style.opacity = '1';
   _toastTimer = setTimeout(() => { _toastEl.style.opacity = '0'; }, 2600);
 }
-
-
-
-
-
-
-
