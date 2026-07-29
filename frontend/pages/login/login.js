@@ -184,10 +184,18 @@ function showLoginOverlay() {
   loginOverlay.removeAttribute('aria-hidden');
   loginOverlay.classList.add('active');
   const dest = getRedirectDestination();
-  setTimeout(() => {
+ setTimeout(() => {
     sessionStorage.removeItem('zitlas_pending_action');
-    window.location.href = dest;
-  }, 1900);
+
+    // Try to open Flutter app
+    window.location.href = "zitlas://login";
+
+    // If app is not installed, continue website normally
+    setTimeout(() => {
+        window.location.href = dest;
+    }, 1200);
+
+}, 1900);
 }
 
 
