@@ -1,59 +1,108 @@
-<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <!-- Required for Firebase and every FastAPI call. Flutter's generated
+         debug/ and profile/ manifests declare this too, but ONLY for the
+         hot-reload channel — without it here, release builds ship with no
+         network access at all. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
 
-    <!-- Health Connect read permissions -->
-    <uses-permission android:name="android.permission.health.READ_STEPS" />
-    <uses-permission android:name="android.permission.health.READ_DISTANCE" />
-    <uses-permission android:name="android.permission.health.READ_TOTAL_CALORIES_BURNED" />
-    <uses-permission android:name="android.permission.health.READ_ACTIVE_CALORIES_BURNED" />
-    <uses-permission android:name="android.permission.health.READ_EXERCISE" />
+    <!-- Geo-Aware Food Intelligence (services/location_food_engine.py) —
+         city/state resolution only, never continuous tracking, so coarse is
+         sufficient (mirrors geo-location.js's enableHighAccuracy:false). -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
 
-    <!-- Required so the app can see the Health Connect provider package -->
-    <queries>
-        <package android:name="com.google.android.apps.healthdata" />
-    </queries>
+    <!-- Runtime-requested on Android 13+ (API 33) for FCM notifications to
+         actually display; older versions grant this at install time. Also
+         covers the LOCAL step-milestone notifications (same OS permission —
+         flutter_local_notifications and FCM share one notification channel
+         permission on Android). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+
+    <!-- Step tracking, source #1: Health Connect. READ only — ZITLAS never
+         writes step records back, and no other health data type is requested
+         (privacy: request exactly what the step counter needs). -->
+    <uses-permission android:name="android.permission.health.READ_STEPS"/>
+
+    <!-- Step tracking, source #2 (fallback): the hardware TYPE_STEP_COUNTER
+         sensor. Required from Android 10 (API 29) to read it at all. The chip
+         counts steps with the app dead/locked, which is what makes
+         background capture possible without a foreground service. -->
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION"/>
+    <uses-feature android:name="android.hardware.sensor.stepcounter" android:required="false"/>
 
     <application
-        android:allowBackup="true"
-        android:icon="@mipmap/ic_launcher"
-        android:label="@string/app_name"
-        android:roundIcon="@mipmap/ic_launcher_round"
-        android:supportsRtl="true"
-        android:theme="@style/AppTheme">
-
+        android:label="ZITLAS"
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher">
         <activity
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
             android:name=".MainActivity"
-            android:label="@string/title_activity_main"
-            android:theme="@style/AppTheme.NoActionBarLaunch"
-            android:launchMode="singleTask"
-            android:exported="true">
-
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-
-        </activity>
-
-        <provider
-            android:name="androidx.core.content.FileProvider"
-            android:authorities="${applicationId}.fileprovider"
-            android:exported="false"
-            android:grantUriPermissions="true">
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <!-- Specifies an Android theme to apply to this Activity as soon as
+                 the Android process has started. This theme is visible to the user
+                 while the Flutter UI initializes. After that, this theme continues
+                 to determine the Window background behind the Flutter UI. -->
             <meta-data
-                android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/file_paths"></meta-data>
-        </provider>
+              android:name="io.flutter.embedding.android.NormalTheme"
+              android:resource="@style/NormalTheme"
+              />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+            <!-- Health Connect permission rationale target, Android 13 and
+                 below. Without it the HC permission sheet can refuse to
+                 appear. (Android 14+ uses the activity-alias below.) -->
+            <intent-filter>
+                <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE"/>
+            </intent-filter>
+        </activity>
+        <!-- Health Connect requires the app to declare where it explains WHY
+             it wants health data (Android 14+, where HC is part of the
+             system, uses this activity-alias; the Android 13-and-below
+             equivalent is the ACTION_SHOW_PERMISSIONS_RATIONALE
+             intent-filter on MainActivity above). -->
+        <activity-alias
+            android:name="ViewPermissionUsageActivity"
+            android:exported="true"
+            android:targetActivity=".MainActivity"
+            android:permission="android.permission.START_VIEW_PERMISSION_USAGE">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW_PERMISSION_USAGE"/>
+                <category android:name="android.intent.category.HEALTH_PERMISSIONS"/>
+            </intent-filter>
+        </activity-alias>
+
+        <!-- Don't delete the meta-data below.
+             This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
     </application>
 
-    <!-- General permissions -->
-    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Package visibility (Android 11+): without this, the Health Connect
+         availability check can't see the provider and always reports
+         "unavailable". -->
+    <queries>
+        <package android:name="com.google.android.apps.healthdata"/>
+        <intent>
+            <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE"/>
+        </intent>
+    </queries>
+    <!-- Required to query activities that can process text, see:
+         https://developer.android.com/training/package-visibility and
+         https://developer.android.com/reference/android/content/Intent#ACTION_PROCESS_TEXT.
 
-    <!-- Hardware step-counter fallback (StepSensorPlugin) — required for
-         TYPE_STEP_COUNTER on Android 10+ when Health Connect is unavailable -->
-    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
-    <!-- Optional step reminders (Android 13+ runtime notification permission) -->
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-
+         In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT"/>
+            <data android:mimeType="text/plain"/>
+        </intent>
+    </queries>
 </manifest>

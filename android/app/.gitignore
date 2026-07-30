@@ -1,4 +1,0 @@
-/build/*
-!/build/.npmkeep
-backend/.env
-.env

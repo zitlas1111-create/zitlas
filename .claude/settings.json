@@ -6,7 +6,9 @@
       "Bash(curl -s \"https://zitlas.com/pages/coaches/cprofile.html\")",
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Read(//c/Users/Atharva/Desktop/**)",
+      "Bash(flutter test *)"
     ]
   }
 }

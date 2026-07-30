@@ -617,9 +617,20 @@ def _engine_context(player_profile: dict | None, lifestyle_data: dict | None):
     # behavior. Now folds in BOTH the regional categories (profile) AND the
     # regional keyword favorites, matching the main groq path
     # (_engine_query_context) instead of the weaker categories-only signal.
-    region_boost = location_food_engine.build_region_boost(pp.get("location") or ld.get("location"))
+    location = pp.get("location") or ld.get("location")
+    region_boost = location_food_engine.build_region_boost(location)
     profile = {"preferredCategories": region_boost["preferred_categories"]} if region_boost else None
     favorite_foods = list(region_boost["preferred_keywords"]) if region_boost else []
+    # Known gap fix: this offline path used to never compute user_state/
+    # compatible_regions at all, so the region-eligibility gate and the
+    # region-tiered ranking in food_engine._score were both silently
+    # skipped whenever a request fell back here (e.g. all AI providers
+    # down) — a Maharashtra user could get any Pan-India-or-wider dish with
+    # zero regional gating in that scenario. Same resolution the online
+    # path (_engine_query_context) already uses.
+    user_state = location_food_engine.resolve_state(location)
+    compatible_regions = location_food_engine.compatible_regions(location)
+    print(f"[REGION] offline path resolved state = {user_state or 'None'}")
     return {
         "goal_tags": food_engine.goal_tags_from_profile(pp),
         "diet_tags": food_engine.diet_tags_from_lifestyle(ld.get("diet_type", "")),
@@ -630,6 +641,8 @@ def _engine_context(player_profile: dict | None, lifestyle_data: dict | None):
         "allergens": food_engine.FoodRecommendationEngine.resolve_allergens(ld.get("allergies", [])),
         "profile": profile,
         "favorite_foods": favorite_foods,
+        "user_state": user_state,
+        "compatible_regions": compatible_regions,
     }
 
 
@@ -649,6 +662,7 @@ def _engine_foods_for_slot(engine, meal_name: str, ctx: dict, usage_counts: dict
         disliked_foods=list(rejected), usage_counts=usage_counts,
         top_n=10 if slot in ("lunch", "dinner") else 3,
         profile=ctx.get("profile"),
+        user_state=ctx.get("user_state"), compatible_regions=ctx.get("compatible_regions"),
     )
     if not pool:
         return None
@@ -767,6 +781,9 @@ def meal_swap(
         living_situation=ctx["living_tag"], budget_tier=ctx["budget_tier"],
         disease_tags=ctx["disease_tags"], allergens=ctx["allergens"],
         exclude_names=exclude_names, n_combos=2,
+        profile=ctx.get("profile"),
+        user_state=ctx.get("user_state"), compatible_regions=ctx.get("compatible_regions"),
+        favorite_foods=ctx.get("favorite_foods"),
     )
 
     if combos:

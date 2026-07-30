@@ -4,6 +4,21 @@
 *firebase-adminsdk*.json
 *serviceAccountKey*.json
 
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
+*.iml
+.idea/
+**/Flutter/ephemeral/
+**/flutter/ephemeral/
+android/local.properties
+android/key.properties
+**/*.keystore
+**/*.jks
+
 # Python
 __pycache__/
 *.pyc

@@ -1554,9 +1554,8 @@ def _engine_query_context(player_profile: dict, lifestyle_data: dict | None) -> 
     # Location (Geo-Aware Food Intelligence): purely additive — merges into
     # the SAME preferredCategories/favorite_foods mechanisms above, so a user
     # with no saved location behaves exactly as before (region_boost is None).
-    region_boost = location_food_engine.build_region_boost(
-        player_profile.get("location") or ld.get("location")
-    )
+    location = player_profile.get("location") or ld.get("location")
+    region_boost = location_food_engine.build_region_boost(location)
     region_note = None
     if region_boost:
         profile_rules = dict(profile_rules)
@@ -1566,6 +1565,18 @@ def _engine_query_context(player_profile: dict, lifestyle_data: dict | None) -> 
         favorite = list(dict.fromkeys(favorite + region_boost["preferred_keywords"]))
         region_note = region_boost["explanation"]
         print(f"[FOOD ENGINE] Region boost: {region_boost['region_label']}")
+
+    # Availability GATING (distinct from the boost above): excludes foods
+    # from an unrelated zone by default (spec: Appam must not reach a
+    # Maharashtra user just because it's "Indian food"), computed
+    # independently of build_region_boost() so it still applies even for a
+    # state with no *verified regional dishes* yet. The athlete's own
+    # (pre-region-merge) favorite_foods is the explicit-preference override —
+    # location personalizes by default, it never prohibits what's asked for.
+    user_state = location_food_engine.resolve_state(location)
+    region_eligibility = location_food_engine.compatible_regions(location)
+    print(f"[REGION] resolved state = {user_state or 'None'} "
+          f"(compatible_regions={sorted(region_eligibility) if region_eligibility else None})")
 
     print(f"[FOOD ENGINE] Occupation profile: {profile_rules.get('profileName')}")
     return {
@@ -1581,6 +1592,8 @@ def _engine_query_context(player_profile: dict, lifestyle_data: dict | None) -> 
         "subgoal_tag":   food_engine.resolve_subgoal(player_profile),
         "season_tag":    food_engine.current_season(),
         "region_note":   region_note,
+        "user_state":         user_state,
+        "compatible_regions": region_eligibility,
     }
 
 
@@ -1818,10 +1831,12 @@ This list is non-negotiable. The player has already refused these foods.
         favorite_foods=ctx["favorite_foods"], disliked_foods=ctx["disliked_foods"],
         daily_calorie_target=calorie_target,
         profile=ctx["profile"], subgoal_tag=ctx["subgoal_tag"], season_tag=ctx["season_tag"],
+        user_state=ctx.get("user_state"), compatible_regions=ctx.get("compatible_regions"),
     )
     print(f"[nutrition-weekly-plan] Engine selected foods for 7 days "
           f"(goal={ctx['goal_tags']} diet={ctx['diet_tags']} living={ctx['living_tag']} "
           f"budget={ctx['budget_tier']} disease={ctx['disease_tags']} allergens={ctx['allergens']})")
+    print(f"[DIET_REGION] backend received = {ctx.get('user_state') or 'None'}")
 
     prompt = f"""
 Arrange a fully personalised 7-day meal plan presentation for this user, using ONLY the
@@ -2172,7 +2187,10 @@ You MUST generate a COMPLETELY DIFFERENT meal with different ingredients.
         disease_tags=swap_ctx["disease_tags"], allergens=swap_ctx["allergens"],
         exclude_names=exclude_names, n_combos=2,
         profile=swap_ctx["profile"], subgoal_tag=swap_ctx["subgoal_tag"], season_tag=swap_ctx["season_tag"],
+        user_state=swap_ctx.get("user_state"), compatible_regions=swap_ctx.get("compatible_regions"),
+        favorite_foods=swap_ctx.get("favorite_foods"),
     )
+    print(f"[SWAP_REGION] backend received = {swap_ctx.get('user_state') or 'None'}")
     print(f"[SWAP ENGINE] {len(swap_combos)} combo(s): "
           f"{[' + '.join(f['name'] for f in c) for c in swap_combos]}")
 

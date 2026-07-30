@@ -107,6 +107,50 @@ for _v in set(_CITY_TO_STATE.values()) | set(_STATE_ALIASES.values()):
     _CANONICAL_NORM_TO_NAME[_norm(_v)] = _v
 
 
+# ── State -> dataset zone (STEP: availability GATING, not just boost) ──────
+# The dataset's own `region` field (enrich_food_dataset_v2.py) uses exactly
+# these 6 zone labels (verified against the live dataset: West/Pan-India/
+# South/North/East/Northeast/Central all appear). This table is pure
+# geography (India's standard zonal classification) — it does not invent
+# any food metadata, it only tells us which of the dataset's OWN region
+# labels count as "this user's zone" so `compatible_regions()` below can
+# build the eligibility set food_engine filters candidates against.
+_STATE_TO_ZONE: dict[str, str] = {
+    "Maharashtra": "West", "Gujarat": "West", "Goa": "West", "Rajasthan": "West",
+    "Punjab": "North", "Haryana": "North", "Delhi": "North", "Uttar Pradesh": "North",
+    "Uttarakhand": "North", "Himachal Pradesh": "North", "Jammu & Kashmir": "North",
+    "Ladakh": "North", "Chandigarh": "North", "Madhya Pradesh": "North",
+    "Tamil Nadu": "South", "Karnataka": "South", "Kerala": "South",
+    "Andhra Pradesh": "South", "Telangana": "South", "Puducherry": "South",
+    "West Bengal": "East", "Odisha": "East", "Bihar": "East", "Jharkhand": "East",
+    "Chhattisgarh": "Central",
+    "Assam": "Northeast", "Sikkim": "Northeast", "Arunachal Pradesh": "Northeast",
+    "Meghalaya": "Northeast", "Manipur": "Northeast", "Mizoram": "Northeast",
+    "Nagaland": "Northeast", "Tripura": "Northeast",
+}
+
+
+def compatible_regions(location: dict | None) -> set[str] | None:
+    """The set of dataset `region` values that count as a default-eligible
+    match for this location — always the user's own zone plus `"Pan-India"`.
+    Returns `None` (meaning: no restriction, fail-open) when the state can't
+    be resolved or isn't in the zone table, so an unmapped/unknown location
+    can never accidentally exclude everything.
+
+    This is deliberately independent of `build_region_boost()` — a state
+    with zero *verified regional dishes* in the dataset (so `build_region_boost`
+    itself returns `None`) can still have a perfectly good zone mapping here;
+    exclusion only needs geography, not per-state dish coverage.
+    """
+    state = resolve_state(location)
+    if not state:
+        return None
+    zone = _STATE_TO_ZONE.get(state)
+    if not zone:
+        return None
+    return {zone, "Pan-India"}
+
+
 def resolve_state(location: dict | None) -> str | None:
     """city/district -> state -> None. `location` is whatever shape the
     frontend saved (city/district/state/country) — every key is optional.

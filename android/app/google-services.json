@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "203730393646",
+    "project_id": "zitlas-b8677",
+    "storage_bucket": "zitlas-b8677.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:203730393646:android:2dbb0320ce1a2861bf1dbf",
+        "android_client_info": {
+          "package_name": "com.zitlas.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "203730393646-k1lkls17il2m6jfn21jsqgm44it4rrdm.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCvyOtKZQZ-xaNwzw0R99gbxXa0GnoZSgA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "203730393646-k1lkls17il2m6jfn21jsqgm44it4rrdm.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

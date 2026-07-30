@@ -277,6 +277,219 @@ def test_no_supplements_preference_excludes_supplements():
           "Protein Supplements" in avoids, str(avoids))
 
 
+# ── Availability GATING regression suite (region excludes, not just boosts) ──
+# Covers the fix: `state`/`compatible_regions` now flow all the way into
+# `_pipeline_ids()`'s "region" stage, so a food from an unrelated zone (e.g.
+# Appam — region="South", state_of_origin=["Kerala"]) is excluded from a
+# Maharashtra plan by default, not merely out-ranked.
+
+def _full_week_via_engine(loc, diet="Vegetarian", extra_favorites=None):
+    """Builds a week plan through the REAL production path
+    (`groq_service._engine_query_context` -> `build_week_plan`), not the
+    local `_ctx()` shortcut — so this exercises the exact code
+    `_engine_grounded_diet_plan`/the LLM path both call."""
+    from services.groq_service import _engine_query_context
+    ctx = _engine_query_context(
+        {"primary_goal": "weight_loss", "location": loc},
+        {"diet_type": diet, "living_situation": "Home", "daily_budget": "Medium",
+         "favorite_foods": extra_favorites or []},
+    )
+    return ENGINE.build_week_plan(
+        ctx["goal_tags"], ctx["diet_tags"], ctx["living_tag"], ctx["budget_tier"],
+        ctx["disease_tags"], ctx["allergens"], favorite_foods=ctx["favorite_foods"],
+        daily_calorie_target=1700, profile=ctx["profile"], subgoal_tag=ctx["subgoal_tag"],
+        season_tag=ctx["season_tag"], user_state=ctx["user_state"],
+        compatible_regions=ctx["compatible_regions"],
+    )
+
+
+def _all_names(week_plan) -> list[str]:
+    names = []
+    for day in week_plan["days"]:
+        for slot_data in day["meals"].values():
+            names += [f["name"] for f in slot_data["primary"]]
+            names += [f["name"] for f in slot_data.get("alternatives", [])]
+    return names
+
+
+def test_maharashtra_excludes_appam_by_default():
+    wp = _full_week_via_engine({"city": "Pune", "state": "Maharashtra"})
+    names_lc = " | ".join(_all_names(wp)).lower()
+    check("Maharashtra (no explicit South Indian preference) week never surfaces Appam/Idiyappam",
+          "appam" not in names_lc, names_lc[:300])
+
+
+def test_maharashtra_with_explicit_appam_preference_allows_it_as_a_candidate():
+    # Isolates JUST the region stage via `_pipeline_ids` directly (no
+    # season/subgoal stages engaged) — `recommend()`/`build_week_plan()`
+    # apply several OTHER independent relaxable filters (season, subgoal)
+    # that can legitimately exclude a specific dish for reasons that have
+    # nothing to do with region, which would make this test flaky/misleading
+    # if it went through the full pipeline instead.
+    from services.groq_service import _engine_query_context
+
+    def _appam_eligible(favorite_foods):
+        ctx = _engine_query_context(
+            {"primary_goal": "general_fitness", "location": {"city": "Pune", "state": "Maharashtra"}},
+            {"diet_type": "Vegetarian", "living_situation": "Home", "daily_budget": "Medium",
+             "favorite_foods": favorite_foods},
+        )
+        ids = ENGINE._pipeline_ids(
+            disease_tags=ctx["disease_tags"], allergens=ctx["allergens"], diet_tags=ctx["diet_tags"],
+            goal_tags=ctx["goal_tags"], subgoal_tag=None, profile=ctx["profile"],
+            budget_tier=ctx["budget_tier"], living_tag="Home", meal_tag="Breakfast",
+            season_tag=None, user_state=ctx["user_state"], compatible_regions=ctx["compatible_regions"],
+            favorite_foods=ctx["favorite_foods"],
+        )
+        appam_id = next(i for i in ENGINE.all_ids if ENGINE.by_id[i]["name"].lower() == "appam")
+        return appam_id in ids
+
+    check("Maharashtra, NO explicit South Indian preference -> Appam is NOT an eligible candidate",
+          not _appam_eligible([]))
+    check("Maharashtra + explicit 'appam' favorite -> Appam BECOMES an eligible candidate",
+          _appam_eligible(["appam"]))
+
+
+def test_maharashtra_still_gets_pan_india_and_local_staples():
+    wp = _full_week_via_engine({"city": "Mumbai", "state": "Maharashtra"})
+    names_lc = " | ".join(_all_names(wp)).lower()
+    check("Maharashtra week still contains recognizable Pan-India/local staples",
+          any(k in names_lc for k in ("poha", "roti", "chapati", "dal", "rice", "curd", "paneer", "oats", "banana", "khichdi")),
+          names_lc[:300])
+
+
+def test_kerala_excludes_maharashtra_specific_by_default():
+    # Generalization check (spec #13): the SAME mechanism, reversed. Misal Pav
+    # is West/Maharashtra-specific and should not leak into a Kerala plan
+    # without an explicit preference, exactly like Appam-in-Maharashtra.
+    wp = _full_week_via_engine({"city": "Kochi", "state": "Kerala"})
+    names_lc = " | ".join(_all_names(wp)).lower()
+    check("Kerala week never surfaces Misal Pav by default", "misal" not in names_lc, names_lc[:300])
+
+
+def test_punjab_excludes_kerala_specific_by_default():
+    wp = _full_week_via_engine({"city": "Amritsar", "state": "Punjab"})
+    names_lc = " | ".join(_all_names(wp)).lower()
+    check("Punjab week never surfaces Appam by default", "appam" not in names_lc, names_lc[:300])
+
+
+def test_region_gate_is_the_most_relaxable_stage():
+    # Spec priority: nutrition/goal/diet must never be sacrificed for
+    # localization. A hard-to-satisfy combination (Non-Vegetarian + Diabetes +
+    # Peanut allergy in a low-coverage state) must still produce complete,
+    # safe meals rather than an empty plan just because the region stage
+    # over-constrained the pool.
+    ctx_loc = {"city": "Kohima", "state": "Nagaland"}  # sparse dataset coverage
+    wp = _full_week_via_engine(ctx_loc, diet="Non-Vegetarian")
+    for day in wp["days"]:
+        for slot in ("breakfast", "lunch", "dinner"):
+            combo = day["meals"].get(slot, {}).get("primary") or []
+            check(f"Nagaland non-veg {day['day']} {slot} still produced a non-empty meal",
+                  len(combo) >= 1, day["day"])
+
+
+def test_region_gate_preserves_meal_structure():
+    # Calorie-window precision is a pre-existing, separately-tracked engine
+    # characteristic (none of this file's other tests assert
+    # `validation["passed"]` either — see the non-veg-MH/Punjab tests above,
+    # which print the same kind of variance and only assert on meal
+    # completeness/composition). What THIS fix must not do is break meal
+    # structure: every slot, every day, must still produce a real combo.
+    wp = _full_week_via_engine({"city": "Pune", "state": "Maharashtra"})
+    for day in wp["days"]:
+        for slot in ("breakfast", "lunch", "dinner"):
+            combo = day["meals"].get(slot, {}).get("primary") or []
+            check(f"Maharashtra-gated {day['day']} {slot} still produces a real meal",
+                  len(combo) >= 1, day["day"])
+            for f in combo:
+                check(f"{day['day']} {slot} item has real calorie/protein data ({f['name']})",
+                      f.get("calories", 0) > 0, f["name"])
+
+
+def test_no_location_behaves_exactly_as_before():
+    from services.groq_service import _engine_query_context
+    ctx = _engine_query_context(
+        {"primary_goal": "weight_loss", "location": None},
+        {"diet_type": "Vegetarian", "living_situation": "Home", "daily_budget": "Medium"},
+    )
+    check("no location -> user_state is None", ctx["user_state"] is None)
+    check("no location -> compatible_regions is None (no-op gate)", ctx["compatible_regions"] is None)
+    wp = ENGINE.build_week_plan(
+        ctx["goal_tags"], ctx["diet_tags"], ctx["living_tag"], ctx["budget_tier"],
+        ctx["disease_tags"], ctx["allergens"], favorite_foods=ctx["favorite_foods"],
+        daily_calorie_target=1700, profile=ctx["profile"],
+        user_state=ctx["user_state"], compatible_regions=ctx["compatible_regions"],
+    )
+    check("no-location plan still generates a full 7 days", len(wp["days"]) == 7)
+
+
+def test_maharashtra_gujarati_dal_swap_does_not_return_khaman_dhokla():
+    """The reported bug, reproduced exactly: a Maharashtra user swapping
+    "Gujarati Dal" must not be handed "Khaman Dhokla" — another
+    Gujarat-specific dish that only shares the dataset's broad "West" zone
+    label with Maharashtra. Region must carry enough scoring weight that a
+    same-state/Pan-India candidate always outranks an equally-fit
+    other-state dish."""
+    location = {"state": "Maharashtra"}
+    user_state = location_food_engine.resolve_state(location)
+    compatible_regions = location_food_engine.compatible_regions(location)
+    check("Maharashtra resolves", user_state == "Maharashtra")
+
+    combos = ENGINE.find_swap_combos(
+        meal_slot="mid_morning", goal_tags=["General Fitness"], diet_tags=["Vegetarian"],
+        living_situation="Home", budget_tier="Low", disease_tags=[], allergens=set(),
+        exclude_names=["Gujarati Dal"], n_combos=3,
+        user_state=user_state, compatible_regions=compatible_regions,
+    )
+    check("swap produced at least one combo", len(combos) >= 1)
+    top_names = [f["name"] for c in combos for f in c]
+    check("Khaman Dhokla is not among the top swap combos for a Maharashtra user",
+          not any("khaman" in n.lower() for n in top_names), top_names)
+
+    # Direct score comparison — the actual mechanism, not just the outcome.
+    khaman = ENGINE.by_id[2127]     # Khaman Dhokla: available_states=["Gujarat"]
+    misal = ENGINE.by_id[19]        # Misal Pav: available_states=["Maharashtra"]
+    guj_dal = ENGINE.by_id[2112]    # Gujarati Dal: available_states=["Gujarat"]
+    common_kwargs = dict(
+        goal_tags=["General Fitness"], living_tag="Home", budget_tier="Low",
+        favorite_foods=[], usage_count=0, profile=None,
+        user_state=user_state, compatible_regions=compatible_regions,
+    )
+    khaman_score = ENGINE._score(khaman, **common_kwargs)
+    misal_score = ENGINE._score(misal, **common_kwargs)
+    check("a genuine Maharashtra dish (Misal Pav) outscores the Gujarat-specific "
+          "Khaman Dhokla for a Maharashtra user", misal_score > khaman_score,
+          f"misal={misal_score:.4f} khaman={khaman_score:.4f}")
+    check("Khaman Dhokla's region_component reflects 'other state, same zone' (0.30), "
+          "not full eligibility parity with a Maharashtra dish",
+          ENGINE._region_component(khaman, user_state, compatible_regions, []) == 0.30)
+    check("Gujarati Dal (empty state_of_origin, but available_states=['Gujarat']) "
+          "is correctly classified as Gujarat-specific despite the missing "
+          "state_of_origin field",
+          ENGINE._region_component(guj_dal, user_state, compatible_regions, []) == 0.30)
+    check("a Maharashtra-tagged dish (Misal Pav) scores the top 'preferred' region tier",
+          ENGINE._region_component(misal, user_state, compatible_regions, []) == 1.00)
+
+
+def test_region_ranking_generalizes_beyond_maharashtra():
+    """Same mechanism, different states — changing ONLY the user's
+    preferredDietRegion must change which foods rank as 'preferred' vs
+    'other-state', with no per-state hardcoding anywhere in the engine."""
+    cases = [
+        ("Punjab", 2127, "Khaman Dhokla"),      # Gujarat dish should NOT be preferred for a Punjab user
+        ("Tamil Nadu", 2112, "Gujarati Dal"),
+        ("West Bengal", 19, "Misal Pav"),        # Maharashtra dish should NOT be preferred for a WB user
+    ]
+    for state, other_state_food_id, food_label in cases:
+        location = {"state": state}
+        user_state = location_food_engine.resolve_state(location)
+        compatible_regions = location_food_engine.compatible_regions(location)
+        food = ENGINE.by_id[other_state_food_id]
+        component = ENGINE._region_component(food, user_state, compatible_regions, [])
+        check(f"{food_label} is NOT the 'preferred' tier for a {state} user",
+              component < 1.00, f"component={component}")
+
+
 def _run_all():
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):

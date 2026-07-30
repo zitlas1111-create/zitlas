@@ -90,8 +90,19 @@ _SLOT_CALORIE_WEIGHT = {
 _BUDGET_RANK = {"Low": 0, "Medium": 1, "High": 2}
 _DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
-# Score weights (SCORING PRIORITY ORDER from spec): must sum to 1.0
-_W_GOAL, _W_MEDICAL, _W_AVAIL, _W_BUDGET, _W_PREF, _W_VARIETY = 0.40, 0.25, 0.15, 0.10, 0.05, 0.05
+# Score weights (SCORING PRIORITY ORDER from spec): must sum to 1.0.
+# _W_REGION was added after a real bug: a Maharashtra user's "Gujarati Dal"
+# swap was replaced with "Khaman Dhokla" — another Gujarat-specific dish —
+# because the OLD scoring formula had no region term at all, so within the
+# eligible pool (which the zone-level "region" gate treats Gujarat and
+# Maharashtra as equally admissible, both being "West") ranking was decided
+# purely by goal/avail/budget/pref, which two near-identical Gujarati snacks
+# tie on. Region now carries real, second-highest weight (after goal) so a
+# same-state/Pan-India candidate reliably outranks an equally-fit
+# other-state dish that only shares the user's broad zone.
+_W_GOAL, _W_MEDICAL, _W_REGION, _W_AVAIL, _W_BUDGET, _W_PREF, _W_VARIETY = (
+    0.30, 0.20, 0.20, 0.12, 0.08, 0.05, 0.05,
+)
 
 
 def _norm(s: str) -> str:
@@ -137,6 +148,19 @@ class FoodRecommendationEngine:
         # dish list, and stays correct automatically as the dataset grows.
         self._idx_state: dict[str, set[int]] = defaultdict(set)
         self._idx_region: dict[str, set[int]] = defaultdict(set)
+        # Real-bug fix: `state_of_origin` is empty on 3748/4520 foods (83%)
+        # — including plenty of unmistakably state-specific dishes, e.g.
+        # "Gujarati Dal" (category "Gujarati Foods") has state_of_origin=[].
+        # `available_states` is a SEPARATE dataset field that is never empty
+        # (verified against the live dataset: 0/4520 empty) — it's "All" for
+        # genuine Pan-India foods and an explicit state list otherwise, and
+        # is a superset-consistent match with state_of_origin wherever both
+        # are populated. Indexing on this field instead is what lets a
+        # Maharashtra user's own state bucket actually include foods whose
+        # state_of_origin was simply never filled in, and — just as
+        # importantly — keeps a Gujarat-tagged dish OUT of that bucket even
+        # though both share the dataset's broad "West" region/zone label.
+        self._effective_states: dict[int, frozenset[str]] = {}
 
         for f in raw:
             fid = f["id"]
@@ -161,7 +185,9 @@ class FoodRecommendationEngine:
             for allergen in f.get("allergens", []):
                 if allergen and allergen != "None":
                     self._idx_allergen[allergen].add(fid)
-            for state in f.get("state_of_origin", []):
+            states = frozenset(s for s in f.get("available_states", []) if s and s != "All")
+            self._effective_states[fid] = states
+            for state in states:
                 self._idx_state[state].add(fid)
             self._idx_region[f.get("region", "Pan-India")].add(fid)
 
@@ -221,6 +247,39 @@ class FoodRecommendationEngine:
         allowed = [b for b, r in _BUDGET_RANK.items() if r <= max_rank]
         return self._union(self._idx_budget, allowed)
 
+    def _region_eligible_ids(
+        self,
+        user_state: str | None,
+        compatible_regions: set[str] | None,
+        favorite_foods: list[str] | None,
+    ) -> set[int] | None:
+        """Bucket A (state_of_origin matches) + B (Pan-India) + C (same zone
+        as the user) are eligible by default; bucket D (a different zone,
+        not the user's state) is excluded UNLESS the athlete's own
+        favorite_foods/cuisine preference names the dish, its category, or
+        its region explicitly — "location is a default, never a
+        prohibition" (spec #5). Returns `None` (no filter — identical to
+        pre-existing behavior) when no location resolved at all.
+        """
+        if compatible_regions is None and not user_state:
+            return None
+        eligible: set[int] = set()
+        for zone in compatible_regions or ():
+            eligible |= self._idx_region.get(zone, set())
+        if user_state:
+            eligible |= self._idx_state.get(user_state, set())
+
+        fav_lc = [_norm(f) for f in (favorite_foods or []) if f]
+        if fav_lc:
+            for i in self.all_ids:
+                if i in eligible:
+                    continue
+                f = self.by_id[i]
+                haystack = f"{_norm(f['name'])} {_norm(f.get('category', ''))} {_norm(f.get('region', ''))}"
+                if any(kw in haystack for kw in fav_lc):
+                    eligible.add(i)
+        return eligible
+
     def _pipeline_ids(
         self,
         disease_tags: list[str],
@@ -235,6 +294,9 @@ class FoodRecommendationEngine:
         season_tag: str | None,
         disliked_foods: list[str] | None = None,
         max_prep_minutes: int | None = None,
+        user_state: str | None = None,
+        compatible_regions: set[str] | None = None,
+        favorite_foods: list[str] | None = None,
     ) -> set[int]:
         profile = profile or {}
         avoid_categories = set(profile.get("avoidCategories") or [])
@@ -284,6 +346,16 @@ class FoodRecommendationEngine:
                 {i for i in self.all_ids if self.by_id[i].get("preparation_time_minutes", 20) <= max_prep_minutes}
                 if max_prep_minutes else None
             )),
+            # Regional availability/familiarity gate — LAST (most relaxable)
+            # of every stage, so nutrition/goal/budget/living/season NEVER
+            # lose out to localization (spec priority: safety > diet type >
+            # explicit preference > nutrition targets > regional
+            # availability > variety). Eligible = Pan-India + the user's own
+            # zone + anything whose state_of_origin literally includes their
+            # state (bucket A/B/C) + an explicit favorite_foods/cuisine
+            # override (bucket D allowed back in on request). `None` means
+            # no location resolved — a pure no-op, identical to today.
+            ("region", self._region_eligible_ids(user_state, compatible_regions, favorite_foods)),
         ]
         active = [(n, s) for n, s in stages if s is not None]
 
@@ -297,6 +369,57 @@ class FoodRecommendationEngine:
 
     # ── Scoring ──────────────────────────────────────────────────────────
 
+    def _region_component(
+        self,
+        food: dict,
+        user_state: str | None,
+        compatible_regions: set[str] | None,
+        favorite_foods: list[str] | None,
+    ) -> float:
+        """Tiered regional fit — the score-side counterpart to
+        `_region_eligible_ids`'s filter-side gating. The filter only asks
+        "is this admissible at all" (Pan-India + user's zone + user's own
+        state + explicit favorites); it does NOT distinguish, within that
+        admitted pool, "this is actually the user's own state" from "this
+        just happens to share the user's broad zone" — which is exactly how
+        a Maharashtra user's Gujarati Dal got swapped for Khaman Dhokla,
+        another Gujarat-specific dish sharing the "West" zone label. This
+        tiering makes that distinction explicit and real-weighted:
+
+            1.00  user's own state (bucket A)
+            0.75  genuine Pan-India (bucket B)
+            0.50  a specific OTHER state's dish, admitted only because the
+                  athlete's own favorite_foods explicitly names it/its
+                  category/region (bucket D, opt-in)
+            0.30  a specific OTHER state's dish that is merely in the same
+                  broad zone (bucket C) — e.g. Gujarat for a Maharashtra
+                  user — no explicit ask for it
+            0.15  outside the user's zone entirely (should only be reached
+                  via a relaxed/edge-case pool, since eligibility already
+                  excludes this)
+            0.70  no location resolved at all — neutral, matches the
+                  pre-region-fix behaviour exactly (a pure no-op)
+        """
+        if compatible_regions is None and not user_state:
+            return 0.70
+        fid = food["id"]
+        states = self._effective_states.get(fid, frozenset())
+        if user_state and user_state in states:
+            return 1.00
+        food_region = food.get("region", "Pan-India")
+        if food_region == "Pan-India" or not states:
+            return 0.75
+        fav_lc = [_norm(f) for f in (favorite_foods or []) if f]
+        explicit_override = False
+        if fav_lc:
+            haystack = f"{_norm(food['name'])} {_norm(food.get('category', ''))} {_norm(food_region)}"
+            explicit_override = any(kw in haystack for kw in fav_lc)
+        if explicit_override:
+            return 0.50
+        if compatible_regions and food_region in compatible_regions:
+            return 0.30
+        return 0.15
+
     def _score(
         self,
         food: dict,
@@ -306,6 +429,8 @@ class FoodRecommendationEngine:
         favorite_foods: list[str],
         usage_count: int,
         profile: dict | None = None,
+        user_state: str | None = None,
+        compatible_regions: set[str] | None = None,
     ) -> float:
         goal_hits = sum(1 for g in goal_tags if g in food.get("goalSuitable", []))
         goal_component = min(1.0, goal_hits / max(1, len(goal_tags))) if goal_tags else 0.7
@@ -353,9 +478,12 @@ class FoodRecommendationEngine:
 
         variety_component = max(0.0, 1.0 - usage_count * 0.35)
 
+        region_component = self._region_component(food, user_state, compatible_regions, favorite_foods)
+
         return (
-            _W_GOAL * goal_component + _W_MEDICAL * medical_component + _W_AVAIL * avail_component
-            + _W_BUDGET * budget_component + _W_PREF * pref_component + _W_VARIETY * variety_component
+            _W_GOAL * goal_component + _W_MEDICAL * medical_component + _W_REGION * region_component
+            + _W_AVAIL * avail_component + _W_BUDGET * budget_component + _W_PREF * pref_component
+            + _W_VARIETY * variety_component
         )
 
     def recommend(
@@ -376,6 +504,8 @@ class FoodRecommendationEngine:
         subgoal_tag: str | None = None,
         season_tag: str | None = None,
         max_prep_minutes: int | None = None,
+        user_state: str | None = None,
+        compatible_regions: set[str] | None = None,
     ) -> list[dict]:
         """Filter -> score -> rank. Returns up to top_n real dataset foods."""
         meal_tag = _SLOT_TO_MEAL_TAG.get(meal_slot, meal_slot)
@@ -384,7 +514,8 @@ class FoodRecommendationEngine:
             goal_tags=goal_tags, subgoal_tag=subgoal_tag, profile=profile,
             budget_tier=budget_tier, living_tag=living_situation, meal_tag=meal_tag,
             season_tag=season_tag, disliked_foods=disliked_foods,
-            max_prep_minutes=max_prep_minutes,
+            max_prep_minutes=max_prep_minutes, user_state=user_state,
+            compatible_regions=compatible_regions, favorite_foods=favorite_foods,
         )
         if exclude_ids:
             ids -= exclude_ids
@@ -396,14 +527,16 @@ class FoodRecommendationEngine:
                     goal_tags=goal_tags, subgoal_tag=subgoal_tag, profile=profile,
                     budget_tier=budget_tier, living_tag=living_situation, meal_tag=meal_tag,
                     season_tag=season_tag, disliked_foods=disliked_foods,
-                    max_prep_minutes=max_prep_minutes,
+                    max_prep_minutes=max_prep_minutes, user_state=user_state,
+                    compatible_regions=compatible_regions, favorite_foods=favorite_foods,
                 )
 
         usage_counts = usage_counts or {}
         favorite_foods = favorite_foods or []
         scored = [
             (self._score(self.by_id[i], goal_tags, living_situation, budget_tier,
-                         favorite_foods, usage_counts.get(i, 0), profile), i)
+                         favorite_foods, usage_counts.get(i, 0), profile,
+                         user_state=user_state, compatible_regions=compatible_regions), i)
             for i in ids
         ]
         scored.sort(key=lambda t: (-t[0], t[1]))
@@ -603,6 +736,8 @@ class FoodRecommendationEngine:
         subgoal_tag: str | None = None,
         season_tag: str | None = None,
         max_prep_minutes: int | None = None,
+        user_state: str | None = None,
+        compatible_regions: set[str] | None = None,
     ) -> dict[str, Any]:
         """
         Deterministic 7-day x 5-slot plan sourced entirely from the dataset.
@@ -633,6 +768,7 @@ class FoodRecommendationEngine:
                     usage_counts=usage_counts, top_n=12,
                     profile=profile, subgoal_tag=subgoal_tag, season_tag=season_tag,
                     max_prep_minutes=max_prep_minutes,
+                    user_state=user_state, compatible_regions=compatible_regions,
                 )
                 if not pool:
                     continue
@@ -654,6 +790,7 @@ class FoodRecommendationEngine:
                         usage_counts=usage_counts, top_n=40,
                         profile=profile, subgoal_tag=None, season_tag=season_tag,
                         max_prep_minutes=max_prep_minutes,
+                        user_state=user_state, compatible_regions=compatible_regions,
                     )
                     retry = self.build_meal_combo(wide_pool, slot, slot_target)
                     if len(self.validate_meal_combo(retry, slot)) < len(self.validate_meal_combo(combo, slot)):
@@ -723,6 +860,9 @@ class FoodRecommendationEngine:
         self, meal_slot, goal_tags, diet_tags, living_situation, budget_tier,
         disease_tags, allergens, exclude_names, profile, subgoal_tag, season_tag,
         pool_size: int = 30,
+        user_state: str | None = None,
+        compatible_regions: set[str] | None = None,
+        favorite_foods: list[str] | None = None,
     ) -> list[dict]:
         exclude_strings = [_norm(n) for n in exclude_names if n]
         exclude_bases = {_base_dish_name(n) for n in exclude_names if n}
@@ -731,12 +871,14 @@ class FoodRecommendationEngine:
             goal_tags=goal_tags, subgoal_tag=subgoal_tag, profile=profile,
             budget_tier=budget_tier, living_tag=living_situation,
             meal_tag=_SLOT_TO_MEAL_TAG.get(meal_slot, meal_slot), season_tag=season_tag,
+            user_state=user_state, compatible_regions=compatible_regions, favorite_foods=favorite_foods,
         )
         ids = {i for i in ids if not self._is_excluded(self.by_id[i], exclude_strings, exclude_bases)}
         if not ids:
             # Relax goal/budget/living but NEVER the meal slot — a dinner swap
             # must stay a dinner-suitable food (diet/medical stay protected
-            # inside _pipeline_ids itself).
+            # inside _pipeline_ids itself). Region is relaxed here too (it's
+            # the most-relaxable stage everywhere else in the pipeline).
             ids = self._pipeline_ids(
                 disease_tags=disease_tags, allergens=allergens, diet_tags=diet_tags,
                 goal_tags=[], subgoal_tag=None, profile=None,
@@ -744,11 +886,34 @@ class FoodRecommendationEngine:
                 meal_tag=_SLOT_TO_MEAL_TAG.get(meal_slot, meal_slot), season_tag=None,
             )
             ids = {i for i in ids if not self._is_excluded(self.by_id[i], exclude_strings, exclude_bases)}
+        # `favorite_foods` used to be hardcoded to `[]` here regardless of
+        # what the caller passed in — meaning pref_component AND (now)
+        # region_component's explicit-override tier were silently disabled
+        # for every swap. Passing the real list through fixes both.
         scored = [
-            (self._score(self.by_id[i], goal_tags, living_situation, budget_tier, [], 0, profile), i)
+            (self._score(self.by_id[i], goal_tags, living_situation, budget_tier,
+                         favorite_foods or [], 0, profile,
+                         user_state=user_state, compatible_regions=compatible_regions), i)
             for i in ids
         ]
         scored.sort(key=lambda t: (-t[0], t[1]))
+        if user_state or compatible_regions:
+            print(f"[REGION_RANK] user_state={user_state} compatible_regions={compatible_regions}")
+            for rank, (score, i) in enumerate(scored[:5], start=1):
+                f = self.by_id[i]
+                states = self._effective_states.get(i, frozenset())
+                region_class = (
+                    "preferred" if user_state and user_state in states else
+                    "common" if (f.get("region", "Pan-India") == "Pan-India" or not states) else
+                    "other_region_explicit" if favorite_foods and any(
+                        _norm(kw) in f"{_norm(f['name'])} {_norm(f.get('category',''))} {_norm(f.get('region',''))}"
+                        for kw in favorite_foods if kw
+                    ) else
+                    "other_region_same_zone" if compatible_regions and f.get("region", "Pan-India") in compatible_regions else
+                    "out_of_zone"
+                )
+                print(f"[REGION_RANK] {rank}. food={f['name']!r} foodRegion={f.get('region')} "
+                      f"states={sorted(states)} regionClass={region_class} finalScore={score:.4f}")
         return [self.by_id[i] for _, i in scored[:pool_size]]
 
     def find_swap_alternatives(
@@ -765,6 +930,9 @@ class FoodRecommendationEngine:
         profile: dict | None = None,
         subgoal_tag: str | None = None,
         season_tag: str | None = None,
+        user_state: str | None = None,
+        compatible_regions: set[str] | None = None,
+        favorite_foods: list[str] | None = None,
     ) -> list[dict]:
         """Ranked single-food alternatives (kept for offline fallback and
         snack slots). For main meals, anchors-only: never offers a single
@@ -772,6 +940,7 @@ class FoodRecommendationEngine:
         pool = self._ranked_swap_pool(
             meal_slot, goal_tags, diet_tags, living_situation, budget_tier,
             disease_tags, allergens, exclude_names, profile, subgoal_tag, season_tag,
+            user_state=user_state, compatible_regions=compatible_regions, favorite_foods=favorite_foods,
         )
         if meal_slot in self._MAIN_SLOTS or meal_slot == "breakfast":
             anchors = [f for f in pool if self._is_meal_anchor(f, meal_slot)]
@@ -804,6 +973,9 @@ class FoodRecommendationEngine:
         profile: dict | None = None,
         subgoal_tag: str | None = None,
         season_tag: str | None = None,
+        user_state: str | None = None,
+        compatible_regions: set[str] | None = None,
+        favorite_foods: list[str] | None = None,
     ) -> list[list[dict]]:
         """Full-meal swap: each result is a COMPLETE composed meal (e.g.
         'Paneer Bhurji with Roti + Curd + Salad'), never a lone ingredient.
@@ -813,6 +985,7 @@ class FoodRecommendationEngine:
         pool = self._ranked_swap_pool(
             meal_slot, goal_tags, diet_tags, living_situation, budget_tier,
             disease_tags, allergens, exclude_names, profile, subgoal_tag, season_tag,
+            user_state=user_state, compatible_regions=compatible_regions, favorite_foods=favorite_foods,
         )
         if not pool:
             return []

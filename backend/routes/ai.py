@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import Any
 
-from services import groq_service, offline_fallback, rag_service
+from services import groq_service, location_food_engine, offline_fallback, rag_service
 
 router = APIRouter()
 
@@ -646,6 +646,9 @@ async def nutrition_weekly_plan(body: NutritionWeeklyPlanRequest) -> dict[str, A
     print(f"  profile.calorie_target     : {body.user_profile.get('daily_calorie_target', 'N/A')}")
     print(f"  profile.age                : {body.user_profile.get('age', 'N/A')}")
     print(f"  nutrition_assessment       : {'yes' if body.nutrition_assessment else 'no'}")
+    _diet_location = body.user_profile.get("location")
+    print(f"[DIET_REGION] request location payload = {_diet_location}")
+    print(f"[DIET_REGION] backend received = {location_food_engine.resolve_state(_diet_location) or 'None'}")
     print("="*60)
 
     try:
@@ -734,6 +737,9 @@ async def swap_meal(body: SwapMealRequest) -> dict[str, Any]:
     print(f"  living_sit    : {(body.lifestyle_data or {}).get('living_situation', 'N/A')}")
     print(f"  diet_type     : {(body.lifestyle_data or {}).get('diet_type', 'N/A')}")
     print(f"[SWAP MEAL] goal={fitness_goal}")
+    _swap_location = (body.user_profile or {}).get("location")
+    print(f"[SWAP_REGION] request location payload = {_swap_location}")
+    print(f"[SWAP_REGION] backend received = {location_food_engine.resolve_state(_swap_location) or 'None'}")
     print("="*60)
 
     # RAG: pull nutrition context aligned with the user's fitness goal

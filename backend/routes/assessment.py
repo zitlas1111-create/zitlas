@@ -104,6 +104,7 @@ def _engine_grounded_diet_plan(data: "AssessmentInput", calc: dict, fitness_goal
         favorite_foods=ctx["favorite_foods"], disliked_foods=ctx["disliked_foods"],
         daily_calorie_target=calc.get("weight_loss_calories_kcal"),
         profile=ctx["profile"], subgoal_tag=ctx["subgoal_tag"], season_tag=ctx["season_tag"],
+        user_state=ctx.get("user_state"), compatible_regions=ctx.get("compatible_regions"),
     )
 
     days_out = []
