@@ -23,6 +23,7 @@ import '../features/profile/presentation/screens/personal_info_screen.dart';
 import '../features/profile/presentation/screens/profile_screen.dart';
 import '../features/reviews/presentation/screens/reviews_screen.dart';
 import '../features/workout/presentation/screens/workout_screen.dart';
+import '../features/zino/data/zino_context_builder.dart';
 import '../features/zino/presentation/screens/zino_screen.dart';
 
 /// Routing foundation. The 5 bottom-nav tabs (matching `components/navbar.js`
@@ -102,7 +103,16 @@ GoRouter buildRouter(AuthState authState) {
       GoRoute(path: '/profile/help-support', builder: (context, state) => const HelpSupportScreen()),
       GoRoute(path: '/wallet', builder: (context, state) => const PaymentsScreen()),
       GoRoute(path: '/activity', builder: (context, state) => const HealthScreen()),
-      GoRoute(path: '/zino', builder: (context, state) => const ZinoScreen()),
+      // `?from=diet` tells Zino which screen the athlete opened it from, so
+      // an ambiguous question ("replace this") anchors to what they were just
+      // looking at — the mobile equivalent of zino.js's `current_page`.
+      GoRoute(
+        path: '/zino',
+        builder: (context, state) => ZinoScreen(
+          screenContext: zinoScreenContextFromName(state.uri.queryParameters['from']),
+          viewingExpertId: state.uri.queryParameters['expertId'],
+        ),
+      ),
 
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) =>

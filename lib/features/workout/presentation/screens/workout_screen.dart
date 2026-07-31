@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import '../../../zino/tour/zino_tour_stops.dart';
 
 import '../../../../core/theme/zitlas_tokens.dart';
 import '../../../auth/auth_state.dart';
@@ -129,7 +130,7 @@ class _WorkoutContent extends StatelessWidget {
             coachName: controller.coachName ?? 'your coach',
             ended: controller.coachingEnded,
           ),
-        WorkoutHero(plan: plan),
+        KeyedSubtree(key: ZinoTourKeys.trainingContent, child: WorkoutHero(plan: plan)),
         const SizedBox(height: 16),
         WorkoutContextBar(plan: plan),
         const SizedBox(height: 16),

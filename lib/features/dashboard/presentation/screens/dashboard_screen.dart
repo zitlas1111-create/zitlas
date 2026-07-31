@@ -1,10 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../../auth/auth_state.dart';
+import '../../../zino/tour/zino_tour_stops.dart';
 import '../../dashboard_controller.dart';
 import '../../data/dashboard_repository.dart';
 import '../dashboard_visuals.dart';
@@ -46,40 +46,6 @@ class DashboardScreen extends StatelessWidget {
         repository: DashboardRepository(FirebaseFirestore.instance),
       ),
       child: const _DashboardBody(),
-    );
-  }
-}
-
-/// `.zn-fab` — 56px circular launcher carrying the Zino avatar.
-class _ZinoFab extends StatelessWidget {
-  const _ZinoFab({required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 56,
-        height: 56,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [DashboardColors.primary, DashboardColors.primaryHover],
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: DashboardColors.primary.withValues(alpha: 0.45),
-              blurRadius: 18,
-              offset: const Offset(0, 6),
-            ),
-          ],
-        ),
-        child: const Icon(Icons.auto_awesome, color: Colors.white, size: 26),
-      ),
     );
   }
 }
@@ -164,15 +130,9 @@ class _DashboardBodyState extends State<_DashboardBody> with WidgetsBindingObser
                 ],
               ),
             ),
-            // `#znFab` (assets/js/zino.js) — the Ask Zino launcher, pinned
-            // bottom-right above the bottom nav on every authenticated page.
-            Positioned(
-              right: 18,
-              bottom: 18,
-              child: SafeArea(
-                child: _ZinoFab(onTap: () => context.push('/zino')),
-              ),
-            ),
+            // The Zino launcher now lives in AppShell so it appears on EVERY
+            // primary tab (matching zino.js, which self-mounts its FAB on
+            // every page) instead of only here.
             SafeArea(
               bottom: false,
               child: Column(
@@ -184,20 +144,33 @@ class _DashboardBodyState extends State<_DashboardBody> with WidgetsBindingObser
                       onRefresh: controller.refresh,
                       child: ListView(
                         padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                        children: const [
-                          GreetingSection(),
-                          GoalCard(),
-                          SizedBox(height: 16),
-                          ExpertReviewPromoCard(),
-                          SizedBox(height: 16),
+                        children: [
+                          const GreetingSection(),
+                          // KeyedSubtree attaches the Zino-tour spotlight
+                          // targets at the USE SITE, so the tour frames the
+                          // real cards without any widget needing to know a
+                          // tour exists.
+                          KeyedSubtree(
+                            key: ZinoTourKeys.goalCard,
+                            child: const GoalCard(),
+                          ),
+                          const SizedBox(height: 16),
+                          const ExpertReviewPromoCard(),
+                          const SizedBox(height: 16),
                           // #healthStatusMount — sits between the expert
                           // promo and the SWOT widget on dashboard.html.
-                          HealthStatusCard(),
-                          SizedBox(height: 16),
-                          SwotWidgetCard(),
-                          SizedBox(height: 16),
-                          ActivityCard(),
-                          SizedBox(height: 16),
+                          KeyedSubtree(
+                            key: ZinoTourKeys.healthStatus,
+                            child: const HealthStatusCard(),
+                          ),
+                          const SizedBox(height: 16),
+                          const SwotWidgetCard(),
+                          const SizedBox(height: 16),
+                          KeyedSubtree(
+                            key: ZinoTourKeys.activityCard,
+                            child: const ActivityCard(),
+                          ),
+                          const SizedBox(height: 16),
                           DailyScoreCard(),
                           SizedBox(height: 16),
                           WellnessCard(),

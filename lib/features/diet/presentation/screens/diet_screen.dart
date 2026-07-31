@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import '../../../zino/tour/zino_tour_stops.dart';
 
 import '../../../../core/theme/zitlas_tokens.dart';
 import '../../../auth/auth_state.dart';
@@ -129,12 +130,16 @@ class _DietContent extends StatelessWidget {
             review: pendingReview,
             onAccept: () => controller.acceptExpertReview(pendingReview),
           ),
-        DietPlanHeaderCard(
-          plan: plan,
-          calculations: controller.calculations,
-          isExpertPlan: storage?.isExpertPlan ?? false,
-          expertName: storage?.expertName,
-          onRequestReview: () => showRequestReviewSheet(context, controller: controller, userName: userName),
+        KeyedSubtree(
+          key: ZinoTourKeys.dietFocusCard,
+          child: DietPlanHeaderCard(
+            plan: plan,
+            calculations: controller.calculations,
+            isExpertPlan: storage?.isExpertPlan ?? false,
+            expertName: storage?.expertName,
+            onRequestReview: () =>
+                showRequestReviewSheet(context, controller: controller, userName: userName),
+          ),
         ),
         const SizedBox(height: 16),
         DietDaySelector(

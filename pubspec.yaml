@@ -65,6 +65,7 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.4
+  fake_cloud_firestore: ^4.2.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -84,6 +85,8 @@ flutter:
     - assets/images/loginbg.png
     - assets/images/homebg.png
     - assets/images/zino.png
+    - assets/images/zino_intro.png
+    - assets/images/zino_done.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

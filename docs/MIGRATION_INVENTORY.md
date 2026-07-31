@@ -988,3 +988,206 @@ Tracking row), `main.dart`, `pubspec.yaml`.
   `flutter devices` showed only Windows/Chrome/Edge). The walk-with-phone-locked
   verification in requirement F/Y remains outstanding and must be run before
   this feature is considered shipped.
+
+---
+
+# Zino — AI fitness companion (mobile)
+
+## What the website actually had (audited first, source of truth)
+
+`frontend/assets/js/zino.js` (773 lines) holds three cooperating pieces:
+`ZinoManager` (context + `POST /api/ai/zino-chat`), `FloatingAssistant` (the
+FAB + chat overlay), and `TutorialEngine` (a first-run spotlight walkthrough).
+The persona, provider chain, and safety rules live server-side in
+`groq_service.ZINO_COMPANION_SYSTEM` + `routes/ai.py::zino_chat`.
+
+The Flutter side was a **bare `PlaceholderScreen`** — the route existed, nothing
+behind it.
+
+## Parity achieved
+
+| Website | Flutter |
+|---|---|
+| `ZinoManager.buildContext()` | `ZinoContextBuilder.build()` |
+| `POST /api/ai/zino-chat` | `ZinoRepository.send()` — same endpoint, same payload |
+| `unwrapReply()` | `unwrapZinoReply()` |
+| `CHIPS` (9 quick actions) | `kZinoChips` — verbatim |
+| `_PAGE_MAP` / `current_page` | `ZinoScreenContext` — purpose strings verbatim |
+| `_history` (20-cap, per session) | `ZinoController` (20-cap, **per uid**) |
+| `.zn-fab` on every page | `ZinoFab` in `AppShell` (all 5 tabs) |
+| `.zn-bubble`, `.zn-typing`, input bar | `_Bubble`, `_TypingBubble`, `_InputBar` |
+
+**No backend change.** The persona, RAG, provider fallback chain, and safety
+rules were already correct and are shared with the live website — modifying
+them would have changed the site's behaviour. No API key exists in the app.
+
+## Context layer — relevant, not everything
+
+Context is rebuilt fresh per message (never cached — live state must not go
+stale), reads only the signed-in uid's own documents, and strips nulls before
+sending. Bulky structures are summarized: the full 7-day plan is large, so only
+**today's** meals/focus travel. SWOT sends the headline strength/weakness, not
+four lists of paragraphs.
+
+**Expert-aware:** reads `currentDietPlan`/`currentWorkoutPlan` FIRST — the plan
+actually in force — so Zino describes what a human expert approved, never the
+superseded AI original, and carries `isCoachManaged` + `expertName` so it can
+say *"your expert adjusted today's plan"* instead of contradicting them.
+
+**Region-aware:** prefers the canonical `preferredDietRegion` over the raw GPS
+snapshot, so Zino reasons with the same value the diet/swap engine uses.
+
+**Step-aware:** prefers the live on-device reading (freshest by definition),
+falling back to today's synced day doc.
+
+## Actions — the security model
+
+Requirement: *"DO NOT allow raw LLM output to arbitrarily execute application
+code."* The design goes further than filtering model output — **the model
+cannot emit an action at all**:
+
+- Actions are a fixed typed enum (`ZinoAction`); no string→route evaluation, no
+  dynamic dispatch. A test asserts every route exists in `router.dart`.
+- Intent is derived from the **athlete's own message** via a pure keyword
+  function, never from the reply. A prompt-injected or hallucinated response
+  therefore cannot trigger navigation.
+- Every action is **navigation-only** to a screen already reachable from the
+  nav bar. Nothing writes data, spends money, or changes a plan.
+- Actions render as a chip the athlete taps — **that tap is the confirmation**.
+- Anything destructive/costly is deliberately excluded. `swapMeal` opens the
+  Diet screen where the real Swap Meal sheet (reason → alternatives → confirm)
+  keeps its own flow; Zino never performs the swap.
+
+This also keeps the backend persona honest — it explicitly promises never to
+claim it took an action.
+
+## Memory — three separate tiers
+
+1. **Conversation history** — recent thread, uid-scoped local key, 20-cap,
+   replayed for continuity ("my knees are sore" is still visible two turns
+   later). Disposable.
+2. **Durable profile data** — goal, assessment, medical conditions. Zino
+   **reads only**; a casual remark can never rewrite a medical field.
+3. **Live app state** — steps, plan, streak. Rebuilt every message, never stored.
+
+**Cross-account isolation has two independent layers:** the history key embeds
+the uid (`zitlas_zino_history_<uid>`), so a different athlete reads a different
+bucket entirely; and `AccountGuard.clearExcept()` already purges it on logout
+and account switch. Both are covered by tests.
+
+## Failure handling
+
+Failed sends keep the athlete's text visible and marked "Not delivered" (never
+silently dropped, never a fabricated reply), expose a Retry, and are excluded
+from persisted history — an undelivered turn has no reply to pair with.
+Errors are classified internally (`NETWORK_ERROR`/`AI_PROVIDER_ERROR`/…) while
+the athlete sees Zino-voiced copy, never a code.
+
+## Files changed
+
+**New:** `lib/features/zino/data/zino_context_builder.dart`,
+`data/zino_repository.dart`, `models/zino_message.dart`, `models/zino_action.dart`,
+`zino_controller.dart`, `presentation/widgets/zino_fab.dart`,
+`test/zino_test.dart`.
+**Rewritten:** `presentation/screens/zino_screen.dart` (was a placeholder).
+**Modified:** `app/router.dart` (`?from=`/`?expertId=` params),
+`core/widgets/app_shell.dart` (FAB on every tab),
+`dashboard_screen.dart` (removed its local FAB — now global).
+
+## Validation
+
+- `flutter analyze` — 9 info lints, all `prefer_initializing_formals` matching
+  the existing codebase convention. **No warnings or errors.**
+- `flutter test` — **195/195 passed** (157 before, **+38 new**).
+- `flutter build apk --debug` — **succeeded**.
+- **Real-device test — NOT PERFORMED.** No Android device was connected
+  (`adb devices` empty). The on-device checklist in the task (new/existing
+  user, network loss, logout/login, long conversations) remains outstanding.
+
+---
+
+# Zino position (top-right) + first-run tour
+
+## Position — a correction to the previous phase
+
+The previous Zino phase placed the launcher as a bottom-right material FAB with
+an orange gradient fill. **That was wrong.** `frontend/assets/css/zino.css:136`
+defines it as:
+
+```css
+.zn-fab { position: fixed; top: calc(78px + env(safe-area-inset-top)); right: 16px;
+          width: 52px; height: 52px; border: 2.5px solid #FF9900; background: #fff; }
+```
+
+TOP-RIGHT, white fill, orange border, carrying `zino.png`, with a `znPulse`
+ring (`::after`, scale 0.9→1.35, 2.6s, infinite). All of that is now
+reproduced: `ZinoFabOverlay` pins it via `SafeArea(bottom: false)` — the Flutter
+equivalent of `env(safe-area-inset-top)` — so the 78px offset is measured below
+the status bar/notch and clears the page header rather than colliding with it.
+Mounted once in `AppShell`, so it is identical on all five tabs.
+
+## Tour — ported from `TutorialEngine` (zino.js:270-574)
+
+Titles and body copy are **verbatim**; this is an existing onboarding script,
+not something to rewrite. Two adaptations, both deliberate:
+
+* The website's three Expert-Profile stops (`request-review`, `hire-coach`,
+  `chat`) are folded into the Experts stop. Reaching an expert profile requires
+  picking a specific expert, and auto-navigating into an arbitrary one mid-tour
+  is impossible on a fresh account with no experts loaded. Their content is
+  preserved in the Experts stop copy.
+* A `zino-here` stop is **added** (the task asked for it) to introduce Zino's
+  own top-right location — the website never needed it, since its FAB is
+  visible on every page from the first second.
+
+Stops spotlight the REAL widgets via `GlobalKey`s attached at the use site with
+`KeyedSubtree`, so no widget needs to know a tour exists. A stop whose target
+isn't mounted is skipped — matching the website, where a `querySelector` miss
+skips the stop. This matters because a genuinely new account has no diet plan,
+no experts and no coach yet.
+
+## New-user detection — the part that must not regress
+
+**Canonical field: `users/{uid}.zinoTourCompleted`** — the SAME field
+`markDone()` writes on the website. No duplicate field. Written as the STRING
+`'true'` for cross-client compatibility; reads accept string or bool. An
+athlete who toured on the website is therefore never re-toured in the app.
+
+**Account-level, never install-level.** SharedPreferences is only a fast-path
+cache of the authoritative Firestore value. This is what makes reinstall,
+logout/login, and the Flutter migration itself non-events.
+
+**Fail-closed.** If the Firestore check can't complete (offline,
+permission-denied, timeout), `shouldAutoStart` returns **false**. Ported from
+the website's `_confirmNeverToured()`, whose own comment gives the reasoning: a
+returning athlete must never be re-toured, whereas a genuinely new one simply
+gets the tour on the next launch. This single choice is also what prevents the
+endless-onboarding loop a fail-open design would cause on a flaky connection.
+
+**Skip == Finish**, exactly as on the website (`skip()` calls `finish()`).
+
+**Replay** (`Profile → Take Zino Tour Again`) bypasses the new-user check and
+does NOT clear `zinoTourCompleted` — replaying can never turn an existing
+athlete back into a "new user".
+
+**Tour ≠ Assessment.** Completing the tour writes only the tour field, and a
+completed assessment does not suppress the tour. Both directions are tested.
+
+## Files changed
+
+**New:** `lib/features/zino/tour/zino_tour_stops.dart`, `zino_tour_store.dart`,
+`zino_tour_controller.dart`, `zino_tour_overlay.dart`; `test/zino_tour_test.dart`.
+**Rewritten:** `zino_fab.dart` (top-right position + website appearance),
+`core/widgets/app_shell.dart` (tour host + FAB overlay).
+**Modified:** `dashboard_screen.dart`, `diet_screen.dart`, `workout_screen.dart`,
+`profile_screen.dart` (tour target keys + replay row); `pubspec.yaml`
+(`zino_intro.png`/`zino_done.png` assets, `fake_cloud_firestore` dev dep).
+
+## Validation
+
+- `flutter analyze` — 11 info lints, all pre-existing style conventions
+  (`prefer_initializing_formals` etc). **No warnings or errors.**
+- `flutter test` — **222/222 passed** (195 before, **+27 new**), covering all
+  10 enumerated cases including fail-closed offline behaviour.
+- `flutter build apk --debug` — **succeeded**.
+- **Real-device test — NOT PERFORMED.** No Android device connected.

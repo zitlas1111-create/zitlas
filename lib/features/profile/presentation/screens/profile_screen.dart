@@ -9,6 +9,8 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../../core/steps/presentation/step_consent_sheet.dart';
+import '../../../../core/widgets/app_shell.dart';
+import '../../../zino/tour/zino_tour_stops.dart';
 import '../../../../core/steps/step_tracking_service.dart';
 import '../../../../core/theme/zitlas_tokens.dart';
 import '../../../auth/auth_state.dart';
@@ -67,7 +69,10 @@ class _ProfileBody extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
                 children: [
                   if (c.expertApplicationPending) const _ExpertAppliedBanner(),
-                  _Header(name: name, photo: photo, aiLabel: c.aiLabel(), isPremium: c.membership.isPremium),
+                  KeyedSubtree(
+                    key: ZinoTourKeys.profileHeader,
+                    child: _Header(name: name, photo: photo, aiLabel: c.aiLabel(), isPremium: c.membership.isPremium),
+                  ),
                   const SizedBox(height: 20),
                   _SectionCard(
                     title: 'Account',
@@ -113,6 +118,21 @@ class _ProfileBody extends StatelessWidget {
                         icon: Icons.help_outline_rounded,
                         label: 'Contact Support',
                         onTap: () => context.push('/profile/help-support'),
+                      ),
+                      // Manual replay. Deliberately does NOT reset
+                      // `zinoTourCompleted` — replaying the walkthrough must
+                      // never turn an existing athlete back into a "new user"
+                      // who'd be auto-toured again on the next login.
+                      _SettingsRow(
+                        icon: Icons.auto_awesome_outlined,
+                        label: 'Take Zino Tour Again',
+                        subtitle: 'Replay the quick walkthrough',
+                        onTap: () {
+                          final host = ZinoTourHost.maybeOf(context);
+                          final tourUid = auth?.uid;
+                          if (host == null || tourUid == null) return;
+                          host.startTour(tourUid);
+                        },
                       ),
                     ],
                   ),
