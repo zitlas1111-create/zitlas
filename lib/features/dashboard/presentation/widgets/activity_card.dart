@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../../core/steps/presentation/step_consent_sheet.dart';
+import '../../../../core/steps/step_tracking_service.dart';
 import '../../dashboard_controller.dart';
 import '../../models/activity_week.dart';
 import '../dashboard_visuals.dart';
@@ -25,11 +27,24 @@ class ActivityCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = context.watch<DashboardController>();
     final activity = controller.todayActivity;
-    final steps = activity?.steps ?? 0;
-    final baseGoal = activity?.goal ?? controller.dailyStepGoal;
-    final goal = activity?.effectiveGoal ?? controller.dailyStepGoal;
+    final snapshot = controller.stepSnapshot;
+
+    // Live device reading wins over the synced day doc — it's the fresher of
+    // the two by definition (the doc is written FROM it). Falling back to the
+    // doc keeps the last known count on screen while a read is in flight and
+    // covers a second device that synced steps for the same day.
+    final steps = snapshot?.isAvailable == true
+        ? snapshot!.steps
+        : (activity?.steps ?? 0);
+    final baseGoal = activity?.goal ?? controller.effectiveStepGoal;
+    final goal = controller.effectiveStepGoal;
     final restDay = activity?.isRestDay ?? false;
     final recovery = activity?.recoveryMode ?? false;
+
+    // Tracking not usable yet — offer the real action instead of a fake 0.
+    if (snapshot != null && !snapshot.isAvailable) {
+      return _StepTrackingPrompt(reason: snapshot.unavailableReason);
+    }
 
     // A paused (Rest) goal shows a full, calm ring — `calculateStepProgress()`
     // returns 100% when `daily_step_goal` is 0.
@@ -229,6 +244,86 @@ class ActivityCard extends StatelessWidget {
       buf.write(s[i]);
     }
     return buf.toString();
+  }
+}
+
+/// The honest "no step data yet" state.
+///
+/// Replaces what would otherwise be a permanent, misleading `0 steps` ring —
+/// the athlete can't tell a real rest day from a permission they never
+/// granted. Each reason gets its own copy and, where one exists, a real
+/// action.
+class _StepTrackingPrompt extends StatelessWidget {
+  const _StepTrackingPrompt({required this.reason});
+
+  final StepUnavailableReason? reason;
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = context.read<DashboardController>();
+    final (String message, String? action) = switch (reason) {
+      StepUnavailableReason.permissionDenied => (
+          'Step tracking is turned off. Enable it to see your daily activity.',
+          'Enable',
+        ),
+      StepUnavailableReason.providerUpdateRequired => (
+          'Health Connect needs an update before ZITLAS can read your steps.',
+          'Fix',
+        ),
+      StepUnavailableReason.deviceUnsupported => (
+          "This device doesn't report step data to ZITLAS.",
+          null,
+        ),
+      _ => ('Track your daily steps and hit your goal.', 'Enable'),
+    };
+
+    return DashboardCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SectionHeader(
+            emoji: '👣',
+            title: "Today's Activity",
+            subtitle: 'Step tracking not enabled',
+          ),
+          const SizedBox(height: 14),
+          Text(
+            message,
+            style: const TextStyle(
+              color: DashboardColors.textSecondary,
+              fontSize: 13,
+              height: 1.5,
+            ),
+          ),
+          if (action != null) ...[
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => controller.enableStepTracking(
+                  runConsentFlow: () => showStepConsentSheet(
+                    context,
+                    service: StepTrackingService(),
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: DashboardColors.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                child: Text(
+                  action,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 }
 

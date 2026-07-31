@@ -8,6 +8,8 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../../../core/steps/presentation/step_consent_sheet.dart';
+import '../../../../core/steps/step_tracking_service.dart';
 import '../../../../core/theme/zitlas_tokens.dart';
 import '../../../auth/auth_state.dart';
 import '../../../auth/sign_out_action.dart';
@@ -86,6 +88,11 @@ class _ProfileBody extends StatelessWidget {
                         subtitle: 'Current Plan: ${c.membership.isPremium ? 'Premium' : 'Basic'}',
                         onTap: () => context.push('/membership'),
                       ),
+                      // Second, always-available entry point to the step
+                      // permission flow — the Dashboard prompt is easy to
+                      // dismiss, and someone who tapped "Not Now" needs a way
+                      // back that isn't a nag.
+                      const _StepTrackingRow(),
                     ],
                   ),
                   const SizedBox(height: 20),
@@ -334,12 +341,46 @@ class _SectionCard extends StatelessWidget {
   }
 }
 
+/// Profile → Activity / Step Tracking → Enable.
+///
+/// Reflects the CURRENT state rather than always saying "Enable", so someone
+/// who already granted it sees that and isn't invited to re-grant.
+class _StepTrackingRow extends StatefulWidget {
+  const _StepTrackingRow();
+
+  @override
+  State<_StepTrackingRow> createState() => _StepTrackingRowState();
+}
+
+class _StepTrackingRowState extends State<_StepTrackingRow> {
+  late StepTrackingService _service = StepTrackingService();
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = _service.isEnabled;
+    return _SettingsRow(
+      icon: Icons.directions_walk_rounded,
+      label: 'Step Tracking',
+      subtitle: enabled ? 'Enabled' : 'Track your daily activity',
+      onTap: enabled
+          ? null
+          : () async {
+              await showStepConsentSheet(context, service: _service);
+              if (mounted) setState(() => _service = StepTrackingService());
+            },
+    );
+  }
+}
+
 class _SettingsRow extends StatelessWidget {
   const _SettingsRow({required this.icon, required this.label, required this.onTap, this.subtitle});
   final IconData icon;
   final String label;
   final String? subtitle;
-  final VoidCallback onTap;
+
+  /// Nullable so a row can render in a settled state (e.g. Step Tracking once
+  /// it's already enabled) without inviting a pointless re-tap.
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {

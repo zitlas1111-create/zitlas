@@ -74,6 +74,29 @@ class DashboardRepository {
     return _userDoc(uid).set({'dailyStepGoal': goal}, SetOptions(merge: true));
   }
 
+  /// Mirrors `activity-service.js`'s `_syncDayToFirestore` — the day doc the
+  /// Activity card, the Mon–Sun strip, and the coach's Overview all read.
+  ///
+  /// `merge: true` deliberately: this doc also carries water/sleep/workout
+  /// fields written by other flows, and a step sync must never clobber them.
+  /// Local storage is written first by [StepTrackingService], so a failure
+  /// here costs a sync, never the steps themselves.
+  Future<void> saveDailySteps(
+    String uid, {
+    required String date,
+    required int steps,
+    required int goal,
+    required bool goalCompleted,
+  }) {
+    return _userDoc(uid).collection('activity').doc(date).set({
+      'date': date,
+      'steps': steps,
+      'goal': goal,
+      'goalCompleted': goalCompleted,
+      'lastUpdated': DateTime.now().toIso8601String(),
+    }, SetOptions(merge: true));
+  }
+
   Future<List<WeightEntry>> fetchWeightHistory(String uid, {int limit = 14}) async {
     final snap = await _userDoc(uid)
         .collection('weight_log')

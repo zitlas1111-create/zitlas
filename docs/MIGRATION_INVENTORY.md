@@ -862,3 +862,129 @@ Serving/unit check (report item 11): confirmed **not a pipeline bug** — `forma
 - `flutter analyze` — same 6 pre-existing info-level lints, no new issues (no Flutter code changed this pass).
 - `flutter test` — **110/110 passed**, unchanged.
 - Backend: unchanged this pass (per the task's explicit instruction not to rebuild it) — verified read-only via direct curl calls against the deployed production API.
+
+---
+
+# Real step counter — Health Connect + hardware sensor (mobile)
+
+## What existed before
+
+The Activity card (`activity_card.dart`), its ring, the Mon–Sun strip, Recovery
+Mode, the adaptive-goal suggestion, `ActivityDayModel`, and the
+`users/{uid}/activity/{date}` read path were all already built and reading real
+Firestore data. The card's own header comment named the gap precisely: on-device
+step **capture** was the one deferred piece (the Capacitor
+`HealthConnectPlugin.java`/`StepSensorPlugin.java` were dropped in the Flutter
+migration). So this phase added a real source and wired it in — it did not
+redesign the Dashboard.
+
+## Architecture chosen, and why
+
+**Hybrid, two sources, never summed** — the same design the website used:
+
+1. **Health Connect** (source of truth when present + granted). Read ONLY via
+   the platform's `AggregateRequest(StepsRecord.COUNT_TOTAL)`. This is the
+   deduplication answer: HC can hold overlapping step records from several
+   providers (phone, watch, Fit, an OEM health app), and its aggregate is the
+   only thing that resolves them correctly. Summing `readRecords()` by hand is
+   exactly how impossible counts happen.
+2. **Hardware `TYPE_STEP_COUNTER`** (fallback). The chip counts in hardware
+   while the process is dead and the screen is locked, at ~no battery cost —
+   this is what makes background capture work without a foreground service.
+   Critically, it is also the source that actually works on a stock phone where
+   Health Connect is installed but *nothing is writing steps into it*, which is
+   the common case.
+
+`health` (pub.dev) was evaluated and **rejected**: every version ≥12 pins
+`device_info_plus` → `win32 ^5.x`, which conflicts irreconcilably with the
+project's existing `share_plus ^13.3.0` → `win32 ^6.0.1`. Rather than downgrade
+a working feature's dependency over a Windows-only transitive conflict, the
+Health Connect surface ZITLAS actually needs (one availability check, one
+permission request, one aggregate query) is ~200 lines of Kotlin we own.
+
+## Midnight-to-midnight
+
+`startOfLocalDay(now)` = `DateTime(now.year, now.month, now.day)` — constructed
+in the device's *current* local zone, so it stays correct across timezone
+changes and DST. The window `[local 00:00, now)` is computed in Dart and passed
+into the native aggregate; the boundary is never computed natively, so there is
+exactly one definition of "today" in the codebase. `startOfNextLocalDay` adds to
+the day *component* rather than a 24-hour `Duration`, because a DST day is 23 or
+25 hours long. No 24h timer, no UTC, no since-launch arithmetic anywhere.
+
+Day rollover needs no timer at all: the day key is re-derived on every read, and
+milestone state stored under yesterday's key reads back as empty today.
+
+**Device step history is never deleted** — "reset at midnight" means the UI
+starts displaying a new calendar day. Health Connect records and the sensor's
+since-boot counter are read-only to ZITLAS.
+
+## Sensor baseline safety
+
+The since-boot counter needs `current - baselineAtStartOfDay`, which is a
+classic source of absurd numbers. Every failure mode is handled explicitly and
+tested: reboot (detected via boot timestamp, with a 90s drift tolerance so
+NTP correction isn't a phantom reboot — and steps already earned that day are
+carried forward, not erased), new local day, counter decrease without a reboot,
+and implausible spikes (capped at 5 steps/sec against elapsed time). First-ever
+read credits **0**, never the whole since-boot total.
+
+## Notification behaviour
+
+Local (`flutter_local_notifications`), not FCM — a step milestone is a
+device-side fact, and `FcmService`'s own note confirms no Cloud Function exists
+to send one anyway. Milestones 25/50/75/100, **max once per calendar day**,
+state persisted so a restart can't re-fire. When several become eligible at once
+(steps arrive in batches), only the **highest** is announced and the leapfrogged
+ones are marked notified so they can never fire retroactively — 100% therefore
+always wins when newly crossed. Lowering the goal mid-day completes it once and
+stays silent thereafter. A paused (0) goal never notifies. Notification
+permission denial never stops counting.
+
+## Android limitations (honest)
+
+Background milestone delivery uses WorkManager, and is **best-effort by design**:
+15 minutes is Android's hard periodic floor; Doze/App Standby stretch that to
+hours when the screen is off; aggressive OEM battery management
+(OnePlus/Oppo/Xiaomi/Samsung) can stop it entirely; force-stop halts it until
+next open. **What is never compromised is the step COUNT** — both sources
+accumulate independently of this app running, so a delayed background run delays
+a *notification*, and the steps appear in full the moment ZITLAS reopens.
+
+## Goal source
+
+No new field. Existing chain, in priority order: `activity/{date}.goalEffective`
+(Recovery Mode) → `users/{uid}.dailyStepGoal` (athlete's explicit goal) →
+`calculations.daily_steps_goal` (what Assessment recommended, written by
+`assessment_service.py:1322`) → 10,000. The third step is new resolution logic:
+previously a missing `dailyStepGoal` fell straight to a hardcoded 10,000,
+ignoring the Assessment's own recommendation.
+
+## Files changed
+
+**New:** `lib/core/steps/step_platform.dart`, `step_day.dart`,
+`step_sensor_baseline.dart`, `step_notifications.dart`,
+`step_tracking_service.dart`, `step_background_worker.dart`,
+`presentation/step_consent_sheet.dart`;
+`android/app/src/main/kotlin/com/zitlas/app/StepTrackerPlugin.kt`;
+`test/step_counter_test.dart`, `test/step_tracking_service_test.dart`.
+
+**Modified:** `MainActivity.kt` (→ `FlutterFragmentActivity`, needed for
+`registerForActivityResult`), `AndroidManifest.xml` (HC READ_STEPS,
+ACTIVITY_RECOGNITION, rationale activity + activity-alias, package queries),
+`build.gradle.kts` (minSdk 24→26 for `connect-client`, desugaring, HC +
+coroutines deps), `dashboard_controller.dart`, `dashboard_repository.dart`
+(`saveDailySteps`), `activity_card.dart` (real data + unavailable states),
+`dashboard_screen.dart` (resume/open refresh), `profile_screen.dart` (Step
+Tracking row), `main.dart`, `pubspec.yaml`.
+
+## Validation
+
+- `flutter analyze` — 6 pre-existing info lints, **no new issues**.
+- `flutter test` — **157/157 passed** (110 before, +47 new).
+- `flutter build apk --debug` — **succeeded**.
+- **Real-device acceptance test — NOT PERFORMED.** No Android device was
+  connected to this machine at implementation time (`adb devices` empty,
+  `flutter devices` showed only Windows/Chrome/Edge). The walk-with-phone-locked
+  verification in requirement F/Y remains outstanding and must be run before
+  this feature is considered shipped.

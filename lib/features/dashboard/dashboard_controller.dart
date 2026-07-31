@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../../core/steps/step_tracking_service.dart';
 import 'data/dashboard_repository.dart';
 import 'data/health_status_store.dart';
 import 'models/activity_day_model.dart';
@@ -25,14 +26,21 @@ class DashboardController extends ChangeNotifier {
     required this.uid,
     required DashboardRepository repository,
     HealthStatusStore? healthStore,
+    StepTrackingService? stepService,
   }) : _repository = repository, // ignore: prefer_initializing_formals
-       _healthStore = healthStore ?? HealthStatusStore() {
+       _healthStore = healthStore ?? HealthStatusStore(),
+       _stepService = stepService { // ignore: prefer_initializing_formals
     _init();
   }
 
   final String uid;
   final DashboardRepository _repository;
   final HealthStatusStore _healthStore;
+
+  /// Constructed lazily so tests (and any non-Android surface) can run the
+  /// Dashboard without LocalStorageService being initialized.
+  StepTrackingService? _stepService;
+  StepTrackingService get _steps => _stepService ??= StepTrackingService();
 
   StreamSubscription<Map<String, dynamic>?>? _userDocSub;
   StreamSubscription<int>? _unreadSub;
@@ -63,6 +71,35 @@ class DashboardController extends ChangeNotifier {
 
   /// The athlete's BASE daily step goal (`users/{uid}.dailyStepGoal`).
   int dailyStepGoal = 10000;
+
+  /// True when `users/{uid}.dailyStepGoal` was actually present — i.e. the
+  /// athlete (or the adaptive-goal apply) set a goal explicitly. When it
+  /// wasn't, the Assessment's own recommendation is the better default than
+  /// a hardcoded 10,000; see [effectiveStepGoal].
+  bool _hasExplicitStepGoal = false;
+
+  /// The goal actually in force today, resolving the existing chain in
+  /// priority order — no new field is introduced:
+  ///
+  ///   1. `activity/{date}.goalEffective` — Recovery Mode's reduced/paused
+  ///      goal for today (0 = "Rest", a deliberately paused goal).
+  ///   2. `users/{uid}.dailyStepGoal` — the athlete's own explicit goal.
+  ///   3. `calculations.daily_steps_goal` — what the Assessment recommended.
+  ///   4. 10,000 — last-resort default.
+  int get effectiveStepGoal {
+    final recovery = todayActivity?.goalEffective;
+    if (recovery != null) return recovery;
+    if (_hasExplicitStepGoal) return dailyStepGoal;
+    if (healthBaseStepsGoal > 0) return healthBaseStepsGoal;
+    return dailyStepGoal;
+  }
+
+  // -- Real step tracking (core/steps) --
+  StepSnapshot? stepSnapshot;
+  bool stepRefreshing = false;
+
+  /// Whether the athlete has opted into step tracking.
+  bool get stepTrackingEnabled => _steps.isEnabled;
 
   bool weightLoading = true;
   List<WeightEntry> weightHistory = const [];
@@ -180,7 +217,9 @@ class DashboardController extends ChangeNotifier {
     photoUrl = personalInfo?['photo'] as String? ?? data['photo'] as String?;
     currentStreak = (data['currentStreak'] as num?)?.toInt() ?? 0;
     longestStreak = (data['longestStreak'] as num?)?.toInt() ?? 0;
-    dailyStepGoal = (data['dailyStepGoal'] as num?)?.toInt() ?? 10000;
+    final explicitGoal = (data['dailyStepGoal'] as num?)?.toInt();
+    _hasExplicitStepGoal = explicitGoal != null && explicitGoal > 0;
+    dailyStepGoal = explicitGoal ?? 10000;
 
     // health-status.js reads these from `zitlas_calculations` /
     // `zitlas_precautions`, which cloud-sync mirrors onto the user doc.
@@ -409,6 +448,62 @@ class DashboardController extends ChangeNotifier {
     weightLoading = true;
     _safeNotify();
     await _loadOneTimeSections();
+    await refreshSteps();
+  }
+
+  /// Re-reads today's REAL step total and syncs it.
+  ///
+  /// Called on Dashboard open, on app resume, after permission is granted,
+  /// and on pull-to-refresh. Each call is a single aggregate/sensor read —
+  /// cheap enough to run on resume, deliberately not polled on a timer.
+  Future<void> refreshSteps() async {
+    if (!_steps.isEnabled) {
+      // Still surface the reason so the card can offer "Enable" rather than
+      // rendering a misleading 0.
+      stepSnapshot = await _steps.refresh(goal: effectiveStepGoal);
+      _safeNotify();
+      return;
+    }
+    stepRefreshing = true;
+    _safeNotify();
+    try {
+      final snapshot = await _steps.refresh(goal: effectiveStepGoal);
+      stepSnapshot = snapshot;
+
+      if (snapshot.isAvailable) {
+        // Local storage already has it (StepTrackingService writes there
+        // first), so this sync is best-effort: an offline device keeps every
+        // step and simply syncs on the next successful refresh.
+        try {
+          await _repository.saveDailySteps(
+            uid,
+            date: snapshot.dayKey,
+            steps: snapshot.steps,
+            goal: snapshot.goal,
+            goalCompleted: snapshot.goalReached,
+          );
+        } catch (e) {
+          if (kDebugMode) debugPrint('[STEPS] Firestore sync deferred: $e');
+        }
+        await _loadActivity();
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('[STEPS] refresh failed: $e');
+    } finally {
+      stepRefreshing = false;
+      _safeNotify();
+    }
+  }
+
+  /// Runs the real consent + OS permission flow, then reads immediately so
+  /// the ring fills in without another interaction.
+  Future<bool> enableStepTracking({
+    required Future<bool> Function() runConsentFlow,
+  }) async {
+    final enabled = await runConsentFlow();
+    if (enabled) await refreshSteps();
+    _safeNotify();
+    return enabled;
   }
 
   Future<void> setGoal(GoalModel newGoal) async {

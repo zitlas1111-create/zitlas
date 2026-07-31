@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'app/app.dart';
 import 'core/config/firebase_bootstrap.dart';
+import 'core/steps/step_background_worker.dart';
 import 'core/storage/local_storage_service.dart';
 
 Future<void> main() async {
@@ -48,6 +51,12 @@ Future<void> main() async {
     debugPrint('[ZITLAS] Firebase unavailable, continuing without it: $e');
     firebaseReady = false;
   }
+
+  // Best-effort periodic step-milestone check so a goal can be announced
+  // while ZITLAS is closed. Registration is idempotent and never blocks
+  // startup — see StepBackgroundWorker for the Android delivery limits this
+  // is explicitly subject to.
+  unawaited(StepBackgroundWorker.register());
 
   runApp(ZitlasApp(firebaseReady: firebaseReady));
 }

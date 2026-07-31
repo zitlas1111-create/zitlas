@@ -32,7 +32,9 @@ class StepNotifications {
   Future<void> init() async {
     if (_initialized) return;
     const android = AndroidInitializationSettings('@mipmap/ic_launcher');
-    await _plugin.initialize(const InitializationSettings(android: android));
+    await _plugin.initialize(
+      settings: const InitializationSettings(android: android),
+    );
     // Channel is created up front so Android's per-channel settings exist
     // before the first notification (on API 26+ a missing channel is dropped
     // silently).
@@ -72,10 +74,10 @@ class StepNotifications {
     await init();
     final isComplete = milestone >= 100;
     await _plugin.show(
-      isComplete ? _completeNotificationId : _progressNotificationId,
-      milestoneTitle(milestone),
-      milestoneMessage(milestone: milestone, goal: goal),
-      const NotificationDetails(
+      id: isComplete ? _completeNotificationId : _progressNotificationId,
+      title: milestoneTitle(milestone),
+      body: milestoneMessage(milestone: milestone, goal: goal),
+      notificationDetails: const NotificationDetails(
         android: AndroidNotificationDetails(
           _channelId,
           _channelName,

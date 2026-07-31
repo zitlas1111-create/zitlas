@@ -84,8 +84,45 @@ class _ZinoFab extends StatelessWidget {
   }
 }
 
-class _DashboardBody extends StatelessWidget {
+class _DashboardBody extends StatefulWidget {
   const _DashboardBody();
+
+  @override
+  State<_DashboardBody> createState() => _DashboardBodyState();
+}
+
+/// Stateful only to own the step-refresh lifecycle — the layout below is
+/// unchanged.
+///
+/// Steps are re-read on Dashboard open and again on every app resume, which
+/// is what makes "lock the phone, walk, come back" show the new total: both
+/// step sources keep counting while this process is backgrounded or dead, so
+/// resuming just needs to ask them again. No timer polls in the background.
+class _DashboardBodyState extends State<_DashboardBody> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) context.read<DashboardController>().refreshSteps();
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      // Also covers the midnight case: a resume after 00:00 re-reads against
+      // the NEW local day, so the ring starts the new day at its real count
+      // and yesterday's final total is already archived in history.
+      context.read<DashboardController>().refreshSteps();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
