@@ -16,7 +16,11 @@ class ExpertReviewsSection extends StatefulWidget {
 
   /// Opens the Diet/Workout plan editor (`modify-diet.html`/
   /// `modify-workout.html`) for a diet/workout-type review.
-  final void Function(ReviewRequest) onEditPlan;
+  ///
+  /// Returns a Future that completes when the editor CLOSES, so this section
+  /// can keep the review's action buttons disabled for as long as it's open
+  /// and a second copy can never be pushed on top of the first.
+  final Future<void> Function(ReviewRequest) onEditPlan;
 
   @override
   State<ExpertReviewsSection> createState() => _ExpertReviewsSectionState();
@@ -24,17 +28,41 @@ class ExpertReviewsSection extends StatefulWidget {
 
 class _ExpertReviewsSectionState extends State<ExpertReviewsSection> {
   int _tab = 0;
+
+  /// Reviews with an action in flight. Two jobs:
+  ///
+  ///  * it disables the card's buttons (`EdActionButton` nulls `onPressed`
+  ///    when `busy`), and
+  ///  * it is checked at the TOP of every action, before any `await`.
+  ///
+  /// The second part is what actually prevents double completion. A button's
+  /// disabled state only updates on the next frame, so a fast double-tap —
+  /// or a tap landing while a confirmation dialog is still opening — gets
+  /// through the widget guard entirely. Claiming the id synchronously here
+  /// closes that window.
   final _busy = <String>{};
 
-  Future<void> _run(String id, Future<void> Function() action, String successMsg) async {
+  /// Claims [id] for an action. Returns false when one is already running,
+  /// which is the caller's cue to do nothing at all.
+  bool _claim(String id) {
+    if (_busy.contains(id)) return false;
     setState(() => _busy.add(id));
+    return true;
+  }
+
+  void _release(String id) {
+    if (mounted) setState(() => _busy.remove(id));
+  }
+
+  Future<void> _run(String id, Future<void> Function() action, String successMsg) async {
+    if (!_claim(id)) return;
     try {
       await action();
       if (mounted) _toast(successMsg);
     } catch (e) {
       if (mounted) _toast('Something went wrong. Please try again.');
     } finally {
-      if (mounted) setState(() => _busy.remove(id));
+      _release(id);
     }
   }
 
@@ -43,7 +71,7 @@ class _ExpertReviewsSectionState extends State<ExpertReviewsSection> {
   }
 
   Future<void> _accept(ExpertDashboardController c, ReviewRequest r) async {
-    setState(() => _busy.add(r.id));
+    if (!_claim(r.id)) return;
     try {
       final error = await c.acceptReview(r);
       if (!mounted) return;
@@ -56,11 +84,12 @@ class _ExpertReviewsSectionState extends State<ExpertReviewsSection> {
         _toast('Could not accept this review. Please try again.');
       }
     } finally {
-      if (mounted) setState(() => _busy.remove(r.id));
+      _release(r.id);
     }
   }
 
   Future<void> _confirmReject(ExpertDashboardController c, ReviewRequest r) async {
+    if (_busy.contains(r.id)) return;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -83,23 +112,63 @@ class _ExpertReviewsSectionState extends State<ExpertReviewsSection> {
     await _run(r.id, () => c.rejectReview(r), 'Request rejected.');
   }
 
+  /// Opens the plan editor, guarded against a double push.
+  ///
+  /// This was the other duplicate-completion path: the "Review & Send" button
+  /// rendered `busy: busy`, but nothing ever ADDED this review to `_busy` for
+  /// the edit action — so a double-tap pushed the editor screen twice. Saving
+  /// on the top copy popped it and revealed the identical second copy, which
+  /// reads exactly like "the completion screen showed twice".
+  ///
+  /// The id stays claimed for the whole time the editor is open, so the card
+  /// underneath cannot start a second action while the expert is editing.
+  Future<void> _openEditor(ReviewRequest r) async {
+    if (!_claim(r.id)) return;
+    try {
+      await widget.onEditPlan(r);
+    } finally {
+      _release(r.id);
+    }
+  }
+
   Future<void> _confirmComplete(ExpertDashboardController c, ReviewRequest r) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: ZitlasTokens.bgCard,
-        title: const Text('Mark review complete?'),
-        content: Text(
-          'This sends your completed review to ${r.displayName} and closes the request.',
+    // Re-entry guard BEFORE the dialog. Without it, a double-tap opens two
+    // confirmation dialogs (the button is still enabled while the first one
+    // is animating in), and confirming both completes the review twice —
+    // two writes, two success toasts.
+    if (!_claim(r.id)) return;
+    try {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: ZitlasTokens.bgCard,
+          title: const Text('Mark review complete?'),
+          content: Text(
+            'This sends your completed review to ${r.displayName} and closes the request.',
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Complete')),
+          ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Complete')),
-        ],
-      ),
-    );
-    if (ok != true) return;
-    await _run(r.id, () => c.completeReview(r), '✅ Review sent to athlete.');
+      );
+      if (ok != true) return;
+
+      // Already finished (e.g. completed on another device while the dialog
+      // was open) — the live snapshot is authoritative, so say so once and
+      // write nothing.
+      if (r.status == ReviewStatus.reviewCompleted) {
+        if (mounted) _toast('This review is already complete.');
+        return;
+      }
+
+      await c.completeReview(r);
+      if (mounted) _toast('✅ Review sent to athlete.');
+    } catch (_) {
+      if (mounted) _toast('Something went wrong. Please try again.');
+    } finally {
+      _release(r.id);
+    }
   }
 
   @override
@@ -156,7 +225,7 @@ class _ExpertReviewsSectionState extends State<ExpertReviewsSection> {
                 onReject: () => _confirmReject(c, r),
                 onChat: () => widget.onOpenChat(r),
                 onComplete: () => _confirmComplete(c, r),
-                onEditPlan: () => widget.onEditPlan(r),
+                onEditPlan: () => _openEditor(r),
               ),
             ),
       ],

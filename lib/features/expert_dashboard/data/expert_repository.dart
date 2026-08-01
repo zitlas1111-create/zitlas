@@ -177,15 +177,15 @@ class ExpertRepository {
     String reviewId, {
     required String expertId,
     required String expertName,
-  }) {
-    final now = DateTime.now().toIso8601String();
-    return _db.collection('review_requests').doc(reviewId).update({
-      'status': ReviewStatus.reviewCompleted,
-      'reviewedAt': now,
-      'completedAt': now,
-      'expertName': expertName,
-      'expertId': expertId,
-    });
+  }) async {
+    // Idempotent, same as the plan-editor completions — see [_completeOnce].
+    await _completeOnce(reviewId, (now) => {
+          'status': ReviewStatus.reviewCompleted,
+          'reviewedAt': now,
+          'completedAt': now,
+          'expertName': expertName,
+          'expertId': expertId,
+        });
   }
 
   // ── Diet/Workout review editing (modify-diet.html / modify-workout.html) ─
@@ -212,20 +212,46 @@ class ExpertRepository {
     String? expertNotes,
     String? athleteId,
   }) async {
-    final now = DateTime.now().toIso8601String();
-    await _db.collection('review_requests').doc(reviewId).update({
-      'status': ReviewStatus.reviewCompleted,
-      'reviewedDietPlan': reviewedDietPlan,
-      'mealChangeHistory': mealChangeHistory,
-      'expertId': expertId,
-      'expertName': expertName,
-      'expertNotes': ?expertNotes,
-      'reviewedAt': now,
-      'completedAt': now,
-    });
-    if (athleteId != null) {
+    final applied = await _completeOnce(reviewId, (now) => {
+          'status': ReviewStatus.reviewCompleted,
+          'reviewedDietPlan': reviewedDietPlan,
+          'mealChangeHistory': mealChangeHistory,
+          'expertId': expertId,
+          'expertName': expertName,
+          'expertNotes': ?expertNotes,
+          'reviewedAt': now,
+          'completedAt': now,
+        });
+    // Only notify when THIS call is the one that completed the review —
+    // otherwise a retry or a second device would send the athlete a duplicate
+    // "your plan was reviewed" notification.
+    if (applied && athleteId != null) {
       unawaited(_notifyReviewCompleted(athleteId: athleteId, expertName: expertName, action: 'diet'));
     }
+  }
+
+  /// Applies a completion payload EXACTLY ONCE.
+  ///
+  /// Runs in a transaction that re-reads the review first and no-ops when it
+  /// is already `review_completed`. This is the last line of defence behind
+  /// the UI's re-entry guards: a retry after a timeout, a second device, or a
+  /// resumed app must never produce a second completion — which would
+  /// overwrite `completedAt`, re-fire the athlete's notification, and (for a
+  /// plan review) clobber an already-accepted plan snapshot.
+  ///
+  /// Returns whether this call is the one that performed the write.
+  Future<bool> _completeOnce(
+    String reviewId,
+    Map<String, dynamic> Function(String nowIso) payload,
+  ) async {
+    final ref = _db.collection('review_requests').doc(reviewId);
+    return _db.runTransaction<bool>((txn) async {
+      final snap = await txn.get(ref);
+      if (!snap.exists) return false;
+      if (snap.data()?['status'] == ReviewStatus.reviewCompleted) return false;
+      txn.update(ref, payload(DateTime.now().toIso8601String()));
+      return true;
+    });
   }
 
   /// `ZitlasNotify.send()` equivalent for review completion — matches
@@ -265,18 +291,17 @@ class ExpertRepository {
     String? expertNotes,
     String? athleteId,
   }) async {
-    final now = DateTime.now().toIso8601String();
-    await _db.collection('review_requests').doc(reviewId).update({
-      'status': ReviewStatus.reviewCompleted,
-      'reviewedWorkoutPlan': reviewedWorkoutPlan,
-      'workoutChangeHistory': workoutChangeHistory,
-      'expertId': expertId,
-      'expertName': expertName,
-      'expertNotes': ?expertNotes,
-      'reviewedAt': now,
-      'completedAt': now,
-    });
-    if (athleteId != null) {
+    final applied = await _completeOnce(reviewId, (now) => {
+          'status': ReviewStatus.reviewCompleted,
+          'reviewedWorkoutPlan': reviewedWorkoutPlan,
+          'workoutChangeHistory': workoutChangeHistory,
+          'expertId': expertId,
+          'expertName': expertName,
+          'expertNotes': ?expertNotes,
+          'reviewedAt': now,
+          'completedAt': now,
+        });
+    if (applied && athleteId != null) {
       unawaited(_notifyReviewCompleted(athleteId: athleteId, expertName: expertName, action: 'training'));
     }
   }

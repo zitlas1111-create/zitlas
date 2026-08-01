@@ -1191,3 +1191,216 @@ completed assessment does not suppress the tour. Both directions are tested.
   10 enumerated cases including fail-closed offline behaviour.
 - `flutter build apk --debug` — **succeeded**.
 - **Real-device test — NOT PERFORMED.** No Android device connected.
+
+---
+
+# Zino Voice — Phase 1 (infrastructure)
+
+## ⚠️ BLOCKER: the ElevenLabs account is on a FREE plan
+
+Verified against the live API with the configured key:
+
+```
+POST /v1/text-to-speech/SGbOfpm28edC83pZ9iGb -> 402 payment_required
+"Free users cannot use library voices via the API. Please upgrade your
+ subscription to use this voice."
+```
+
+This is NOT specific to Zino's voice ID — premade voices (Aria, Rachel) return
+the identical 402. **No voice can be synthesized via the API on this plan.**
+It is a billing state, not a code defect; the integration is correct and starts
+working the moment the plan is upgraded, with no code change.
+
+Because a voice screen with no voice is useless, the app falls back to the
+DEVICE speech engine (`flutter_tts`) so Talk with Zino genuinely works today.
+`VoiceService.lastSource` reports which was used and the call screen labels it
+honestly ("Zino's voice" vs "Device voice") rather than implying premium audio
+it isn't delivering.
+
+STT is unaffected — it runs on Groq Whisper using the existing `GROQ_API_KEY`
+(verified: auth accepted, only a deliberately-invalid payload rejected).
+
+## Architecture — ElevenLabs is a speaker, not a brain
+
+`/api/voice/chat` calls the SAME `groq_service.chat(system_override=
+ZINO_COMPANION_SYSTEM)` the text chat uses, then hands the resulting sentence
+to ElevenLabs. No intelligence moved to a voice vendor and ElevenLabs Agents
+are deliberately not used. The only thing voice adds to the prompt is a
+language instruction plus spoken-output guidance (no emoji/markdown, 1-3
+sentences) — appended, never edited into the existing persona, so
+`/api/ai/zino-chat` and the website are untouched.
+
+**Verified end to end:** a Hinglish request returned *"Hey Atharva! Aaj ka din
+bhi ek naya mauka hai to crush those goals. Keep going, champ!"* with
+`voice_available: false` — real Hinglish from the real brain, text delivered
+despite the TTS outage. The existing `/api/ai/zino-chat` was re-tested in the
+same session and still answers in its original emoji-rich English.
+
+## Secrets
+
+`ELEVENLABS_API_KEY` and `GROQ_API_KEY` exist only in `backend/.env`. Flutter's
+entire vocabulary is three HTTP calls to ZITLAS's own server. The voice ID is
+env-configurable (`ELEVENLABS_VOICE_ID`, defaulting to `SGbOfpm28edC83pZ9iGb`),
+so changing Zino's voice is a deployment change rather than a code patch.
+
+## Backend endpoints
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/voice/health` | config visibility — reports whether a key EXISTS, never its value |
+| `POST /api/voice/tts` | text → `audio/mpeg` |
+| `POST /api/voice/stt` | multipart audio → transcript (Groq Whisper) |
+| `POST /api/voice/chat` | text → reply + base64 audio in ONE round trip |
+
+`/chat` bundles reply and audio deliberately: two sequential calls would
+serialize two round trips into the athlete's perceived latency on a live call.
+If synthesis fails, `audio_base64` is null but `reply` still returns — a voice
+outage never costs the athlete their answer.
+
+## Language
+
+Three options (English / Hindi / **Hinglish, recommended**), asked ONCE on
+first use and stored **account-level** at `users/{uid}.voiceLanguage` — same
+reasoning as `zinoTourCompleted`: it's a fact about the person, not the phone,
+so a reinstall or a second device doesn't re-ask, and a shared handset can't
+leak one athlete's choice to another. A FAILED read is reported as
+`known: false` and distinguished from "never chose", so an offline moment can't
+overwrite a real preference. Changeable later in Profile and from the call
+screen.
+
+Whisper gets `hi` as its hint for Hinglish — there is no ISO code for
+code-switched speech, and hinting Hindi transcribes the Hindi words correctly
+while passing English through.
+
+## Privacy
+
+Recorded audio goes to a temp file, is uploaded for transcription, and is
+**deleted immediately**. ZITLAS never retains a copy of the athlete's speech.
+Clips under 1 KB are discarded client-side as silence rather than uploaded.
+
+## Files
+
+**New (backend):** `services/voice_service.py`, `routes/voice.py`.
+**New (Flutter):** `core/voice/voice_language.dart`, `voice_service.dart`,
+`voice_language_store.dart`, `voice_recorder.dart`;
+`features/zino/voice/zino_call_controller.dart`,
+`voice/presentation/zino_call_screen.dart`, `voice_language_sheet.dart`;
+`test/voice_test.dart`.
+**Modified:** `backend/main.py`, `backend/.env` (+`ELEVENLABS_VOICE_ID`),
+`core/network/api_client.dart` (+`postMultipartBytes`, `postForBytes`),
+`app/router.dart` (`/zino/call`), `AndroidManifest.xml` (`RECORD_AUDIO`),
+`zino_screen.dart` (call entry point), `profile_screen.dart` (language row),
+`pubspec.yaml`.
+
+## Validation
+
+- `flutter analyze` — 15 info lints, all pre-existing style conventions. **No warnings or errors.**
+- `flutter test` — **252/252 passed** (222 before, **+30 new**).
+- `flutter build apk --debug` — **succeeded**.
+- Backend E2E via `TestClient`: health 200, tts 503 (correct given the 402),
+  chat 200 with real Hinglish + graceful degradation.
+- Existing `/api/ai/zino-chat` re-verified: unchanged.
+- **Real-device test — NOT PERFORMED.** No Android device connected, so the
+  microphone, permission prompt, audio playback, and background/resume
+  behaviour are untested on hardware.
+
+## Ready for Phase 2
+
+Yes, with two caveats: the ElevenLabs plan must be upgraded for the premium
+voice, and the on-device checks above still need a connected phone. The
+assessment conversation, goal/diet/workout generation are deliberately absent —
+`ZinoCallController` runs mic → transcript → existing brain → speech and
+nothing more.
+
+---
+
+# Expert review completion — duplicate-completion fix
+
+## Root cause: TWO unguarded re-entry windows, not one
+
+Both come from the same mistake — relying on a widget's disabled state to
+prevent a second tap. `EdActionButton` does null `onPressed` when `busy`, but
+that only takes effect on the NEXT frame, so a fast double-tap is already
+through.
+
+**A. `_confirmComplete` opened its dialog BEFORE claiming the busy flag.**
+`_busy` was only set inside `_run`, i.e. *after* the confirmation dialog was
+answered. A double-tap therefore opened two dialogs; confirming both ran two
+completions — two Firestore writes and two success toasts.
+
+**B. "Review & Send" had a busy flag that nothing ever set.**
+The button rendered `busy: busy`, but the edit path called
+`widget.onEditPlan(r)` directly and never added the review to `_busy`. A
+double-tap pushed the plan editor **twice**. Saving on the top copy popped it
+and revealed the identical second copy — which is exactly what "the completion
+screen showed twice" looks like from the outside.
+
+## Automatic chat navigation — not reproduced
+
+I traced every `ExpertChatScreen` push: all three call sites (`_openReviewChat`,
+`_openCoachingChat`, `_openRoom`) are wired to explicit user-tapped buttons, and
+neither editor nor the completion path navigates anywhere except a plain pop
+back to the dashboard. **There is no code path from completing a review to
+Chat**, so I could not reproduce that symptom and cannot claim to have "fixed"
+it. The most likely explanation is symptom B: with two editors stacked, the
+screen behind the popped one is not where the expert expected to land. The
+navigation is now explicit and commented so it can't drift.
+
+One thing I checked and ruled out rather than assumed: the editors were pushed
+with `Navigator.push` but popped with GoRouter's `context.pop()`. That mismatch
+*looks* like a bug, but `GoRouterDelegate.pop()` resolves to the root navigator
+here, so it was popping the right route. I still changed it to
+`Navigator.of(context).pop()` for consistency with the push.
+
+## Fixes
+
+1. **`_claim(id)` / `_release(id)`** — a synchronous re-entry guard checked at
+   the TOP of every review action, before any `await`. This is what actually
+   closes the double-tap window; the button's disabled state is now just the
+   visual half.
+2. **`_confirmComplete`** claims before showing the dialog, and re-checks the
+   live status afterwards (completed on another device while the dialog was
+   open → says so once, writes nothing).
+3. **`_openEditor`** claims for the editor's whole lifetime.
+   `onEditPlan` is now `Future<void> Function(...)` and
+   `_openReviewEditor` returns the push future, so the guard spans until the
+   editor closes.
+4. **`_save` in both editors** re-checks `_saving` before doing anything.
+5. **`ExpertRepository._completeOnce`** — every completion path
+   (`completeReview`, `submitDietReview`, `submitWorkoutReview`) now runs in a
+   transaction that re-reads the review and **no-ops when it is already
+   `review_completed`**. This is the last line of defence behind the UI: a
+   retry after a timeout, a resumed app, or a second device can never produce a
+   second completion. The athlete notification only fires when the call is the
+   one that actually performed the write.
+
+## Data guarantees
+
+One atomic write per completion, carrying status + reviewed plan + change
+history + expert id/name + notes + `reviewedAt`/`completedAt`. A duplicate call
+cannot overwrite `completedAt`, cannot rewrite the completing expert, cannot
+clobber a plan the athlete may already have accepted, and cannot re-notify.
+`athleteAccepted` is deliberately untouched — that belongs to the athlete's own
+accept action.
+
+## Files changed
+
+`presentation/sections/reviews_section.dart` (claim/release guard, both
+paths), `presentation/screens/expert_dashboard_screen.dart` (editor push
+returns its future), `data/expert_repository.dart` (`_completeOnce`
+transaction on all three completion paths),
+`presentation/screens/review_diet_editor_screen.dart` +
+`review_workout_editor_screen.dart` (save guard, matching pop),
+`test/expert_review_completion_test.dart` (new).
+
+## Validation
+
+- `flutter analyze` — 15 info lints, all pre-existing conventions. **No warnings or errors.**
+- `flutter test` — **264/264 passed** (252 before, **+12 new**).
+- `flutter build apk --debug` — **succeeded**.
+- **Discrimination proof**: a throwaway test replicating the OLD plain-`update()`
+  path was run and confirmed it DID clobber `completedAt` and `expertName` —
+  so the new tests genuinely catch the regression rather than passing vacuously.
+- **Real-device test — NOT PERFORMED.** No Android device connected, so the
+  physical double-tap, slow-network, and app-resumed-mid-completion cases are
+  covered by unit tests only.

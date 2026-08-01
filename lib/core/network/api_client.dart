@@ -112,6 +112,76 @@ class ApiClient {
     });
   }
 
+  /// Multipart upload from IN-MEMORY bytes.
+  ///
+  /// Distinct from [uploadFile], which needs a path on disk. A recorded voice
+  /// clip is transient — writing it to storage just to upload it would add
+  /// disk I/O, a cleanup obligation, and a copy of the athlete's speech
+  /// sitting in the filesystem.
+  Future<dynamic> postMultipartBytes(
+    String path, {
+    required String fileField,
+    required String fileName,
+    required Uint8List fileBytes,
+    Map<String, String>? fields,
+    Duration? timeout,
+  }) {
+    return _send(() async {
+      final request = http.MultipartRequest('POST', _uri(path));
+      final token = await authTokenProvider?.call();
+      if (token != null) {
+        request.headers['Authorization'] = 'Bearer $token';
+      }
+      if (fields != null) request.fields.addAll(fields);
+      request.files.add(
+        http.MultipartFile.fromBytes(fileField, fileBytes, filename: fileName),
+      );
+      final streamed = await _client.send(request).timeout(timeout ?? Env.apiTimeout);
+      return http.Response.fromStream(streamed);
+    });
+  }
+
+  /// POSTs JSON and returns the raw response BODY BYTES rather than decoded
+  /// JSON — for endpoints that answer with binary (`/api/voice/tts` returns
+  /// `audio/mpeg`). Running that through [_send] would try to `jsonDecode` an
+  /// MP3 and throw.
+  Future<Uint8List> postForBytes(
+    String path, {
+    Object? body,
+    Duration? timeout,
+  }) async {
+    late final http.Response res;
+    try {
+      res = await _client
+          .post(
+            _uri(path),
+            headers: await _headers(),
+            body: body == null ? null : jsonEncode(body),
+          )
+          .timeout(timeout ?? Env.apiTimeout);
+    } on Exception catch (e) {
+      _logTransportFailure(e);
+      throw ApiException(message: e.toString());
+    }
+
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      // An error body IS json even though the success body isn't.
+      String? detail;
+      try {
+        final decoded = res.body.isEmpty ? null : jsonDecode(res.body);
+        if (decoded is Map<String, dynamic>) detail = decoded['detail']?.toString();
+      } on FormatException {
+        detail = null;
+      }
+      _log('HTTP ${res.statusCode} from $_baseUrl (bytes) — detail: ${detail ?? '(none)'}');
+      throw ApiException(
+        message: detail ?? 'Request failed (${res.statusCode})',
+        statusCode: res.statusCode,
+      );
+    }
+    return res.bodyBytes;
+  }
+
   Future<dynamic> _send(Future<http.Response> Function() request) async {
     late final http.Response res;
     try {

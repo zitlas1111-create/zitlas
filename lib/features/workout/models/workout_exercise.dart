@@ -27,6 +27,7 @@ class WorkoutExercise {
     this.sets,
     this.repsOrDuration,
     this.restSeconds,
+    this.weight,
     this.tip,
     this.progression,
   });
@@ -45,6 +46,12 @@ class WorkoutExercise {
   /// is why the raw text is kept rather than a parsed count of seconds.
   final String? restSeconds;
 
+  /// Load for this exercise (`"40 kg"`, `"bodyweight"`). ADDITIVE — the
+  /// generator never sets it, and both the athlete app and the website ignore
+  /// keys they don't know, so an expert filling this in cannot break an
+  /// existing plan on either client.
+  final String? weight;
+
   /// `ex.tip` on the website, falling back to `ex.notes` for expert-edited
   /// entries (`modify-workout.js` writes `notes`, not `tip`).
   final String? tip;
@@ -59,6 +66,7 @@ class WorkoutExercise {
     String? sets,
     String? repsOrDuration,
     String? restSeconds,
+    String? weight,
     String? tip,
     String? progression,
   }) {
@@ -67,6 +75,7 @@ class WorkoutExercise {
       sets: sets ?? this.sets,
       repsOrDuration: repsOrDuration ?? this.repsOrDuration,
       restSeconds: restSeconds ?? this.restSeconds,
+      weight: weight ?? this.weight,
       tip: tip ?? this.tip,
       progression: progression ?? this.progression,
     );
@@ -78,6 +87,7 @@ class WorkoutExercise {
       sets: asDisplayString(m['sets']),
       repsOrDuration: asText(m['reps_or_duration']),
       restSeconds: asDisplayString(m['rest_seconds']),
+      weight: asText(m['weight']),
       tip: asText(m['tip']) ?? asText(m['notes']),
       progression: asText(m['progression']),
     );
@@ -92,6 +102,7 @@ class WorkoutExercise {
       if (sets != null) 'sets': displayStringToJson(sets),
       if (repsOrDuration != null) 'reps_or_duration': repsOrDuration,
       if (restSeconds != null) 'rest_seconds': displayStringToJson(restSeconds),
+      if (weight != null) 'weight': weight,
       if (tip != null) 'tip': tip,
       if (progression != null) 'progression': progression,
     };

@@ -131,12 +131,22 @@ class _ExpertDashboardBodyState extends State<_ExpertDashboardBody> {
     );
   }
 
-  void _openReviewEditor(ReviewRequest r) {
-    if (r.reviewType == 'workout') {
-      Navigator.of(context).push(MaterialPageRoute(builder: (_) => ReviewWorkoutEditorScreen(reviewId: r.id)));
-    } else {
-      Navigator.of(context).push(MaterialPageRoute(builder: (_) => ReviewDietEditorScreen(reviewId: r.id)));
-    }
+  /// Opens the plan editor and RETURNS the push future, so the caller can keep
+  /// the review's buttons disabled until the editor actually closes.
+  ///
+  /// Returning early (rather than awaiting nothing) is what lets
+  /// `ExpertReviewsSection` guarantee only one editor exists per review.
+  /// Completion happens inside the editor; this deliberately performs no
+  /// navigation of its own afterwards — popping the editor returns to this
+  /// dashboard, which is the only correct destination.
+  Future<void> _openReviewEditor(ReviewRequest r) {
+    return Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => r.reviewType == 'workout'
+            ? ReviewWorkoutEditorScreen(reviewId: r.id)
+            : ReviewDietEditorScreen(reviewId: r.id),
+      ),
+    );
   }
 
   void _openRoom(ChatRoom room) {

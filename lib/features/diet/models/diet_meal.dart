@@ -15,6 +15,8 @@ class DietMeal {
     this.emoji,
     this.calories,
     this.proteinG,
+    this.carbsG,
+    this.fatG,
     this.notes,
     this.expertModified = false,
     this.modifiedBy,
@@ -36,6 +38,12 @@ class DietMeal {
 
   /// Exact field name on the website is `protein_g`, not `protein`.
   final num? proteinG;
+
+  /// Carbs/fat are ADDITIVE fields, written only when an expert fills them in.
+  /// The generator and the website never set them, and both clients ignore
+  /// unknown keys — so adding them here cannot break an existing plan.
+  final num? carbsG;
+  final num? fatG;
   final String? notes;
 
   /// Set by `buildEffectivePlan()` when an `expertModifications` entry
@@ -64,6 +72,9 @@ class DietMeal {
     List<String>? foods,
     num? calories,
     num? proteinG,
+    num? carbsG,
+    num? fatG,
+    String? notes,
     String? purpose,
     bool? expertModified,
     String? modifiedBy,
@@ -79,7 +90,9 @@ class DietMeal {
       emoji: emoji,
       calories: calories ?? this.calories,
       proteinG: proteinG ?? this.proteinG,
-      notes: notes,
+      carbsG: carbsG ?? this.carbsG,
+      fatG: fatG ?? this.fatG,
+      notes: notes ?? this.notes,
       expertModified: expertModified ?? this.expertModified,
       modifiedBy: modifiedBy ?? this.modifiedBy,
       modifiedAt: modifiedAt ?? this.modifiedAt,
@@ -106,6 +119,8 @@ class DietMeal {
       emoji: asText(m['emoji']),
       calories: asNum(m['calories']),
       proteinG: asNum(m['protein_g']),
+      carbsG: asNum(m['carbs_g']),
+      fatG: asNum(m['fat_g']),
       notes: asText(m['notes']),
       expertModified: m['_expertModified'] == true,
       modifiedBy: m['_modifiedBy'] as String?,
@@ -132,6 +147,8 @@ class DietMeal {
       if (emoji != null) 'emoji': emoji,
       if (calories != null) 'calories': calories,
       if (proteinG != null) 'protein_g': proteinG,
+      if (carbsG != null) 'carbs_g': carbsG,
+      if (fatG != null) 'fat_g': fatG,
       if (notes != null) 'notes': notes,
       // Only written when the expert's editor produced this meal — mirrors
       // modify-diet.js leaving `_edited`/`_modifiedBy` on the saved doc so

@@ -28,6 +28,12 @@
          counts steps with the app dead/locked, which is what makes
          background capture possible without a foreground service. -->
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION"/>
+
+    <!-- Talk with Zino: microphone capture for speech-to-text. Recorded audio
+         is uploaded for transcription and the temp file deleted immediately —
+         ZITLAS never retains a copy of the athlete's speech. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <uses-feature android:name="android.hardware.microphone" android:required="false"/>
     <uses-feature android:name="android.hardware.sensor.stepcounter" android:required="false"/>
 
     <application

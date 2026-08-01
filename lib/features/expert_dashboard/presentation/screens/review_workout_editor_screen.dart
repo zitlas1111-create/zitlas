@@ -1,13 +1,13 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/zitlas_tokens.dart';
 import '../../../workout/models/workout_day.dart';
 import '../../../workout/models/workout_exercise.dart';
 import '../../../workout/models/workout_plan_content.dart';
 import '../../data/expert_repository.dart';
+import '../widgets/exercise_editor_sheet.dart';
 
 /// Native rebuild of `frontend/pages/experts/modify-workout.html` +
 /// `modify-workout.js` — the expert's Training review editor. Loads the
@@ -18,8 +18,17 @@ import '../../data/expert_repository.dart';
 /// the change on the athlete's Training page (which has no explicit
 /// "Accept" button by website design, unlike Diet).
 class ReviewWorkoutEditorScreen extends StatefulWidget {
-  const ReviewWorkoutEditorScreen({super.key, required this.reviewId});
+  const ReviewWorkoutEditorScreen({
+    super.key,
+    required this.reviewId,
+    this.repository,
+  });
+
   final String reviewId;
+
+  /// Injectable so this screen can be pumped in a widget test — see the diet
+  /// editor for why that seam exists.
+  final ExpertRepository? repository;
 
   @override
   State<ReviewWorkoutEditorScreen> createState() => _ReviewWorkoutEditorScreenState();
@@ -39,7 +48,8 @@ class _ReviewWorkoutEditorScreenState extends State<ReviewWorkoutEditorScreen> {
   @override
   void initState() {
     super.initState();
-    _repository = ExpertRepository(firestore: FirebaseFirestore.instance, auth: FirebaseAuth.instance);
+    _repository = widget.repository ??
+        ExpertRepository(firestore: FirebaseFirestore.instance, auth: FirebaseAuth.instance);
     _load();
   }
 
@@ -110,7 +120,10 @@ class _ReviewWorkoutEditorScreenState extends State<ReviewWorkoutEditorScreen> {
     final day = _days[_selectedDay];
     return Column(
       children: [
-        SizedBox(
+        Row(
+          children: [
+            Expanded(
+              child: SizedBox(
           height: 46,
           child: ListView.separated(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -128,6 +141,15 @@ class _ReviewWorkoutEditorScreenState extends State<ReviewWorkoutEditorScreen> {
               );
             },
           ),
+        ),
+            ),
+            IconButton(
+              tooltip: 'Copy this day to another',
+              icon: const Icon(Icons.copy_all_rounded, size: 19, color: ZitlasTokens.textSecondary),
+              onPressed: _copyDay,
+            ),
+            const SizedBox(width: 6),
+          ],
         ),
         Expanded(
           child: ListView(
@@ -152,7 +174,24 @@ class _ReviewWorkoutEditorScreenState extends State<ReviewWorkoutEditorScreen> {
                   ],
                 ),
               ),
-              ...List.generate(day.exercises.length, (i) => _exerciseCard(day, i)),
+              ReorderableListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                buildDefaultDragHandles: false,
+                itemCount: day.exercises.length,
+                onReorderItem: _reorderExercise,
+                itemBuilder: (context, i) => _exerciseCard(
+                  day,
+                  i,
+                  key: ValueKey('ex_${_selectedDay}_${i}_${day.exercises[i].name}'),
+                ),
+              ),
+              const SizedBox(height: 6),
+              OutlinedButton.icon(
+                onPressed: _addExercise,
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: const Text('Add Exercise'),
+              ),
             ],
           ),
         ),
@@ -160,24 +199,60 @@ class _ReviewWorkoutEditorScreenState extends State<ReviewWorkoutEditorScreen> {
     );
   }
 
-  Widget _exerciseCard(WorkoutDay day, int exIdx) {
+  Widget _exerciseCard(WorkoutDay day, int exIdx, {Key? key}) {
     final ex = day.exercises[exIdx];
+    // Only the fields the expert actually filled in are shown, so an
+    // untouched exercise doesn't read as a wall of em-dashes.
+    final detail = [
+      if (ex.sets != null) '${ex.sets} sets',
+      if (ex.repsOrDuration != null) ex.repsOrDuration!,
+      if (ex.weight != null) ex.weight!,
+      if (ex.restSeconds != null) 'rest ${ex.restSeconds}',
+    ].join(' - ');
     return Container(
+      key: key,
       margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.fromLTRB(4, 10, 4, 10),
       decoration: BoxDecoration(color: ZitlasTokens.bgCard, borderRadius: BorderRadius.circular(12), border: Border.all(color: ZitlasTokens.borderSub)),
       child: Row(
         children: [
+          ReorderableDragStartListener(
+            index: exIdx,
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 6),
+              child: Icon(Icons.drag_indicator_rounded, size: 18, color: ZitlasTokens.textMuted),
+            ),
+          ),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(ex.name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: ZitlasTokens.textPrimary)),
-                Text('${ex.sets ?? '—'} sets · ${ex.repsOrDuration ?? '—'}', style: const TextStyle(fontSize: 11.5, color: ZitlasTokens.textMuted)),
+                if (detail.isNotEmpty)
+                  Text(detail, style: const TextStyle(fontSize: 11.5, color: ZitlasTokens.textMuted)),
+                if (ex.tip != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      ex.tip!,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 11, color: ZitlasTokens.textSecondary),
+                    ),
+                  ),
               ],
             ),
           ),
-          IconButton(icon: const Icon(Icons.edit_outlined, size: 16), onPressed: () => _editExercise(exIdx, ex)),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(Icons.edit_outlined, size: 16),
+            onPressed: () => _editExercise(exIdx, ex),
+          ),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(Icons.delete_outline_rounded, size: 16, color: ZitlasTokens.danger),
+            onPressed: () => _deleteExercise(exIdx),
+          ),
         ],
       ),
     );
@@ -200,22 +275,126 @@ class _ReviewWorkoutEditorScreenState extends State<ReviewWorkoutEditorScreen> {
     });
   }
 
+  /// Opens the FULL exercise editor — name, sets, reps/duration, weight,
+  /// rest, and instructions.
   Future<void> _editExercise(int exIdx, WorkoutExercise ex) async {
-    final setsCtrl = TextEditingController(text: ex.sets ?? '');
-    final repsCtrl = TextEditingController(text: ex.repsOrDuration ?? '');
-    final ok = await _editDialog('Edit ${ex.name}', [
-      TextField(controller: setsCtrl, decoration: const InputDecoration(labelText: 'Sets (e.g. 3-4)')),
-      const SizedBox(height: 10),
-      TextField(controller: repsCtrl, decoration: const InputDecoration(labelText: 'Reps / Duration (e.g. 12 reps, AMRAP)')),
-    ]);
-    if (ok != true) return;
+    final updated = await showExerciseEditorSheet(context, exercise: ex);
+    if (updated == null || !mounted) return;
     setState(() {
       final day = _days[_selectedDay];
-      final exercises = List.of(day.exercises);
-      exercises[exIdx] = ex.copyWith(sets: setsCtrl.text.trim(), repsOrDuration: repsCtrl.text.trim());
+      final exercises = List.of(day.exercises)..[exIdx] = updated;
       _days = List.of(_days)..[_selectedDay] = day.copyWith(exercises: exercises);
       _editedDays.add(_selectedDay);
     });
+  }
+
+  Future<void> _addExercise() async {
+    final created = await showExerciseEditorSheet(
+      context,
+      exercise: const WorkoutExercise(name: ''),
+      isNew: true,
+    );
+    if (created == null || !mounted) return;
+    setState(() {
+      final day = _days[_selectedDay];
+      _days = List.of(_days)
+        ..[_selectedDay] = day.copyWith(exercises: [...day.exercises, created]);
+      _editedDays.add(_selectedDay);
+    });
+  }
+
+  Future<void> _deleteExercise(int exIdx) async {
+    final day = _days[_selectedDay];
+    final name = day.exercises[exIdx].name;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: ZitlasTokens.bgCard,
+        title: const Text('Remove exercise?'),
+        content: Text('"$name" will be removed from ${day.day}.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Remove', style: TextStyle(color: ZitlasTokens.danger)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    setState(() {
+      final exercises = List.of(day.exercises)..removeAt(exIdx);
+      _days = List.of(_days)..[_selectedDay] = day.copyWith(exercises: exercises);
+      _editedDays.add(_selectedDay);
+    });
+  }
+
+  /// `onReorderItem` already accounts for the removed item, so newIndex must
+  /// NOT be decremented here.
+  void _reorderExercise(int oldIndex, int newIndex) {
+    setState(() {
+      final day = _days[_selectedDay];
+      final exercises = List.of(day.exercises);
+      exercises.insert(newIndex, exercises.removeAt(oldIndex));
+      _days = List.of(_days)..[_selectedDay] = day.copyWith(exercises: exercises);
+      _editedDays.add(_selectedDay);
+    });
+  }
+
+  /// Copies this day's whole session onto another day. Days are otherwise
+  /// fully independent — this is the only path that moves work between them,
+  /// and it always asks first.
+  Future<void> _copyDay() async {
+    final targets = <int>[for (var i = 0; i < _days.length; i++) if (i != _selectedDay) i];
+    if (targets.isEmpty) return;
+    final target = await showModalBottomSheet<int>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: const BoxDecoration(
+          color: ZitlasTokens.bgCard,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Copy ${_days[_selectedDay].day} to...',
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: ZitlasTokens.textPrimary)),
+            const SizedBox(height: 4),
+            const Text('This replaces the session on the day you pick.',
+                style: TextStyle(fontSize: 12, color: ZitlasTokens.textMuted)),
+            const SizedBox(height: 12),
+            for (final i in targets)
+              ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                title: Text(_days[i].day, style: const TextStyle(fontSize: 13.5)),
+                trailing: const Icon(Icons.chevron_right_rounded, size: 18),
+                onTap: () => Navigator.pop(ctx, i),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (target == null || !mounted) return;
+    setState(() {
+      final source = _days[_selectedDay];
+      _days = List.of(_days)
+        ..[target] = _days[target].copyWith(
+          focus: source.focus,
+          durationMinutes: source.durationMinutes,
+          exercises: List.of(source.exercises),
+        );
+      _editedDays.add(target);
+      _selectedDay = target;
+    });
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Copied to ${_days[_selectedDay].day}.')),
+      );
+    }
   }
 
   Future<bool?> _editDialog(String title, List<Widget> fields) {
@@ -280,7 +459,12 @@ class _ReviewWorkoutEditorScreenState extends State<ReviewWorkoutEditorScreen> {
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ Review sent to athlete.')));
-      context.pop();
+      // Pop the SAME navigator this screen was pushed onto
+      // (`Navigator.push` in ExpertDashboardScreen._openReviewEditor), and
+      // return to the Expert Dashboard underneath. Deliberately a plain pop:
+      // the expert must never be pushed or redirected into Chat after
+      // completing a review.
+      Navigator.of(context).pop();
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not save — please try again.')));
