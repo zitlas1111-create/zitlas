@@ -776,6 +776,14 @@ def meal_swap(
     diet_tags = food_engine.diet_tags_from_lifestyle(reason_diet) if reason_diet else ctx["diet_tags"]
     slot = _meal_slot_from_name(meal_name, meal_time)
     exclude_names = list(current_foods) + list(rejected)
+    # Same family-level variety signal as the online path — an AI outage must
+    # not silently reintroduce the repeat-suggestion bug.
+    recent_families = {}
+    for line in list(current_foods) + list(rejected):
+        if not line:
+            continue
+        fam = food_engine.dish_family(line)
+        recent_families[fam] = recent_families.get(fam, 0) + (2 if line in current_foods else 1)
     combos = engine.find_swap_combos(
         meal_slot=slot, goal_tags=ctx["goal_tags"], diet_tags=diet_tags,
         living_situation=ctx["living_tag"], budget_tier=ctx["budget_tier"],
@@ -784,6 +792,7 @@ def meal_swap(
         profile=ctx.get("profile"),
         user_state=ctx.get("user_state"), compatible_regions=ctx.get("compatible_regions"),
         favorite_foods=ctx.get("favorite_foods"),
+        recent_families=recent_families,
     )
 
     if combos:

@@ -2009,6 +2009,21 @@ def _build_meal_swap_system(fitness_goal: str) -> str:
     return ZITLAS_SYSTEM_PROMPT + "\n\n" + rules + _MEAL_SWAP_JSON_SCHEMA
 
 
+def _swap_target_calories(current_foods, engine) -> float | None:
+    """Calories of the meal being replaced, resolved from the dataset by
+    matching each stored food line back to its record. Returns None when
+    nothing matches, which disables the nutrition term rather than inventing
+    a target."""
+    total = 0.0
+    for line in current_foods or []:
+        base = food_engine._base_dish_name(line)
+        for food in engine.by_id.values():
+            if food_engine._base_dish_name(food["name"]) == base:
+                total += food.get("calories") or 0
+                break
+    return total if total > 0 else None
+
+
 def _meal_slot_from_name(meal_name: str, meal_time: str = "") -> str:
     name_lc = f"{meal_name} {meal_time}".lower()
     if "breakfast" in name_lc:
@@ -2180,6 +2195,26 @@ You MUST generate a COMPLETELY DIFFERENT meal with different ingredients.
     # auto_forbidden goes to the ENGINE too (not just the LLM prompt): a
     # vegetarian swap must exclude meat at the layer that picks the food.
     exclude_names = list(dict.fromkeys(current_foods + (rejected_foods or []) + all_previous_foods + auto_forbidden))
+
+    # Dish FAMILIES the athlete has already been shown — the meal being
+    # replaced, everything rejected, and every earlier suggestion this
+    # session. Exclusion alone can't fix repetition here: "Sabudana Khichdi"
+    # and "Protein Rich Khichdi" are different NAMES, so excluding one never
+    # blocked the other, and the athlete got khichdi after khichdi. Passing
+    # families lets the engine push the whole khichdi group down instead.
+    recent_families: dict[str, int] = {}
+    for line in current_foods + (rejected_foods or []) + all_previous_foods:
+        if not line:
+            continue
+        family = food_engine.dish_family(line)
+        # The meal being swapped away from counts double: the athlete has
+        # actively said they don't want it right now.
+        recent_families[family] = recent_families.get(family, 0) + (
+            2 if line in current_foods else 1
+        )
+    if recent_families:
+        print(f"[SWAP ENGINE] recent families penalised: {recent_families}")
+
     swap_combos = engine.find_swap_combos(
         meal_slot=_meal_slot_from_name(meal_name, meal_time),
         goal_tags=swap_ctx["goal_tags"], diet_tags=diet_tags,
@@ -2189,6 +2224,10 @@ You MUST generate a COMPLETELY DIFFERENT meal with different ingredients.
         profile=swap_ctx["profile"], subgoal_tag=swap_ctx["subgoal_tag"], season_tag=swap_ctx["season_tag"],
         user_state=swap_ctx.get("user_state"), compatible_regions=swap_ctx.get("compatible_regions"),
         favorite_foods=swap_ctx.get("favorite_foods"),
+        recent_families=recent_families,
+        # Keeps the replacement a comparable MEAL — the calories of what is
+        # being swapped away are the only honest target available here.
+        target_calories=_swap_target_calories(current_foods, engine),
     )
     print(f"[SWAP_REGION] backend received = {swap_ctx.get('user_state') or 'None'}")
     print(f"[SWAP ENGINE] {len(swap_combos)} combo(s): "

@@ -100,6 +100,17 @@ _DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
 # tie on. Region now carries real, second-highest weight (after goal) so a
 # same-state/Pan-India candidate reliably outranks an equally-fit
 # other-state dish that only shares the user's broad zone.
+# Swap-time recency penalty. Deliberately larger than _W_VARIETY and
+# non-saturating up to its cap: it has to be able to move a repeat suggestion
+# BELOW a fresh one, which a 0.05-weighted, zero-flooring term cannot do.
+# Capped so it can never outweigh goal fit + region + availability combined.
+_RECENCY_STEP = 0.10
+# Nutrition-match penalty: a swap must stay a comparable MEAL. Weighted above
+# recency so variety can never turn a lunch into a garnish.
+_NUTRITION_STEP = 0.55
+_MAX_NUTRITION_PENALTY = 0.60
+_MAX_RECENCY_PENALTY = 0.45
+
 _W_GOAL, _W_MEDICAL, _W_REGION, _W_AVAIL, _W_BUDGET, _W_PREF, _W_VARIETY = (
     0.30, 0.20, 0.20, 0.12, 0.08, 0.05, 0.05,
 )
@@ -122,6 +133,50 @@ def _base_dish_name(name: str) -> str:
         if stripped == base:
             return _norm(base)
         base = stripped
+
+
+# Words that CARRY a dish rather than name it. "Misal Pav" is misal served with
+# pav; "Rajma Chawal" is rajma served with rice. Treating the carrier as the
+# dish would group every rice-based plate into one family and every pav-based
+# one into another, which is the opposite of useful.
+_CARRIER_WORDS = frozenset({
+    "pav", "rice", "chawal", "bhaat", "roti", "chapati", "bhakri", "paratha",
+    "curry", "sabzi", "masala", "bowl", "plate", "combo", "meal", "style",
+})
+
+# Qualifier phrases that introduce an accompaniment rather than a new dish:
+# "Khichdi with Extra Ghee" is still khichdi.
+_QUALIFIER_SPLITS = (" with ", " and ", " served ", " topped ")
+
+
+def dish_family(name: str) -> str:
+    """The dish FAMILY a food belongs to — 'khichdi' for all of Sabudana
+    Khichdi / Protein Rich Khichdi / Khichdi with Extra Ghee.
+
+    `_base_dish_name` only strips style suffixes, so those three produce three
+    DIFFERENT base names and dedup never groups them. That is exactly how a
+    Maharashtra athlete ended up being offered khichdi after khichdi: each
+    variant looked like a distinct dish to every diversity check in the
+    pipeline.
+
+    Heuristic, deliberately: the head noun of an Indian dish name is almost
+    always the last significant word ("sabudana KHICHDI", "moong DAL",
+    "veg PULAO"), after dropping accompaniment clauses and carrier words.
+    """
+    base = _base_dish_name(name)
+    for split in _QUALIFIER_SPLITS:
+        idx = base.find(split)
+        if idx > 0:
+            base = base[:idx]
+            break
+    tokens = [t for t in re.split(r"[\s/,-]+", base) if t]
+    if not tokens:
+        return base
+    # Walk backwards past carrier words to the real head noun.
+    for token in reversed(tokens):
+        if token not in _CARRIER_WORDS:
+            return token
+    return tokens[-1]
 
 
 class FoodRecommendationEngine:
@@ -863,6 +918,8 @@ class FoodRecommendationEngine:
         user_state: str | None = None,
         compatible_regions: set[str] | None = None,
         favorite_foods: list[str] | None = None,
+        recent_families: dict[str, int] | None = None,
+        target_calories: float | None = None,
     ) -> list[dict]:
         exclude_strings = [_norm(n) for n in exclude_names if n]
         exclude_bases = {_base_dish_name(n) for n in exclude_names if n}
@@ -874,6 +931,22 @@ class FoodRecommendationEngine:
             user_state=user_state, compatible_regions=compatible_regions, favorite_foods=favorite_foods,
         )
         ids = {i for i in ids if not self._is_excluded(self.by_id[i], exclude_strings, exclude_bases)}
+
+        # HARD family exclusion. A score penalty alone is not enough: in a
+        # pool already narrowed by region + diet + goal, one family can lead
+        # by more than any bounded penalty, so khichdi kept winning even at
+        # full penalty. The rule the athlete actually needs is categorical —
+        # if they just had khichdi, don't offer khichdi — so recently-seen
+        # families are REMOVED here, and only restored if that would leave
+        # nothing to suggest (a genuinely empty pool is worse than a repeat).
+        blocked = set(recent_families or {})
+        if blocked:
+            without_blocked = {
+                i for i in ids if dish_family(self.by_id[i]["name"]) not in blocked
+            }
+            if without_blocked:
+                ids = without_blocked
+
         if not ids:
             # Relax goal/budget/living but NEVER the meal slot — a dinner swap
             # must stay a dinner-suitable food (diet/medical stay protected
@@ -890,13 +963,47 @@ class FoodRecommendationEngine:
         # what the caller passed in — meaning pref_component AND (now)
         # region_component's explicit-override tier were silently disabled
         # for every swap. Passing the real list through fixes both.
-        scored = [
-            (self._score(self.by_id[i], goal_tags, living_situation, budget_tier,
-                         favorite_foods or [], 0, profile,
-                         user_state=user_state, compatible_regions=compatible_regions), i)
-            for i in ids
-        ]
+        #
+        # `usage_count` used to be hardcoded to 0 as well, which made
+        # `_score`'s variety term a CONSTANT for every swap — so an identical
+        # query always returned the identical top result, forever. It is now
+        # driven by how recently the candidate's dish FAMILY was seen (in
+        # today's plan or in earlier suggestions), which is what turns the
+        # variety weight back on.
+        def _swap_score(fid: int) -> float:
+            food = self.by_id[fid]
+            base = self._score(
+                food, goal_tags, living_situation, budget_tier,
+                favorite_foods or [], 0, profile,
+                user_state=user_state, compatible_regions=compatible_regions,
+            )
+            # Recency penalty applied OUTSIDE the fixed 30/20/20/12/8/5/5
+            # formula, on purpose. Routing it through `_score`'s variety term
+            # caps it at _W_VARIETY (0.05) AND floors at zero after ~3 uses,
+            # so a dish family leading by more than 0.05 stayed #1 forever —
+            # which is exactly how breakfast came back khichdi 90 times out
+            # of 100. Here it keeps growing until it can actually reorder,
+            # while the cap stops variety from ever outranking safety, diet
+            # type, or goal fit.
+            seen = (recent_families or {}).get(dish_family(food["name"]), 0)
+            score = base - min(_MAX_RECENCY_PENALTY, seen * _RECENCY_STEP)
+
+            # NUTRITION MATCH — a replacement has to be a comparable meal, not
+            # merely a different one. Without this, pushing hard for variety
+            # eventually surfaces a 15 kcal side dish as a "lunch": every
+            # substantial option has been penalised for being seen before,
+            # and nothing was checking size. Scaled by relative distance so it
+            # is meaningful for a 200 kcal snack and a 700 kcal dinner alike.
+            if target_calories and target_calories > 0:
+                cal = food.get("calories") or 0
+                drift = abs(cal - target_calories) / target_calories
+                score -= min(_MAX_NUTRITION_PENALTY, drift * _NUTRITION_STEP)
+            return score
+
+        scored = [(_swap_score(i), i) for i in ids]
         scored.sort(key=lambda t: (-t[0], t[1]))
+        scored = self._spread_families([i for _, i in scored], pool_size)
+        scored = [(0.0, i) for i in scored]
         if user_state or compatible_regions:
             print(f"[REGION_RANK] user_state={user_state} compatible_regions={compatible_regions}")
             for rank, (score, i) in enumerate(scored[:5], start=1):
@@ -916,6 +1023,39 @@ class FoodRecommendationEngine:
                       f"states={sorted(states)} regionClass={region_class} finalScore={score:.4f}")
         return [self.by_id[i] for _, i in scored[:pool_size]]
 
+
+    def _spread_families(self, ranked_ids: list[int], limit: int) -> list[int]:
+        """Re-orders a ranked list so consecutive picks come from DIFFERENT
+        dish families, without discarding the ranking.
+
+        Sorting by score alone clusters every khichdi variant at the top,
+        because near-identical dishes score near-identically. This takes the
+        best-of-each-family first, then the second-best of each, and so on —
+        so the head of the list is maximally varied while still strictly
+        preferring higher-scored foods within each family.
+        """
+        by_family: dict[str, list[int]] = {}
+        for i in ranked_ids:
+            by_family.setdefault(dish_family(self.by_id[i]["name"]), []).append(i)
+        # Families keep their best member's rank, so a stronger family still
+        # leads — variety reorders, it never promotes a bad food.
+        order = sorted(by_family, key=lambda f: ranked_ids.index(by_family[f][0]))
+        out: list[int] = []
+        round_index = 0
+        while len(out) < min(limit, len(ranked_ids)):
+            added = False
+            for family in order:
+                members = by_family[family]
+                if round_index < len(members):
+                    out.append(members[round_index])
+                    added = True
+                    if len(out) >= min(limit, len(ranked_ids)):
+                        break
+            if not added:
+                break
+            round_index += 1
+        return out
+
     def find_swap_alternatives(
         self,
         meal_slot: str,
@@ -933,6 +1073,8 @@ class FoodRecommendationEngine:
         user_state: str | None = None,
         compatible_regions: set[str] | None = None,
         favorite_foods: list[str] | None = None,
+        recent_families: dict[str, int] | None = None,
+        target_calories: float | None = None,
     ) -> list[dict]:
         """Ranked single-food alternatives (kept for offline fallback and
         snack slots). For main meals, anchors-only: never offers a single
@@ -941,6 +1083,8 @@ class FoodRecommendationEngine:
             meal_slot, goal_tags, diet_tags, living_situation, budget_tier,
             disease_tags, allergens, exclude_names, profile, subgoal_tag, season_tag,
             user_state=user_state, compatible_regions=compatible_regions, favorite_foods=favorite_foods,
+            recent_families=recent_families,
+            target_calories=target_calories,
         )
         if meal_slot in self._MAIN_SLOTS or meal_slot == "breakfast":
             anchors = [f for f in pool if self._is_meal_anchor(f, meal_slot)]
@@ -976,6 +1120,8 @@ class FoodRecommendationEngine:
         user_state: str | None = None,
         compatible_regions: set[str] | None = None,
         favorite_foods: list[str] | None = None,
+        recent_families: dict[str, int] | None = None,
+        target_calories: float | None = None,
     ) -> list[list[dict]]:
         """Full-meal swap: each result is a COMPLETE composed meal (e.g.
         'Paneer Bhurji with Roti + Curd + Salad'), never a lone ingredient.
@@ -986,6 +1132,8 @@ class FoodRecommendationEngine:
             meal_slot, goal_tags, diet_tags, living_situation, budget_tier,
             disease_tags, allergens, exclude_names, profile, subgoal_tag, season_tag,
             user_state=user_state, compatible_regions=compatible_regions, favorite_foods=favorite_foods,
+            recent_families=recent_families,
+            target_calories=target_calories,
         )
         if not pool:
             return []
@@ -996,7 +1144,9 @@ class FoodRecommendationEngine:
                 break
             if not self._is_meal_anchor(anchor, meal_slot):
                 continue
-            base = _base_dish_name(anchor["name"])
+            # FAMILY, not base name: base-name dedup let "Sabudana Khichdi"
+            # and "Protein Rich Khichdi" both through as "different" dishes.
+            base = dish_family(anchor["name"])
             if base in used_anchor_bases:
                 continue
             sub_pool = [anchor] + [f for f in pool if f["id"] != anchor["id"]]
