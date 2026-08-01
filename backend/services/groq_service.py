@@ -1594,6 +1594,10 @@ def _engine_query_context(player_profile: dict, lifestyle_data: dict | None) -> 
         "region_note":   region_note,
         "user_state":         user_state,
         "compatible_regions": region_eligibility,
+        # Who actually cooks — drives `_kitchen_fit`, so a hostel athlete
+        # stops being told to slow-cook and a family-cooked athlete gets real
+        # household meals.
+        "meal_preparer":      ld.get("meal_preparer"),
     }
 
 
@@ -2009,6 +2013,30 @@ def _build_meal_swap_system(fitness_goal: str) -> str:
     return ZITLAS_SYSTEM_PROMPT + "\n\n" + rules + _MEAL_SWAP_JSON_SCHEMA
 
 
+def _swap_nutrition_target(current_foods, engine) -> dict[str, float] | None:
+    """Full macro profile of the meal being replaced, resolved from the
+    dataset. This is what the ±15%/±20% band is measured against — without it
+    there is no definition of 'nutritionally equivalent'."""
+    total = {"calories": 0.0, "protein": 0.0, "carbs": 0.0, "fat": 0.0}
+    matched = False
+    for line in current_foods or []:
+        base = _base_dish_name_safe(line)
+        for food in engine.by_id.values():
+            if food_engine._base_dish_name(food["name"]) == base:
+                for k, src in (("calories", "calories"), ("protein", "protein"),
+                               ("carbs", "carbs"), ("fat", "fat")):
+                    total[k] += float(food.get(src) or 0)
+                matched = True
+                break
+    return total if matched and total["calories"] > 0 else None
+
+
+def _base_dish_name_safe(line: str) -> str:
+    """Stored lines carry a serving clause the dataset name does not, and it
+    can be nested — strip it before matching, or nothing ever matches."""
+    return food_engine._base_dish_name(food_engine.strip_serving_suffix(line))
+
+
 def _swap_target_calories(current_foods, engine) -> float | None:
     """Calories of the meal being replaced, resolved from the dataset by
     matching each stored food line back to its record. Returns None when
@@ -2016,7 +2044,7 @@ def _swap_target_calories(current_foods, engine) -> float | None:
     a target."""
     total = 0.0
     for line in current_foods or []:
-        base = food_engine._base_dish_name(line)
+        base = _base_dish_name_safe(line)
         for food in engine.by_id.values():
             if food_engine._base_dish_name(food["name"]) == base:
                 total += food.get("calories") or 0
@@ -2037,7 +2065,12 @@ def _meal_slot_from_name(meal_name: str, meal_time: str = "") -> str:
     return "evening_snack"
 
 
-def _apply_engine_swap(structured: dict | None, combos: list[list[dict]]) -> dict[str, Any]:
+def _apply_engine_swap(
+    structured: dict | None,
+    combos: list[list[dict]],
+    nutrition_target: dict[str, float] | None = None,
+    goal_tags: list[str] | None = None,
+) -> dict[str, Any]:
     """Same hallucination firewall as _apply_engine_foods(), for swap-meal:
     `swap`/`alternative` foods always come from the engine's combos, never
     from the LLM. Each combo is a COMPLETE composed meal (a main meal swap
@@ -2059,12 +2092,22 @@ def _apply_engine_swap(structured: dict | None, combos: list[list[dict]]) -> dic
     def _combo_block(combo: list[dict], llm_block: dict) -> dict:
         anchor = combo[0]
         name = " + ".join(f["name"] for f in combo)
+        macros = food_engine._combo_macros(combo)
         return {
             "name": (llm_block.get("name") or "").strip() or name,
             "foods": [food_engine.format_food_line(f) for f in combo],
-            "calories": round(sum(f["calories"] for f in combo)),
-            "protein_g": round(sum(f["protein"] for f in combo), 1),
-            "reason": (llm_block.get("reason") or "").strip() or f"{anchor['name']} — {anchor['description']}",
+            "calories": round(macros["calories"]),
+            "protein_g": round(macros["protein"], 1),
+            # Carbs/fat now travel too, so the app can show the full
+            # comparison the athlete needs to trust a swap.
+            "carbs_g": round(macros["carbs"], 1),
+            "fat_g": round(macros["fat"], 1),
+            # GENERATED FROM THE ACTUAL NUMBERS, never from the model.
+            # An LLM asked to justify a swap writes plausible prose rather
+            # than reading values — which is how a deep-fried onion bhajiya
+            # got described to an athlete as "good protein and healthy
+            # carbs". The engine knows the real figures; it writes the line.
+            "reason": food_engine.describe_swap(combo, nutrition_target, goal_tags),
             "food_id": anchor["id"],
             "food_ids": [f["id"] for f in combo],
         }
@@ -2228,6 +2271,9 @@ You MUST generate a COMPLETELY DIFFERENT meal with different ingredients.
         # Keeps the replacement a comparable MEAL — the calories of what is
         # being swapped away are the only honest target available here.
         target_calories=_swap_target_calories(current_foods, engine),
+        meal_preparer=swap_ctx.get("meal_preparer"),
+        disliked_foods=swap_ctx.get("disliked_foods"),
+        nutrition_target=_swap_nutrition_target(current_foods, engine),
     )
     print(f"[SWAP_REGION] backend received = {swap_ctx.get('user_state') or 'None'}")
     print(f"[SWAP ENGINE] {len(swap_combos)} combo(s): "
@@ -2317,7 +2363,12 @@ above. Do not restate calories/protein yourself — those are filled in automati
     )
 
     llm_structured = _extract_json(result["reply"])
-    result["structured"] = _apply_engine_swap(llm_structured, swap_combos)
+    result["structured"] = _apply_engine_swap(
+        llm_structured,
+        swap_combos,
+        nutrition_target=_swap_nutrition_target(current_foods, engine),
+        goal_tags=swap_ctx.get("goal_tags"),
+    )
     return result
 
 

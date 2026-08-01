@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../core/network/api_exception.dart';
+import 'models/diet_profile.dart';
 import '../expert_dashboard/models/expert_models.dart' show ExpertProfile;
 import 'data/diet_repository.dart';
 import 'models/diet_calculations.dart';
@@ -48,6 +49,14 @@ class DietController extends ChangeNotifier {
   bool _disposed = false;
   bool _dayAutoSelected = false;
   Map<String, dynamic>? _lastUserDoc;
+
+  /// The athlete's permanent food profile. Read from the same live user-doc
+  /// snapshot as everything else, so it can never drift from what's stored.
+  DietProfile dietProfile = const DietProfile();
+
+  /// True when the intake has never been completed — the Diet screen uses
+  /// this to offer it once, and only once.
+  bool get needsDietProfile => !dietProfile.isComplete;
 
   bool loading = true;
   Object? error;
@@ -113,6 +122,9 @@ class DietController extends ChangeNotifier {
 
   void _onUserDoc(Map<String, dynamic>? data) {
     _lastUserDoc = data;
+    dietProfile = DietProfile.fromMap(
+      (data?['dietProfile'] as Map?)?.cast<String, dynamic>(),
+    );
     calculations = _repository.parseCalculations(data);
     livePlanId = data?['planId'] as String?;
 
@@ -267,11 +279,17 @@ class DietController extends ChangeNotifier {
           'uses_supplements': assessment['uses_supplements'],
           'location': locationPayload,
         },
+        // The athlete's permanent food profile takes precedence over the
+        // one-off assessment answers: it is the deliberate, editable record
+        // of who cooks, what they can afford, and what they actually like,
+        // and it is what makes the engine's kitchen-first ranking work.
+        // Assessment values remain the fallback for athletes who predate it.
         lifestyleData: {
           'diet_preference': assessment['diet_preference'],
           'living_situation': assessment['living_situation'],
           'daily_budget': assessment['budget'],
           'disliked_foods': assessment['disliked_foods'],
+          ...dietProfile.toLifestyleData(),
         },
         rejectedFoods: rejectedFoods,
         previousSuggestions: previousSuggestions,

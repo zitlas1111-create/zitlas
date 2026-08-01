@@ -46,6 +46,7 @@ from routes import payment
 from routes import admin
 from routes import review_apply
 from routes import voice
+from routes import swap
 from services import rag_service
 
 # ── Directory paths ──────────────────────────────────────────────────────────
@@ -174,6 +175,7 @@ app.include_router(diet.router,       prefix="/api/diet",       tags=["Diet"])
 app.include_router(assessment.router, prefix="/api/assessment", tags=["Assessment"])
 app.include_router(ai.router,         prefix="/api/ai",         tags=["AI"])
 app.include_router(voice.router,      prefix="/api/voice",      tags=["Voice"])
+app.include_router(swap.router,       prefix="/api/diet",       tags=["Swap"])
 app.include_router(rag.router,        prefix="/api/rag",        tags=["RAG"])
 app.include_router(support.router,    prefix="/api/support",    tags=["Support"])
 app.include_router(review.router,     prefix="/api/review",     tags=["Review"])

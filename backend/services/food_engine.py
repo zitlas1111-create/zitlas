@@ -105,15 +105,39 @@ _DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
 # BELOW a fresh one, which a 0.05-weighted, zero-flooring term cannot do.
 # Capped so it can never outweigh goal fit + region + availability combined.
 _RECENCY_STEP = 0.10
+# Food quality as a ranking bonus, on top of the hard gate above.
+_W_QUALITY = 0.30
 # Nutrition-match penalty: a swap must stay a comparable MEAL. Weighted above
 # recency so variety can never turn a lunch into a garnish.
 _NUTRITION_STEP = 0.55
 _MAX_NUTRITION_PENALTY = 0.60
 _MAX_RECENCY_PENALTY = 0.45
 
-_W_GOAL, _W_MEDICAL, _W_REGION, _W_AVAIL, _W_BUDGET, _W_PREF, _W_VARIETY = (
-    0.30, 0.20, 0.20, 0.12, 0.08, 0.05, 0.05,
-)
+# KITCHEN-FIRST WEIGHTS. Sum to 1.0.
+#
+# The old order put GOAL first (0.30) and the athlete's own food preferences
+# LAST (0.05) — which is how you get a nutritionally perfect plan full of food
+# someone has never cooked and can't buy nearby. ZITLAS's whole premise is the
+# opposite: recommend what they can actually eat today.
+#
+# Safety is NOT in this table on purpose. Allergies, medical conditions, diet
+# type and explicit exclusions are HARD FILTERS in `_pipeline_ids` — they can
+# never be outweighed by a score, however strong a preference is.
+#
+# Order here mirrors the product spec: likes > region > budget > goal >
+# kitchen fit > season > variety.
+_W_PREF = 0.26      # foods the athlete already likes / already has at home
+_W_REGION = 0.20    # commonly available where they actually are (GPS)
+_W_BUDGET = 0.14    # affordable at their stated budget
+_W_GOAL = 0.14      # fits the fitness goal
+_W_KITCHEN = 0.10   # realistic for who actually cooks (hostel/family/self)
+_W_AVAIL = 0.08     # everyday-household popularity signal from the dataset
+_W_SEASON = 0.05    # in season right now
+_W_VARIETY = 0.03   # nudge away from repetition (the hard work is in recency)
+
+# Retained so the medical term keeps its documented shape; anything reaching
+# scoring has already passed every medical filter, so this is a constant.
+_W_MEDICAL = 0.0
 
 
 def _norm(s: str) -> str:
@@ -121,6 +145,33 @@ def _norm(s: str) -> str:
 
 
 _TRAILING_PAREN_RE = re.compile(r"\s*\([^()]*\)\s*$")
+
+
+def strip_serving_suffix(name: str) -> str:
+    """Removes a trailing serving-size clause, including NESTED parentheses.
+
+    Plans store food lines as `"Quinoa Avocado Salad (Home Style) (1 bowl
+    (150 g))"`. `_base_dish_name`'s regex requires a paren group with nothing
+    nested inside, so it left that whole string untouched — meaning the line
+    never matched its own dataset record, and the nutrition target resolved
+    to None. The band then had nothing to measure against and silently did
+    not apply.
+
+    Scans from the right, balancing parens, and drops the final group.
+    """
+    text = (name or "").strip()
+    if not text.endswith(")"):
+        return text
+    depth = 0
+    for idx in range(len(text) - 1, -1, -1):
+        ch = text[idx]
+        if ch == ")":
+            depth += 1
+        elif ch == "(":
+            depth -= 1
+            if depth == 0:
+                return text[:idx].strip()
+    return text
 
 
 def _base_dish_name(name: str) -> str:
@@ -177,6 +228,233 @@ def dish_family(name: str) -> str:
         if token not in _CARRIER_WORDS:
             return token
     return tokens[-1]
+
+
+# ── Nutritional equivalence gate ─────────────────────────────────────────────
+#
+# A swap has to be a REPLACEMENT, not merely another food. Without a hard
+# band, ranking alone happily offered a 317 kcal fried bhajiya in place of a
+# 215 kcal salad (+47%) — nutritionally a different meal wearing the same slot.
+#
+# Bands are asymmetric by intent: calories are the tightest because they drive
+# the day's target, while the macros have a little more room since real foods
+# rarely match on all three at once.
+_BAND_CALORIES = 0.15
+_BAND_PROTEIN = 0.20
+_BAND_CARBS = 0.20
+_BAND_FAT = 0.20
+
+
+def _combo_macros(combo: list[dict]) -> dict[str, float]:
+    return {
+        "calories": float(sum(f.get("calories") or 0 for f in combo)),
+        "protein": float(sum(f.get("protein") or 0 for f in combo)),
+        "carbs": float(sum(f.get("carbs") or 0 for f in combo)),
+        "fat": float(sum(f.get("fat") or 0 for f in combo)),
+    }
+
+
+def _within_band(actual: float, target: float, band: float) -> bool:
+    """A zero/absent target means 'no opinion' — never a reason to reject."""
+    if not target:
+        return True
+    return abs(actual - target) <= target * band
+
+
+def combo_meets_nutrition(
+    combo: list[dict],
+    target: dict[str, float] | None,
+    tolerance: float = 1.0,
+) -> bool:
+    """Whether a composed meal is a nutritionally acceptable stand-in.
+
+    `tolerance` multiplies every band, and exists ONLY for the progressive
+    relaxation in `find_swap_combos` — returning nothing at all is a worse
+    outcome for the athlete than a slightly-off match, so the bands widen in
+    steps rather than failing closed. The first pass always uses 1.0.
+    """
+    if not target:
+        return True
+    m = _combo_macros(combo)
+    return (
+        _within_band(m["calories"], target.get("calories", 0), _BAND_CALORIES * tolerance)
+        and _within_band(m["protein"], target.get("protein", 0), _BAND_PROTEIN * tolerance)
+        and _within_band(m["carbs"], target.get("carbs", 0), _BAND_CARBS * tolerance)
+        and _within_band(m["fat"], target.get("fat", 0), _BAND_FAT * tolerance)
+    )
+
+
+def describe_swap(combo: list[dict], target: dict[str, float] | None, goal_tags: list[str] | None = None) -> str:
+    """The explanation shown to the athlete, generated FROM THE ACTUAL NUMBERS.
+
+    Never a template and never model prose: an LLM asked to justify a swap
+    will cheerfully call a deep-fried bhajiya "good protein and healthy
+    carbs", because it is writing plausible text rather than reading the
+    values. Every clause below is derived from real dataset figures, so a
+    claim can only appear when the numbers support it.
+    """
+    m = _combo_macros(combo)
+    name = combo[0].get("name", "This")
+    parts: list[str] = []
+
+    if target and target.get("calories"):
+        delta = m["calories"] - target["calories"]
+        pct = abs(delta) / target["calories"] * 100
+        if pct < 5:
+            parts.append(f"almost identical calories ({m['calories']:.0f} vs {target['calories']:.0f} kcal)")
+        elif delta < 0:
+            parts.append(f"{pct:.0f}% fewer calories ({m['calories']:.0f} vs {target['calories']:.0f} kcal)")
+        else:
+            parts.append(f"{pct:.0f}% more calories ({m['calories']:.0f} vs {target['calories']:.0f} kcal)")
+    else:
+        parts.append(f"{m['calories']:.0f} kcal")
+
+    if target and target.get("protein"):
+        pdelta = m["protein"] - target["protein"]
+        # "More protein" is only claimed on a difference worth naming — a
+        # 0.3 g edge is noise, and calling it an upgrade is the exact kind of
+        # overclaim this function exists to prevent.
+        if pdelta >= 2:
+            parts.append(f"more protein ({m['protein']:.1f}g vs {target['protein']:.1f}g)")
+        elif pdelta <= -2:
+            parts.append(f"a little less protein ({m['protein']:.1f}g vs {target['protein']:.1f}g)")
+        else:
+            parts.append(f"about the same protein ({m['protein']:.1f}g)")
+    else:
+        parts.append(f"{m['protein']:.1f}g protein")
+
+    sentence = f"{name} — " + ", ".join(parts) + "."
+
+    # Only state what the data actually says.
+    extras: list[str] = []
+    if combo[0].get("high_protein"):
+        extras.append("genuinely high in protein")
+    if combo[0].get("high_fiber"):
+        extras.append("high in fibre")
+    if goal_tags and any(g in (combo[0].get("goalSuitable") or []) for g in goal_tags):
+        extras.append(f"suited to your {goal_tags[0].lower()} goal")
+    if combo[0].get("hostel_friendly"):
+        extras.append("easy to get in a hostel mess")
+    if extras:
+        sentence += " Also " + ", ".join(extras) + "."
+    return sentence
+
+
+# ── Nutrition Quality Score ──────────────────────────────────────────────────
+#
+# ZITLAS is a fitness platform. A swap engine that offers Onion Bhajiya as a
+# weight-loss meal is not merely unhelpful — it actively works against the
+# thing the athlete opened the app to do. Ranking on macros alone allows it,
+# because a deep-fried snack can hit a calorie band perfectly.
+#
+# Every signal below is read from the dataset. The only heuristic is the
+# preparation keyword list, and it exists because the dataset has no explicit
+# "deep fried" flag — the names are the evidence available.
+
+# Deep-fried / ultra-processed preparations. Matched on the dish name.
+_DEEP_FRIED_KEYWORDS = (
+    "pakoda", "pakora", "bhajiya", "bhajji", "samosa", "kachori",
+    # "pav bhaji" by name, NOT a bare "bhaji" — Patal Bhaji and Aluchi Patal
+    # Bhaji are healthy Maharashtrian leafy-vegetable dishes and must stay.
+    "pav bhaji", "mirchi bhaji", "misal pav" if False else "pav bhaji",
+    "vada", "puri", "bhatura", "jalebi", "gulab jamun", "chips", "fries",
+    "fried", "deep fry", "medu", "murukku", "chakli", "sev ", "namkeen",
+    "papad", "wafer", "nugget", "cutlet", "spring roll", "manchurian",
+)
+
+_ULTRA_PROCESSED_KEYWORDS = (
+    "instant noodles", "maggi", "burger", "pizza", "soft drink", "cola",
+    "packaged", "candy", "chocolate bar", "energy drink", "ice cream",
+    "pastry", "doughnut", "donut", "cake", "biscuit", "cookie", "white bread",
+)
+
+# Categories the dataset itself marks as outside a health plan.
+_LOW_QUALITY_CATEGORIES = frozenset({
+    "Fast Foods", "Street Foods", "Desserts & Sweets",
+})
+
+# Goals where food QUALITY is the point, not just hitting a calorie number.
+_HEALTH_GOALS = frozenset({
+    "Weight Loss", "Fat Loss", "General Fitness", "Endurance",
+})
+
+
+def _name_matches(name: str, keywords) -> bool:
+    n = _norm(name)
+    return any(k in n for k in keywords)
+
+
+def nutrition_quality_score(food: dict) -> float:
+    """0..1 — how defensible this food is inside a health plan.
+
+    Deliberately NOT a nutrition-density score: a food can be macro-perfect
+    and still be a deep-fried street snack. This measures whether a coach
+    would put it in a plan.
+    """
+    score = 0.55  # neutral home-cooked baseline
+
+    cal = float(food.get("calories") or 0)
+    protein = float(food.get("protein") or 0)
+    fiber = float(food.get("fiber") or 0)
+    sugar = float(food.get("sugar") or 0)
+    sodium = float(food.get("sodium") or 0)
+    fat = float(food.get("fat") or 0)
+
+    # ── Rewards, all from real values ──
+    if cal > 0:
+        # Protein and fibre DENSITY per 100 kcal — the two things that make a
+        # meal satisfying and useful, independent of portion size.
+        score += min(0.20, (protein / cal) * 100 * 0.020)
+        score += min(0.12, (fiber / cal) * 100 * 0.030)
+    if food.get("high_protein"):
+        score += 0.08
+    if food.get("high_fiber"):
+        score += 0.06
+    if food.get("heart_friendly"):
+        score += 0.05
+    if food.get("diabetes_friendly"):
+        score += 0.04
+    if food.get("weight_loss_friendly"):
+        score += 0.06
+    # The dataset's own weight-loss rating, normalised.
+    score += min(0.10, (float(food.get("weightLossScore") or 0) / 100.0) * 0.10)
+
+    # ── Severe penalties ──
+    name = food.get("name", "")
+    if _name_matches(name, _DEEP_FRIED_KEYWORDS):
+        score -= 0.45
+    if _name_matches(name, _ULTRA_PROCESSED_KEYWORDS):
+        score -= 0.45
+    if food.get("category") in _LOW_QUALITY_CATEGORIES:
+        score -= 0.25
+    if food.get("street_food"):
+        score -= 0.12
+    if food.get("festival_food"):
+        score -= 0.10
+
+    # Added sugar and sodium, scaled to portion.
+    if cal > 0:
+        if (sugar / cal) * 100 > 8:
+            score -= 0.18
+        if sodium > 600:
+            score -= 0.12
+        if (fat / cal) * 100 > 5.5:  # fat-dominant
+            score -= 0.10
+
+    return max(0.0, min(1.0, score))
+
+
+# Below this, a food is not offered in a health-goal plan at all.
+_MIN_QUALITY_FOR_HEALTH_GOALS = 0.40
+
+
+def is_health_plan_appropriate(food: dict, goal_tags: list[str] | None) -> bool:
+    """Hard gate. Applied only for health-oriented goals — a Weight Gain plan
+    legitimately has more room, and an expert can still place anything by hand
+    through the plan editor."""
+    if not goal_tags or not any(g in _HEALTH_GOALS for g in goal_tags):
+        return True
+    return nutrition_quality_score(food) >= _MIN_QUALITY_FOR_HEALTH_GOALS
 
 
 class FoodRecommendationEngine:
@@ -414,13 +692,23 @@ class FoodRecommendationEngine:
         ]
         active = [(n, s) for n, s in stages if s is not None]
 
+        # MEAL SLOT IS NOT RELAXABLE. The loop below degrades gracefully by
+        # dropping stages from the tail, and `cut=0` returns `base` — which
+        # has no meal filter at all. That is how breakfast-only foods could
+        # surface at dinner: a thin pool fell all the way through. The slot
+        # is pinned separately so every fallback still respects it.
+        meal_ids = next((s for n, s in active if n == "meal"), None)
+
         for cut in range(len(active), -1, -1):
             ids = set(base)
             for _, s in active[:cut]:
                 ids &= s
+            if meal_ids is not None:
+                ids &= meal_ids
             if ids:
                 return ids
-        return base
+        # Everything else exhausted — still never cross the meal boundary.
+        return (base & meal_ids) if meal_ids is not None else base
 
     # ── Scoring ──────────────────────────────────────────────────────────
 
@@ -486,6 +774,9 @@ class FoodRecommendationEngine:
         profile: dict | None = None,
         user_state: str | None = None,
         compatible_regions: set[str] | None = None,
+        season_tag: str | None = None,
+        meal_preparer: str | None = None,
+        disliked_foods: list[str] | None = None,
     ) -> float:
         goal_hits = sum(1 for g in goal_tags if g in food.get("goalSuitable", []))
         goal_component = min(1.0, goal_hits / max(1, len(goal_tags))) if goal_tags else 0.7
@@ -514,7 +805,37 @@ class FoodRecommendationEngine:
             budget_component = 0.8
 
         name_lc = _norm(food["name"])
-        pref_component = 1.0 if any(_norm(f) in name_lc for f in favorite_foods if f) else 0.5
+        # LIKES are now the heaviest signal, so the gap between "they told us
+        # they love this" and "we have no signal" has to be wide enough to
+        # actually move ranking — a 1.0/0.5 split under a 0.26 weight is what
+        # makes "I already have this at home" win.
+        liked = any(_norm(f) in name_lc for f in favorite_foods if f)
+        pref_component = 1.0 if liked else 0.45
+
+        # A stated dislike is a soft-zero rather than a hard filter here: the
+        # hard exclusion already happened in `_pipeline_ids`, and this only
+        # catches near-misses (a variant whose name didn't match exactly).
+        for d in (disliked_foods or []):
+            if d and _norm(d) in name_lc:
+                pref_component = 0.0
+                break
+
+        # SEASON — prefer what is actually in the market this month. "All
+        # Season" foods are neutral rather than penalised; they're the staples
+        # a plan legitimately leans on year-round.
+        food_seasons = food.get("season") or []
+        if not season_tag or not food_seasons:
+            season_component = 0.7
+        elif season_tag in food_seasons:
+            season_component = 1.0
+        elif "All Season" in food_seasons:
+            season_component = 0.8
+        else:
+            season_component = 0.25
+
+        # KITCHEN FIT — is this realistic for whoever actually cooks?
+        season_component = min(1.0, season_component)
+        kitchen_component = self._kitchen_fit(food, meal_preparer)
 
         # Profile-rule bonuses fold into the existing Availability/Preference
         # buckets rather than adding new weight categories (keeps the 40/25/
@@ -536,10 +857,58 @@ class FoodRecommendationEngine:
         region_component = self._region_component(food, user_state, compatible_regions, favorite_foods)
 
         return (
-            _W_GOAL * goal_component + _W_MEDICAL * medical_component + _W_REGION * region_component
-            + _W_AVAIL * avail_component + _W_BUDGET * budget_component + _W_PREF * pref_component
+            _W_PREF * pref_component
+            + _W_REGION * region_component
+            + _W_BUDGET * budget_component
+            + _W_GOAL * goal_component
+            + _W_KITCHEN * kitchen_component
+            + _W_AVAIL * avail_component
+            + _W_SEASON * season_component
             + _W_VARIETY * variety_component
+            + _W_MEDICAL * medical_component
         )
+
+
+    # Who actually cooks decides what "realistic" means. The dataset already
+    # carries every signal this needs (hostel_friendly, home_cooked,
+    # restaurant_food, preparation_time_minutes, difficulty), so this reads
+    # real food metadata rather than guessing from names.
+    _PREPARER_NEUTRAL = 0.6
+
+    def _kitchen_fit(self, food: dict, preparer: str | None) -> float:
+        if not preparer:
+            return self._PREPARER_NEUTRAL
+        prep_minutes = food.get("preparation_time_minutes") or 20
+        easy = (food.get("difficulty") or "Medium") in ("Easy", "Very Easy")
+
+        if preparer in ("hostel_mess", "tiffin"):
+            # No kitchen of their own — it has to be something the mess
+            # actually serves or that needs no cooking.
+            if food.get("hostel_friendly"):
+                return 1.0
+            return 0.8 if "Ready to Eat" in (food.get("availability") or []) else 0.25
+
+        if preparer == "restaurant":
+            # Eating out: reward things a restaurant plausibly serves, and
+            # don't pretend they'll assemble a home salad.
+            if food.get("restaurant_food"):
+                return 1.0
+            return 0.7 if food.get("street_food") else 0.4
+
+        if preparer == "self":
+            # Cooking for one, usually short on time — quick and easy wins.
+            if prep_minutes <= 15 and easy:
+                return 1.0
+            if prep_minutes <= 30:
+                return 0.75
+            return 0.35
+
+        if preparer in ("family", "cook"):
+            # A household kitchen: proper home-cooked meals are the point, and
+            # prep time is somebody else's constraint.
+            return 1.0 if food.get("home_cooked") else 0.7
+
+        return self._PREPARER_NEUTRAL
 
     def recommend(
         self,
@@ -561,6 +930,7 @@ class FoodRecommendationEngine:
         max_prep_minutes: int | None = None,
         user_state: str | None = None,
         compatible_regions: set[str] | None = None,
+        meal_preparer: str | None = None,
     ) -> list[dict]:
         """Filter -> score -> rank. Returns up to top_n real dataset foods."""
         meal_tag = _SLOT_TO_MEAL_TAG.get(meal_slot, meal_slot)
@@ -591,7 +961,9 @@ class FoodRecommendationEngine:
         scored = [
             (self._score(self.by_id[i], goal_tags, living_situation, budget_tier,
                          favorite_foods, usage_counts.get(i, 0), profile,
-                         user_state=user_state, compatible_regions=compatible_regions), i)
+                         user_state=user_state, compatible_regions=compatible_regions,
+                         season_tag=season_tag, meal_preparer=meal_preparer,
+                         disliked_foods=disliked_foods), i)
             for i in ids
         ]
         scored.sort(key=lambda t: (-t[0], t[1]))
@@ -920,6 +1292,8 @@ class FoodRecommendationEngine:
         favorite_foods: list[str] | None = None,
         recent_families: dict[str, int] | None = None,
         target_calories: float | None = None,
+        meal_preparer: str | None = None,
+        disliked_foods: list[str] | None = None,
     ) -> list[dict]:
         exclude_strings = [_norm(n) for n in exclude_names if n]
         exclude_bases = {_base_dish_name(n) for n in exclude_names if n}
@@ -931,6 +1305,14 @@ class FoodRecommendationEngine:
             user_state=user_state, compatible_regions=compatible_regions, favorite_foods=favorite_foods,
         )
         ids = {i for i in ids if not self._is_excluded(self.by_id[i], exclude_strings, exclude_bases)}
+
+        # HEALTH GATE — deep-fried, ultra-processed and high-sugar foods are
+        # removed outright for fitness goals. They are not "a bit worse"; they
+        # are the opposite of what the athlete is training for, and no macro
+        # match justifies offering one.
+        healthy = {i for i in ids if is_health_plan_appropriate(self.by_id[i], goal_tags)}
+        if healthy:
+            ids = healthy
 
         # HARD family exclusion. A score penalty alone is not enough: in a
         # pool already narrowed by region + diet + goal, one family can lead
@@ -976,6 +1358,8 @@ class FoodRecommendationEngine:
                 food, goal_tags, living_situation, budget_tier,
                 favorite_foods or [], 0, profile,
                 user_state=user_state, compatible_regions=compatible_regions,
+                season_tag=season_tag, meal_preparer=meal_preparer,
+                disliked_foods=disliked_foods,
             )
             # Recency penalty applied OUTSIDE the fixed 30/20/20/12/8/5/5
             # formula, on purpose. Routing it through `_score`'s variety term
@@ -987,6 +1371,9 @@ class FoodRecommendationEngine:
             # type, or goal fit.
             seen = (recent_families or {}).get(dish_family(food["name"]), 0)
             score = base - min(_MAX_RECENCY_PENALTY, seen * _RECENCY_STEP)
+            # Quality is a ranking term as well as a gate: among foods that
+            # all clear the bar, the better one should still come first.
+            score += _W_QUALITY * nutrition_quality_score(food)
 
             # NUTRITION MATCH — a replacement has to be a comparable meal, not
             # merely a different one. Without this, pushing hard for variety
@@ -1075,6 +1462,8 @@ class FoodRecommendationEngine:
         favorite_foods: list[str] | None = None,
         recent_families: dict[str, int] | None = None,
         target_calories: float | None = None,
+        meal_preparer: str | None = None,
+        disliked_foods: list[str] | None = None,
     ) -> list[dict]:
         """Ranked single-food alternatives (kept for offline fallback and
         snack slots). For main meals, anchors-only: never offers a single
@@ -1085,6 +1474,8 @@ class FoodRecommendationEngine:
             user_state=user_state, compatible_regions=compatible_regions, favorite_foods=favorite_foods,
             recent_families=recent_families,
             target_calories=target_calories,
+            meal_preparer=meal_preparer,
+            disliked_foods=disliked_foods,
         )
         if meal_slot in self._MAIN_SLOTS or meal_slot == "breakfast":
             anchors = [f for f in pool if self._is_meal_anchor(f, meal_slot)]
@@ -1122,6 +1513,9 @@ class FoodRecommendationEngine:
         favorite_foods: list[str] | None = None,
         recent_families: dict[str, int] | None = None,
         target_calories: float | None = None,
+        meal_preparer: str | None = None,
+        disliked_foods: list[str] | None = None,
+        nutrition_target: dict[str, float] | None = None,
     ) -> list[list[dict]]:
         """Full-meal swap: each result is a COMPLETE composed meal (e.g.
         'Paneer Bhurji with Roti + Curd + Salad'), never a lone ingredient.
@@ -1134,11 +1528,20 @@ class FoodRecommendationEngine:
             user_state=user_state, compatible_regions=compatible_regions, favorite_foods=favorite_foods,
             recent_families=recent_families,
             target_calories=target_calories,
+            meal_preparer=meal_preparer,
+            disliked_foods=disliked_foods,
         )
         if not pool:
             return []
         combos: list[list[dict]] = []
         used_anchor_bases: set[str] = set()
+        rejected_for_nutrition: list[list[dict]] = []
+        _tolerance = 1.0
+        # Reset per call. Read by callers to tell the athlete when a result is
+        # a "closest available match" rather than a true nutritional peer —
+        # silently widening the band and presenting the result as equivalent
+        # would be dishonest.
+        self.last_swap_tolerance = 1.0
         for anchor in pool:
             if len(combos) >= n_combos:
                 break
@@ -1153,8 +1556,41 @@ class FoodRecommendationEngine:
             combo = self.build_meal_combo(sub_pool, meal_slot, None)
             if self.validate_meal_combo(combo, meal_slot):
                 continue  # failed validation — try the next anchor
+            # NUTRITION GATE — a replacement outside the band is rejected and
+            # the search continues, rather than being offered because it
+            # happened to rank well.
+            if not combo_meets_nutrition(combo, nutrition_target, _tolerance):
+                rejected_for_nutrition.append(combo)
+                continue
             used_anchor_bases.add(base)
             combos.append(combo)
+        # PROGRESSIVE RELAXATION — only ever of the nutrition band, and only
+        # when the strict pass found nothing. Widening in steps keeps the
+        # closest match first: an athlete is better served by a 20%-off meal
+        # labelled honestly than by an empty sheet. Safety/diet/allergy
+        # filters are NOT part of this and are never relaxed.
+        if len(combos) < n_combos and rejected_for_nutrition and nutrition_target:
+            # Widen in steps and KEEP FILLING until we have enough options.
+            # Stopping at the first factor that yielded anything is what left
+            # the athlete staring at a single choice: one near-miss passed at
+            # 1.5x and the search ended there.
+            seen_families = {dish_family(c[0]["name"]) for c in combos}
+            for factor in (1.5, 2.0, 3.0):
+                for candidate in rejected_for_nutrition:
+                    if len(combos) >= n_combos:
+                        break
+                    fam = dish_family(candidate[0]["name"])
+                    if fam in seen_families:
+                        continue
+                    if combo_meets_nutrition(candidate, nutrition_target, factor):
+                        combos.append(candidate)
+                        seen_families.add(fam)
+                        self.last_swap_tolerance = max(self.last_swap_tolerance, factor)
+                if len(combos) >= n_combos:
+                    break
+            if self.last_swap_tolerance > 1.0:
+                print(f"[SWAP ENGINE] nutrition band widened to x{self.last_swap_tolerance}")
+
         if not combos and pool:
             # No anchor survived validation (ultra-restrictive filters) —
             # degrade to the best single candidates rather than nothing.
