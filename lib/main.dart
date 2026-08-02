@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import 'app/app.dart';
 import 'core/config/firebase_bootstrap.dart';
+import 'core/notifications/zino_notification_scheduler.dart';
 import 'core/steps/step_background_worker.dart';
 import 'core/storage/local_storage_service.dart';
 
@@ -57,6 +58,11 @@ Future<void> main() async {
   // startup — see StepBackgroundWorker for the Android delivery limits this
   // is explicitly subject to.
   unawaited(StepBackgroundWorker.register());
+
+  // (Re)schedule Zino's daily reminders on every launch. Idempotent — each
+  // slot has a stable id, so this replaces rather than stacking duplicates,
+  // and it repairs the schedule if Android ever dropped it.
+  unawaited(ZinoNotificationScheduler().scheduleAll());
 
   runApp(ZitlasApp(firebaseReady: firebaseReady));
 }

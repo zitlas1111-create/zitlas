@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/zitlas_tokens.dart';
 import '../../diet_controller.dart';
 import '../../models/diet_meal.dart';
+import '../../models/swap_result.dart';
 
 /// Native rebuild of `#swapModal` (`frontend/pages/diet/diet.js:848-1260`) —
 /// the REAL website's 3-phase swap flow: Phase A asks WHY before anything
@@ -68,7 +69,11 @@ class _MealSwapSheetState extends State<_MealSwapSheet> {
   final List<Map<String, dynamic>> _previousSuggestions = [];
 
   String? _error;
-  Map<String, dynamic>? _suggestion;
+
+  /// The engine's full ranked result. Held verbatim — the sheet renders what
+  /// the backend sent, in the order it sent it, and never re-ranks or filters.
+  SwapResult? _result;
+  int _selected = 0;
 
   Future<void> _selectReason(String reason) async {
     setState(() {
@@ -76,7 +81,7 @@ class _MealSwapSheetState extends State<_MealSwapSheet> {
       _phase = _SwapPhase.loading;
       _error = null;
     });
-    final swap = await widget.controller.requestMealSwap(
+    final result = await widget.controller.requestMealSwap(
       dayIndex: widget.dayIndex,
       mealIndex: widget.mealIndex,
       reason: reason,
@@ -85,13 +90,18 @@ class _MealSwapSheetState extends State<_MealSwapSheet> {
     );
     if (!mounted) return;
     setState(() {
-      if (swap == null) {
+      if (result == null || result.isEmpty) {
         _phase = _SwapPhase.reason;
         _error = 'Could not get a suggestion. Please try again.';
       } else {
         _phase = _SwapPhase.result;
-        _suggestion = swap;
-        _previousSuggestions.add(swap);
+        _result = result;
+        _selected = 0;
+        // Every option shown counts as "already offered", so Try Again gets a
+        // genuinely fresh set rather than reshuffling the same five.
+        for (final o in result.options) {
+          _previousSuggestions.add({'foods': o.foods});
+        }
       }
     });
   }
@@ -105,8 +115,20 @@ class _MealSwapSheetState extends State<_MealSwapSheet> {
   }
 
   Future<void> _accept() async {
-    final suggestion = _suggestion;
-    if (suggestion == null) return;
+    final result = _result;
+    if (result == null || result.isEmpty) return;
+    final chosen = result.options[_selected];
+    // Rebuilt into the shape acceptSwap() already persists — the engine's own
+    // numbers, not anything recomputed here.
+    final suggestion = <String, dynamic>{
+      'name': chosen.name,
+      'foods': chosen.foods,
+      'calories': chosen.calories,
+      'protein_g': chosen.proteinG,
+      'carbs_g': chosen.carbsG,
+      'fat_g': chosen.fatG,
+      'reason': chosen.reason,
+    };
     setState(() => _phase = _SwapPhase.loading);
     try {
       await widget.controller.acceptSwap(
@@ -235,45 +257,45 @@ class _MealSwapSheetState extends State<_MealSwapSheet> {
   }
 
   Widget _resultPhase() {
-    final suggestion = _suggestion!;
-    final suggestedFoods = suggestion['foods'] is List
-        ? (suggestion['foods'] as List).map((e) => e.toString()).toList()
-        : const <String>[];
-
+    final result = _result!;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Swap ${widget.meal.mealName}', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: ZitlasTokens.textPrimary)),
+        Text('Swap ${widget.meal.mealName}',
+            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: ZitlasTokens.textPrimary)),
         const SizedBox(height: 4),
-        Text('Current: ${widget.meal.foods.join(', ')}', style: const TextStyle(fontSize: 12.5, color: ZitlasTokens.textSecondary)),
-        const SizedBox(height: 14),
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(color: ZitlasTokens.bgCardLight, borderRadius: BorderRadius.circular(16)),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Suggested swap', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: ZitlasTokens.primaryDark)),
-              const SizedBox(height: 6),
-              ...suggestedFoods.map((f) => Text('• $f', style: const TextStyle(fontSize: 13, color: ZitlasTokens.textPrimary))),
-              if (suggestion['calories'] != null || suggestion['protein_g'] != null) ...[
-                const SizedBox(height: 8),
-                Text(
-                  [
-                    if (suggestion['calories'] != null) '${suggestion['calories']} kcal',
-                    if (suggestion['protein_g'] != null) '${suggestion['protein_g']}g protein',
-                  ].join(' · '),
-                  style: const TextStyle(fontSize: 11.5, color: ZitlasTokens.textMuted),
-                ),
-              ],
-              if (suggestion['reason'] != null) ...[
-                const SizedBox(height: 8),
-                Text('Why this works', style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: ZitlasTokens.textMuted)),
-                Text('${suggestion['reason']}', style: const TextStyle(fontSize: 11.5, color: ZitlasTokens.textSecondary)),
-              ],
-            ],
+        Text('Current: ${widget.meal.foods.join(', ')}',
+            style: const TextStyle(fontSize: 12.5, color: ZitlasTokens.textSecondary)),
+        const SizedBox(height: 10),
+
+        // Honesty banner — shown only when the engine had to widen its
+        // nutrition band. Presenting a widened match as a true nutritional
+        // peer would be misleading, so the athlete is told.
+        if (result.relaxedMatch)
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: ZitlasTokens.primary.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text('⚠ ${result.matchNote}',
+                style: const TextStyle(fontSize: 11.5, color: ZitlasTokens.primaryDark)),
           ),
-        ),
+
+        Text('${result.options.length} options — tap to choose',
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: ZitlasTokens.textMuted)),
+        const SizedBox(height: 8),
+
+        for (var i = 0; i < result.options.length; i++)
+          _OptionCard(
+            option: result.options[i],
+            rank: i + 1,
+            selected: i == _selected,
+            onTap: () => setState(() => _selected = i),
+          ),
+
         const SizedBox(height: 14),
         Row(
           children: [
@@ -306,4 +328,101 @@ class _MealSwapSheetState extends State<_MealSwapSheet> {
       ],
     );
   }
+}
+
+/// One engine-ranked option. Shows the macros, the data-derived reason,
+/// availability and budget — everything the athlete needs to choose, straight
+/// from the response.
+class _OptionCard extends StatelessWidget {
+  const _OptionCard({
+    required this.option,
+    required this.rank,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final SwapOption option;
+  final int rank;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: selected ? ZitlasTokens.primary.withValues(alpha: 0.08) : ZitlasTokens.bgCardLight,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: selected ? ZitlasTokens.primary : ZitlasTokens.borderSub,
+                width: selected ? 1.6 : 1,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    if (rank == 1)
+                      const Padding(
+                        padding: EdgeInsets.only(right: 4),
+                        child: Text('⭐', style: TextStyle(fontSize: 12)),
+                      ),
+                    Expanded(
+                      child: Text(option.name,
+                          style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800, color: ZitlasTokens.textPrimary)),
+                    ),
+                    if (selected)
+                      const Icon(Icons.check_circle_rounded, size: 18, color: ZitlasTokens.primary),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '${option.calories} kcal · ${option.proteinG}g P · '
+                  '${option.carbsG}g C · ${option.fatG}g F',
+                  style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: ZitlasTokens.textSecondary),
+                ),
+                const SizedBox(height: 4),
+                Text(option.reason,
+                    style: const TextStyle(fontSize: 11, height: 1.35, color: ZitlasTokens.textMuted)),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: [
+                    _Tag(text: '📍 ${option.availability}'),
+                    _Tag(text: '💰 ${option.budgetLevel}'),
+                    if (option.highProtein) const _Tag(text: '💪 High protein'),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Tag extends StatelessWidget {
+  const _Tag({required this.text});
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+        decoration: BoxDecoration(
+          color: ZitlasTokens.bgCard,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: ZitlasTokens.borderSub),
+        ),
+        child: Text(text, style: const TextStyle(fontSize: 9.5, color: ZitlasTokens.textMuted)),
+      );
 }

@@ -1404,3 +1404,91 @@ transaction on all three completion paths),
 - **Real-device test — NOT PERFORMED.** No Android device connected, so the
   physical double-tap, slow-network, and app-resumed-mid-completion cases are
   covered by unit tests only.
+
+---
+
+# Phase — Zino Smart Notification System
+
+## What was built
+
+Eight fixed daily reminders delivered by the Android AlarmManager, so they fire
+with the app closed, minimised or the screen locked. Nothing of ours needs to be
+running.
+
+| Time | Slot | Category | Copy source |
+|------|------|----------|-------------|
+| 07:30 | Morning motivation | motivation | 365 quotes, one per day of the year |
+| 09:00 | Breakfast | meals | 52 messages |
+| 13:00 | Lunch | meals | 51 messages |
+| 17:00 | Snack | meals | 51 messages |
+| 18:00 | Step progress | steps | Generated from the day's REAL step count |
+| 19:00 | Workout | workout | 20 messages, suppressed if already trained |
+| 20:30 | Dinner | meals | 51 messages |
+| 22:00 | Night wind-down | motivation | 30 messages |
+
+## Design decisions worth knowing
+
+**Rotation is day-of-year, not random.** A notification handed to AlarmManager
+hours ahead must display the text it was scheduled with; a random pick at
+schedule time and another at display time would disagree. Day-indexing also
+makes "never the same message two days running" provable — consecutive days are
+always different list positions — rather than hoped for.
+
+**The two contextual slots carry placeholder text in the schedule and are
+rewritten at fire time.** A schedule fixed hours earlier cannot know whether the
+goal was met. `runStepReminder()` reads the real step total and either
+encourages with actual numbers ("6,200 of 8,000 — 1,800 to go") or celebrates;
+`runWorkoutReminder()` sends *nothing at all* if the session is already done.
+Telling someone to finish steps they already finished is what gets an app muted.
+
+**Preferences are stored as the DISABLED set**, so a category added in a future
+release defaults ON without a migration. Device-scoped, not account-scoped —
+"don't buzz this phone" is a property of the handset.
+
+**`USE_EXACT_ALARM` is deliberately NOT declared.** It is auto-granted, but Play
+restricts it to apps whose core function is an alarm clock, timer or calendar; a
+fitness app that declares it fails policy review. `SCHEDULE_EXACT_ALARM` is
+requested at runtime instead, and the scheduler falls back to
+`inexactAllowWhileIdle` when it isn't held — a reminder inside a window beats no
+reminder at all. Profile → Notifications surfaces an opt-in "Allow precise
+timing" card only when the grant is missing.
+
+**The permission ask happens after the Zino tour, not at launch.** Android shows
+its POST_NOTIFICATIONS dialog exactly once per install; spending it cold is the
+fastest route to a permanent "Don't allow". A new user who has just seen what
+Zino does understands what the reminders are for.
+
+## Files added
+
+`lib/core/notifications/zino_messages.dart` (365 quotes + 205 slot messages),
+`zino_notification_scheduler.dart`, `notification_preferences.dart`,
+`zino_contextual_reminders.dart`, `notification_onboarding.dart`,
+`presentation/notification_consent_sheet.dart`,
+`lib/features/profile/presentation/screens/notification_settings_screen.dart`,
+`test/notification_test.dart`, `test/notification_onboarding_test.dart`.
+
+Modified: `AndroidManifest.xml` (boot receiver, `RECEIVE_BOOT_COMPLETED`,
+`SCHEDULE_EXACT_ALARM`), `lib/main.dart` (reschedule on every launch),
+`lib/core/widgets/app_shell.dart` (one-time ask), `lib/app/router.dart` +
+Profile row (`/profile/notifications`).
+
+## Validation
+
+- `flutter analyze lib/ test/` — 21 issues, **all info-level**. No warnings or errors.
+- `flutter test` — **351/351 passed** (+32 new across the two notification suites).
+- `flutter build apk --debug` — **succeeded**.
+- **Real device (OnePlus, Android 15):**
+  - All 8 slots confirmed queued in the OS AlarmManager via `dumpsys alarm`, at
+    exactly 07:30 / 09:00 / 13:00 / 17:00 / 18:00 / 19:00 / 20:30 / 22:00,
+    targeting `ScheduledNotificationReceiver`.
+  - Inexact fallback confirmed working: after removing `USE_EXACT_ALARM` the
+    alarms re-registered as windowed (`window=+1h`) instead of throwing.
+  - Fresh-install permission state confirmed (`granted=false` after uninstall);
+    the "already granted" onboarding branch confirmed writing
+    `flutter.zitlas_notification_prompted=true` and rescheduling.
+  - `am force-stop` cancels the alarms — this is documented Android behaviour
+    for an explicit user stop, not a defect. Reopening the app restores them.
+  - **Post-reboot verification INCOMPLETE.** The device was rebooted with 8
+    alarms queued, but Android disables Wireless Debugging across a reboot, so
+    the post-boot alarm queue could not be read. The boot receiver is declared
+    and the permission granted; the check itself is still owed.

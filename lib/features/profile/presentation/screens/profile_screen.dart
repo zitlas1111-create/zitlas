@@ -102,6 +102,12 @@ class _ProfileBody extends StatelessWidget {
                       // back that isn't a nag.
                       const _StepTrackingRow(),
                       const _VoiceLanguageRow(),
+                      _SettingsRow(
+                        icon: Icons.notifications_none_rounded,
+                        label: 'Notifications',
+                        subtitle: "Zino's daily reminders",
+                        onTap: () => context.push('/profile/notifications'),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 20),

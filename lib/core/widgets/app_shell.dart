@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../features/auth/auth_state.dart';
+import '../notifications/notification_onboarding.dart';
+import '../notifications/presentation/notification_consent_sheet.dart';
 import '../../features/zino/presentation/widgets/zino_fab.dart';
 import '../../features/zino/tour/zino_tour_controller.dart';
 import '../../features/zino/tour/zino_tour_overlay.dart';
@@ -52,6 +56,11 @@ class _AppShellState extends State<AppShell> {
   ZinoTourController? _tour;
   String? _tourUid;
 
+  /// In-session latch. Both the "no tour" and "tour finished" paths can fire,
+  /// and an account switch re-runs [_initTourFor] — without this the sheet
+  /// could be pushed twice.
+  bool _askedAboutNotifications = false;
+
   /// Tour screen -> nav branch index, so advancing the walkthrough moves the
   /// athlete through the real app the way the website navigated between pages.
   static const _branchForTourScreen = {
@@ -88,6 +97,9 @@ class _AppShellState extends State<AppShell> {
       _syncBranchToTour();
     } else {
       controller.dispose();
+      // Returning athlete: no walkthrough to wait behind, so the notification
+      // ask (if it's still owed) can happen right away.
+      unawaited(_maybeAskAboutNotifications());
     }
   }
 
@@ -100,6 +112,11 @@ class _AppShellState extends State<AppShell> {
       setState(() => _tour = null);
       tour.removeListener(_onTourChanged);
       tour.dispose();
+      // Deliberately AFTER the walkthrough rather than at launch: a new user
+      // who has just been shown what Zino does understands what the reminders
+      // are for, and a permission sheet stacked on the tour spotlight would
+      // block the very thing it's explaining.
+      unawaited(_maybeAskAboutNotifications());
       return;
     }
     setState(() {});
@@ -113,6 +130,18 @@ class _AppShellState extends State<AppShell> {
     final target = _branchForTourScreen[tour.current.screen];
     if (target == null || target == widget.navigationShell.currentIndex) return;
     widget.navigationShell.goBranch(target);
+  }
+
+  /// One-time notification ask, guarded by [NotificationOnboarding] so a
+  /// returning athlete is never re-pitched and Android's single-shot system
+  /// dialog isn't spent before the athlete knows what it's for.
+  Future<void> _maybeAskAboutNotifications() async {
+    if (_askedAboutNotifications) return;
+    _askedAboutNotifications = true;
+    const onboarding = NotificationOnboarding();
+    if (!await onboarding.shouldPrompt()) return;
+    if (!mounted) return;
+    await showNotificationConsentSheet(context, onboarding: onboarding);
   }
 
   /// Entry point for Profile -> "Take Zino Tour Again". Replaying never

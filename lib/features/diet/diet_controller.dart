@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../core/network/api_exception.dart';
 import 'models/diet_profile.dart';
+import 'models/swap_result.dart';
 import '../expert_dashboard/models/expert_models.dart' show ExpertProfile;
 import 'data/diet_repository.dart';
 import 'models/diet_calculations.dart';
@@ -234,7 +235,7 @@ class DietController extends ChangeNotifier {
   /// Returns the raw `{foods, calories?, protein_g?}` swap so the caller can
   /// show a preview before committing via [acceptSwap]; never writes
   /// anything itself.
-  Future<Map<String, dynamic>?> requestMealSwap({
+  Future<SwapResult?> requestMealSwap({
     required int dayIndex,
     required int mealIndex,
     required String reason,
@@ -295,7 +296,21 @@ class DietController extends ChangeNotifier {
         previousSuggestions: previousSuggestions,
         fitnessGoal: (goal?['type'] as String?) ?? (assessment['fitness_goal'] as String?) ?? 'general_fitness',
       );
-      if (kDebugMode) debugPrint('[SWAP] status = 200, alternative received: ${result['name'] ?? result['foods']}');
+      if (kDebugMode) {
+        // Logged verbatim from the response so backend output and UI can be
+        // compared line-for-line — the whole point of removing the LLM was
+        // that what the engine ranked is what the athlete sees.
+        debugPrint('[SWAP] current   = ${meal.foods.join(", ")}');
+        debugPrint('[SWAP] returned  = ${result.options.length} options '
+            'in ${result.elapsedMs}ms (llm=${result.llmUsed})');
+        for (var i = 0; i < result.options.length; i++) {
+          final o = result.options[i];
+          debugPrint('[SWAP]   ${i + 1}. ${o.name} — ${o.calories}kcal '
+              '${o.proteinG}P ${o.carbsG}C ${o.fatG}F | ${o.budgetLevel}');
+          debugPrint('[SWAP]      reason: ${o.reason}');
+        }
+        debugPrint('[SWAP] match     = ${result.matchNote}');
+      }
       return result;
     } catch (e) {
       swapError = e;

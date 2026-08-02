@@ -460,7 +460,14 @@ def is_health_plan_appropriate(food: dict, goal_tags: list[str] | None) -> bool:
 class FoodRecommendationEngine:
     def __init__(self, path: Path = _DATASET_PATH):
         raw: list[dict] = json.loads(path.read_text(encoding="utf-8"))
-        self.by_id: dict[int, dict] = {f["id"]: f for f in raw}
+
+        # A record with no `id` used to raise a bare KeyError here, killing
+        # backend startup with a traceback that says nothing about which food
+        # or how many. Skipping it lets the integrity report below name the
+        # real problem — a diagnosable boot beats an opaque crash.
+        self.by_id: dict[int, dict] = {
+            f["id"]: f for f in raw if f.get("id") is not None
+        }
         self.all_ids: set[int] = set(self.by_id.keys())
 
         self._idx_meal: dict[str, set[int]] = defaultdict(set)
@@ -496,7 +503,9 @@ class FoodRecommendationEngine:
         self._effective_states: dict[int, frozenset[str]] = {}
 
         for f in raw:
-            fid = f["id"]
+            fid = f.get("id")
+            if fid is None:
+                continue  # already excluded from by_id; keep indexes consistent
             for tag in f.get("mealSuitable", []):
                 self._idx_meal[tag].add(fid)
             for tag in f.get("goalSuitable", []):
@@ -524,9 +533,106 @@ class FoodRecommendationEngine:
                 self._idx_state[state].add(fid)
             self._idx_region[f.get("region", "Pan-India")].add(fid)
 
-        print(f"[FOOD ENGINE] Loaded {len(raw)} foods, indexes built "
-              f"(meal:{len(self._idx_meal)} goal:{len(self._idx_goal)} "
-              f"diet:{len(self._idx_diet)} disease:{len(self._idx_disease_unsafe)})")
+        self._print_startup_report(raw)
+
+    # ── Startup report ───────────────────────────────────────────────────
+
+    def _print_startup_report(self, raw: list[dict]) -> None:
+        """Dataset inventory, printed once at import.
+
+        Includes an INTEGRITY CHECK, which is the part that earns its keep:
+        counting rows in the file and comparing against what actually made it
+        into the index is the only way a silent truncation (a duplicate id
+        overwriting an entry, a malformed record) shows up as anything other
+        than mysteriously poor recommendations months later.
+        """
+        file_records = len(raw)
+        loaded = len(self.by_id)
+
+        def tally(index: dict[str, set[int]]) -> list[tuple[str, int]]:
+            return sorted(index.items(), key=lambda kv: -len(kv[1]))
+
+        line = "=" * 62
+        print()
+        print(line)
+        print("  ZITLAS FOOD ENGINE")
+
+        if loaded == file_records:
+            print(f"  Dataset Loaded Successfully  -  {loaded:,} foods")
+        else:
+            # Never a silent pass: a mismatch means records were dropped.
+            missing = file_records - loaded
+            print(f"  !! INCOMPLETE LOAD - {loaded:,} of {file_records:,} "
+                  f"({missing:,} records lost)")
+            ids = [f.get("id") for f in raw]
+            dupes = len(ids) - len(set(ids))
+            no_id = sum(1 for i in ids if i is None)
+            if dupes:
+                print(f"    cause: {dupes:,} duplicate id(s) overwriting entries")
+            if no_id:
+                print(f"    cause: {no_id:,} record(s) with no id")
+
+        print(line)
+        print(f"  Source        : {_DATASET_PATH.name}")
+        print(f"  States Covered: {len(self._idx_state)}")
+        print()
+
+        print("  BY MEAL TYPE")
+        for tag, ids in tally(self._idx_meal):
+            print(f"    {tag:<30} {len(ids):>6,}")
+        print()
+
+        print("  BY DIET PREFERENCE")
+        for tag, ids in tally(self._idx_diet):
+            print(f"    {tag:<30} {len(ids):>6,}")
+        print()
+
+        print("  BY BUDGET")
+        for tag, ids in tally(self._idx_budget):
+            print(f"    {tag:<30} {len(ids):>6,}")
+        print()
+
+        print("  BY SEASON")
+        for tag, ids in tally(self._idx_season):
+            print(f"    {tag:<30} {len(ids):>6,}")
+        print()
+
+        print("  BY REGION")
+        for tag, ids in tally(self._idx_region):
+            print(f"    {tag:<30} {len(ids):>6,}")
+        print()
+
+        # Top states only — 30+ entries of mostly single digits is noise.
+        states = tally(self._idx_state)
+        print(f"  TOP STATES  (of {len(states)} covered)")
+        for tag, ids in states[:10]:
+            print(f"    {tag:<30} {len(ids):>6,}")
+        print()
+
+        categories = tally(self._idx_category)
+        print(f"  TOP CATEGORIES  (of {len(categories)})")
+        for tag, ids in categories[:10]:
+            print(f"    {(tag or '(uncategorised)'):<30} {len(ids):>6,}")
+        print()
+
+        # Health quality is what gates every fitness recommendation, so its
+        # distribution belongs in the boot report rather than buried in a test.
+        healthy = sum(
+            1 for f in self.by_id.values()
+            if nutrition_quality_score(f) >= _MIN_QUALITY_FOR_HEALTH_GOALS
+        )
+        pct = (healthy / loaded * 100) if loaded else 0
+        print("  HEALTH QUALITY")
+        print(f"    {'Plan-eligible':<30} {healthy:>6,}  ({pct:.0f}%)")
+        print(f"    {'Excluded':<30} {loaded - healthy:>6,}  "
+              f"(deep-fried / ultra-processed / high-sugar)")
+        print()
+
+        print(f"  Indexes: meal:{len(self._idx_meal)} goal:{len(self._idx_goal)} "
+              f"diet:{len(self._idx_diet)} disease:{len(self._idx_disease_unsafe)} "
+              f"allergen:{len(self._idx_allergen)}")
+        print(line)
+        print()
 
     # ── Condition / allergen resolution (reuses medical_conditions.py) ─────
 
@@ -1522,15 +1628,58 @@ class FoodRecommendationEngine:
         A swap replaces the entire plate — the same way build_week_plan
         composes one — and every combo passes validate_meal_combo before
         it's offered. Snack/pre/post slots return single-item combos."""
+        # Pool must SCALE with how many options are wanted. It was pinned at
+        # 30 regardless, and each option consumes far more than one candidate:
+        # family dedup collapses every khichdi variant to a single slot, the
+        # nutrition band rejects whatever falls outside +/-15%, and season
+        # narrows further. Asking for 5 options out of 30 candidates ran the
+        # pool dry and returned 1. Rank deep, then choose.
         pool = self._ranked_swap_pool(
             meal_slot, goal_tags, diet_tags, living_situation, budget_tier,
             disease_tags, allergens, exclude_names, profile, subgoal_tag, season_tag,
+            pool_size=max(30, n_combos * 40),
             user_state=user_state, compatible_regions=compatible_regions, favorite_foods=favorite_foods,
             recent_families=recent_families,
             target_calories=target_calories,
             meal_preparer=meal_preparer,
             disliked_foods=disliked_foods,
         )
+        # WIDEN THE POOL when it cannot possibly yield the requested number of
+        # distinct dishes. A narrow athlete profile (hostel + vegetarian +
+        # weight-loss + one state) can leave as few as 8 candidates, all in a
+        # single dish family — at which point no amount of nutrition-band
+        # relaxation produces a second option, because there is no second
+        # family to offer.
+        #
+        # Relaxes SOFT context only, in increasing order of how much the
+        # athlete would notice: season, then living situation, then budget.
+        # Diet type, allergens, medical safety and meal slot are NEVER
+        # relaxed here — those are the filters that keep a suggestion safe and
+        # appropriate, and a thin pool is not a reason to compromise them.
+        def _families(candidates: list[dict]) -> int:
+            return len({dish_family(f["name"]) for f in candidates})
+
+        for relax in ("season", "living", "budget"):
+            if _families(pool) >= n_combos:
+                break
+            if relax == "season":
+                season_tag = None
+            elif relax == "living":
+                living_situation = None
+            else:
+                budget_tier = None
+            pool = self._ranked_swap_pool(
+                meal_slot, goal_tags, diet_tags, living_situation, budget_tier,
+                disease_tags, allergens, exclude_names, profile, subgoal_tag, season_tag,
+                pool_size=max(30, n_combos * 40),
+                user_state=user_state, compatible_regions=compatible_regions,
+                favorite_foods=favorite_foods, recent_families=recent_families,
+                target_calories=target_calories, meal_preparer=meal_preparer,
+                disliked_foods=disliked_foods,
+            )
+            print(f"[SWAP FUNNEL] pool widened (relaxed {relax}) -> "
+                  f"{len(pool)} candidates in {_families(pool)} families")
+
         if not pool:
             return []
         combos: list[list[dict]] = []
@@ -1595,6 +1744,18 @@ class FoodRecommendationEngine:
             # No anchor survived validation (ultra-restrictive filters) —
             # degrade to the best single candidates rather than nothing.
             combos = [[f] for f in pool[:n_combos]]
+
+        # Per-request funnel log. Without this the only visible symptom of a
+        # collapse is "one option appeared", with no way to tell which stage
+        # ate the candidates.
+        rej_families = {dish_family(c[0]["name"]) for c in rejected_for_nutrition}
+        print(
+            f"[SWAP FUNNEL] slot={meal_slot} pool={len(pool)} "
+            f"anchors_passed={len(used_anchor_bases)} "
+            f"nutrition_rejected={len(rejected_for_nutrition)} "
+            f"(in {len(rej_families)} families) "
+            f"tolerance=x{self.last_swap_tolerance} returned={len(combos)}"
+        )
         return combos
 
 

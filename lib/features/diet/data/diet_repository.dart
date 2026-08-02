@@ -1,11 +1,15 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import 'package:flutter/foundation.dart';
+
 import '../../../core/network/api_client.dart';
+import '../../../core/network/api_exception.dart';
 import '../../expert_dashboard/models/expert_models.dart' show ExpertProfile;
 import '../models/diet_calculations.dart';
 import '../models/diet_plan_content.dart';
 import '../models/diet_review_request.dart';
 import '../models/diet_storage.dart';
+import '../models/swap_result.dart';
 
 /// Firestore + backend access for the Diet feature. Every collection path
 /// and field name here was traced from `frontend/pages/diet/diet.js`,
@@ -117,10 +121,18 @@ class DietRepository {
     });
   }
 
-  /// `POST /api/ai/swap-meal` — exact payload shape from `callSwapMealApi()`
-  /// (diet.js:903-1036). Returns the raw `swap` object
-  /// (`{foods, calories?, protein_g?}` at minimum).
-  Future<Map<String, dynamic>> swapMeal({
+  /// `POST /api/diet/swap` — the DETERMINISTIC swap engine.
+  ///
+  /// Migrated off `/api/ai/swap-meal`, which routed every swap through an LLM
+  /// for ~12 seconds to produce a food the engine had already chosen in 4ms.
+  /// The model contributed an optional display name and a tips array; the
+  /// engine's `find_swap_combos()` output was substituted over everything
+  /// else it wrote. Removing it costs nothing and returns ~50x the speed.
+  ///
+  /// Returns the engine's top-N ranked options verbatim — this method does no
+  /// re-ranking, filtering, or truncation, so what Flutter shows is exactly
+  /// what `find_swap_combos()` produced.
+  Future<SwapResult> swapMeal({
     required String mealName,
     required String? mealTime,
     required List<String> currentFoods,
@@ -130,47 +142,125 @@ class DietRepository {
     required List<String> rejectedFoods,
     required List<Map<String, dynamic>> previousSuggestions,
     required String fitnessGoal,
+    List<String> todaysFoods = const [],
+    int options = 5,
   }) async {
-    // `previous_suggestions` on the backend is `list[list[str]]` (a plain
-    // food-name list per prior suggestion), NOT the full suggestion object
-    // Flutter accumulates for its own "Try Again" bookkeeping — sending the
-    // raw maps would fail FastAPI's Pydantic validation (422) the moment a
-    // second attempt includes one. Reshape to match the real contract.
-    final previousSuggestionNames = previousSuggestions
-        .map((s) => (s['foods'] is List ? (s['foods'] as List).map((e) => e.toString()).toList() : <String>[]))
+    final previousFoodNames = previousSuggestions
+        .map((s) => (s['foods'] is List
+            ? (s['foods'] as List).map((e) => e.toString()).toList()
+            : <String>[]))
         .toList();
 
-    // The RAG lookup + LLM call this endpoint makes (1 retrieval + 1
-    // generation, with a Groq -> Gemini -> OpenRouter fallback chain) can
-    // occasionally run past the app's default 30s budget under provider
-    // load — matches `generate-plan`'s same reasoning for its own longer
-    // timeout. A slow swap is still a real answer; a plain 30s cutoff isn't.
+    try {
+      final res = await _api.post(
+        '/api/diet/swap',
+        // No LLM in this path — the engine answers in milliseconds. The budget
+        // only needs to cover transport.
+        timeout: const Duration(seconds: 20),
+        body: {
+          'meal_name': mealName,
+          'meal_time': mealTime ?? '',
+          'current_foods': currentFoods,
+          'reason': reason,
+          'user_profile': userProfile,
+          'lifestyle_data': lifestyleData,
+          'rejected_foods': rejectedFoods,
+          'previous_suggestions': previousFoodNames,
+          'fitness_goal': fitnessGoal,
+          'todays_foods': todaysFoods,
+          'options': options,
+        },
+      );
+
+      if (res is! Map) {
+        throw FormatException('Unexpected swap response: ${res.runtimeType}');
+      }
+      return SwapResult.fromMap(res.cast<String, dynamic>());
+    } on ApiException catch (e) {
+      // The deterministic endpoint is missing on this server.
+      //
+      // 404 = route genuinely absent. 405 = the request fell through to the
+      // static-file mount at "/", which only answers GET/HEAD — that is what
+      // a POST to an undeployed API path looks like from outside, and it is
+      // indistinguishable from a routing bug unless you know to expect it.
+      //
+      // The app ships ahead of the backend, so rather than showing "Swap is
+      // broken" until a deploy lands, fall back to the older LLM endpoint,
+      // which is still live. Slower and single-option, but it works, and this
+      // path disappears on its own the moment /api/diet/swap is deployed.
+      if (e.statusCode != 404 && e.statusCode != 405) rethrow;
+      if (kDebugMode) {
+        debugPrint('[SWAP] /api/diet/swap unavailable (${e.statusCode}) — '
+            'falling back to /api/ai/swap-meal. Deploy the backend to get '
+            'the 5-option deterministic engine.');
+      }
+      return _legacySwap(
+        mealName: mealName,
+        mealTime: mealTime,
+        currentFoods: currentFoods,
+        reason: reason,
+        userProfile: userProfile,
+        lifestyleData: lifestyleData,
+        rejectedFoods: rejectedFoods,
+        previousFoodNames: previousFoodNames,
+        fitnessGoal: fitnessGoal,
+      );
+    }
+  }
+
+  /// Legacy `/api/ai/swap-meal` adapted into [SwapResult].
+  ///
+  /// That endpoint runs the SAME `food_engine.find_swap_combos()` under an LLM
+  /// wrapper, so the foods are already engine-chosen — it simply returns at
+  /// most two of them (`swap` + `alternative`) and takes ~12s. Mapping it to
+  /// the same result type keeps the UI code identical on both paths.
+  Future<SwapResult> _legacySwap({
+    required String mealName,
+    required String? mealTime,
+    required List<String> currentFoods,
+    required String reason,
+    required Map<String, dynamic> userProfile,
+    required Map<String, dynamic> lifestyleData,
+    required List<String> rejectedFoods,
+    required List<List<String>> previousFoodNames,
+    required String fitnessGoal,
+  }) async {
     final res = await _api.post(
       '/api/ai/swap-meal',
+      // This path DOES call an LLM behind a provider-failover chain.
       timeout: const Duration(seconds: 60),
       body: {
         'meal_name': mealName,
-        'meal_time': mealTime,
+        'meal_time': mealTime ?? '',
         'current_foods': currentFoods,
         'reason': reason,
         'user_profile': userProfile,
         'lifestyle_data': lifestyleData,
         'rejected_foods': rejectedFoods,
-        'previous_suggestions': previousSuggestionNames,
+        'previous_suggestions': previousFoodNames,
         'fitness_goal': fitnessGoal,
       },
     );
 
-    if (res is Map) {
-      final structured = res['structured'];
-      if (structured is Map && structured['swap'] is Map) {
-        return (structured['swap'] as Map).cast<String, dynamic>();
-      }
-      if (res['swap'] is Map) {
-        return (res['swap'] as Map).cast<String, dynamic>();
-      }
+    final structured = (res is Map ? res['structured'] : null);
+    if (structured is! Map) {
+      throw FormatException('Unexpected legacy swap response: ${res.runtimeType}');
     }
-    throw FormatException('Unexpected swap-meal response shape: ${res.runtimeType}');
+
+    final options = <Map<String, dynamic>>[];
+    for (final key in ['swap', 'alternative']) {
+      final block = structured[key];
+      if (block is Map) options.add(block.cast<String, dynamic>());
+    }
+
+    return SwapResult.fromMap({
+      'options': options,
+      'relaxed_match': false,
+      // Told plainly rather than dressed up — on this path there are fewer
+      // choices and no nutrition-band guarantee.
+      'match_note': 'Limited options (server update pending)',
+      'llm_used': true,
+    });
   }
 
   /// Sourced directly from the `experts` collection (approved-only) rather
