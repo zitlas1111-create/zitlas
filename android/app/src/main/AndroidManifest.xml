@@ -119,6 +119,29 @@
             android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver"
             android:exported="false"/>
 
+        <!-- Captures the step counter at local midnight so a completed day has
+             an exact closing total even when ZITLAS was never opened. Plain
+             Kotlin, no Flutter engine — see StepDayBoundary.kt. -->
+        <receiver
+            android:name=".StepDayBoundaryReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.zitlas.app.STEP_DAY_BOUNDARY"/>
+            </intent-filter>
+        </receiver>
+
+        <!-- AlarmManager drops every alarm on reboot; this re-arms the midnight
+             capture without the athlete having to reopen the app. -->
+        <receiver
+            android:name=".StepBootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+                <action android:name="android.intent.action.QUICKBOOT_POWERON"/>
+            </intent-filter>
+        </receiver>
+
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

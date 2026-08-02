@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
@@ -73,6 +75,25 @@ class HealthConnectSteps {
 class StepSensorReading {
   const StepSensorReading({required this.cumulative, required this.bootTimeMillis});
 
+  final int cumulative;
+  final int bootTimeMillis;
+}
+
+/// The step counter's value at the moment a local day ended, captured by the
+/// native midnight receiver while ZITLAS was closed.
+///
+/// [dayKey] is the day that ENDED. The same [cumulative] is simultaneously
+/// that day's closing total and the next day's opening origin, which is what
+/// lets the two days be split exactly instead of guessed at.
+@immutable
+class StepDayBoundaryReading {
+  const StepDayBoundaryReading({
+    required this.dayKey,
+    required this.cumulative,
+    required this.bootTimeMillis,
+  });
+
+  final String dayKey;
   final int cumulative;
   final int bootTimeMillis;
 }
@@ -157,6 +178,46 @@ class StepPlatform {
       final bootTime = raw['bootTimeMillis'];
       if (cumulative is! num || bootTime is! num) return null;
       return StepSensorReading(
+        cumulative: cumulative.toInt(),
+        bootTimeMillis: bootTime.toInt(),
+      );
+    } on MissingPluginException {
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Arms the native local-midnight capture (StepDayBoundary.kt).
+  ///
+  /// Called on every launch: an app force-stop clears its alarms, so the
+  /// schedule has to be repairable, and re-arming is idempotent.
+  Future<void> scheduleDayBoundary() async {
+    try {
+      await _channel.invokeMethod<bool>('scheduleDayBoundary');
+    } on MissingPluginException {
+      // Non-Android / tests — the Dart-side rollover still covers the
+      // app-was-open case.
+    } catch (_) {}
+  }
+
+  /// Takes the midnight reading the native receiver captured, if any.
+  ///
+  /// Consume-once by design: the native side deletes it as it hands it over,
+  /// because folding the same boundary in twice would credit a day's closing
+  /// steps to two different days.
+  Future<StepDayBoundaryReading?> consumeDayBoundary() async {
+    try {
+      final raw = await _channel.invokeMethod<String>('consumeDayBoundary');
+      if (raw == null) return null;
+      final map = jsonDecode(raw);
+      if (map is! Map) return null;
+      final dayKey = map['dayKey'];
+      final cumulative = map['cumulative'];
+      final bootTime = map['bootTimeMillis'];
+      if (dayKey is! String || cumulative is! num || bootTime is! num) return null;
+      return StepDayBoundaryReading(
+        dayKey: dayKey,
         cumulative: cumulative.toInt(),
         bootTimeMillis: bootTime.toInt(),
       );

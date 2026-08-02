@@ -182,6 +182,9 @@ SensorDelta computeSensorDelta({
     );
   }
 
+  // The cap is per-INTERVAL, so it is only meaningful against a delta measured
+  // since the previous read — which is exactly what [rawDelta] is, because
+  // every successful read below re-anchors the origin to the current reading.
   final cap = elapsedSincePreviousRead == null
       ? _absoluteJumpCap
       : (elapsedSincePreviousRead.inSeconds * _maxStepsPerSecond)
@@ -202,13 +205,24 @@ SensorDelta computeSensorDelta({
     );
   }
 
+  // Normal accumulation. The origin MOVES to the current reading and the
+  // running total moves with it — the two always describe the same instant.
+  //
+  // Leaving the origin at the start of the day instead (what this used to do)
+  // silently double-counts: the next read measures the whole day again and
+  // adds it to a total that already contained it, so a 4,000-step day is
+  // reported as 9,000 after four refreshes. It also breaks the interval cap
+  // above, because a whole day of walking always looks implausible when
+  // compared against the seconds since the last refresh — which is how the
+  // counter ends up frozen for the rest of the day.
+  final total = previous.stepsAtBaseline + rawDelta;
   return SensorDelta(
-    stepsToday: previous.stepsAtBaseline + rawDelta,
+    stepsToday: total,
     baseline: SensorBaseline(
       dayKey: todayKey,
-      baselineCumulative: previous.baselineCumulative,
+      baselineCumulative: cumulative,
       bootTimeMillis: bootTimeMillis,
-      stepsAtBaseline: previous.stepsAtBaseline,
+      stepsAtBaseline: total,
     ),
     reason: 'ok',
   );

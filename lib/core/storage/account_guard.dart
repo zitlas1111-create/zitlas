@@ -14,13 +14,29 @@ class AccountGuard {
   static const _ownerKey = 'zitlas_cache_owner_uid';
 
   /// Device/UI-scoped keys that legitimately survive an account switch —
-  /// same list as `KEEP_KEYS` on web.
+  /// the web app's `KEEP_KEYS` list, plus the device-state keys that only
+  /// exist on mobile.
+  ///
+  /// The step keys below describe THE HANDSET, not the person: whether this
+  /// phone has been granted OS permissions, and where the hardware counter
+  /// stood at the last read. Purging them on sign-out revoked nothing (the OS
+  /// grant survives) but made ZITLAS believe tracking had never been enabled,
+  /// so the athlete was asked to "Enable" again after every sign-out and the
+  /// sensor re-anchored from scratch. Step HISTORY is deliberately NOT here —
+  /// that is personal data, it is purged on an account switch, and it is
+  /// re-hydrated from Firestore for whoever signs in.
   static const _deviceKeys = {
     'zitlas_theme',
     'zitlas_language',
     'zitlas_trial_mode',
     'zitlas_step_perm_state',
     'zitlas_remember',
+    'zitlas_step_tracking_enabled',
+    'zitlas_step_permission_denied',
+    'zitlas_step_baseline',
+    'zitlas_step_last_read_at',
+    'zitlas_notification_prompted',
+    'zitlas_notification_prefs',
   };
 
   LocalStorageService get _storage => LocalStorageService.instance;

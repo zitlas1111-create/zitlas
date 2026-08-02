@@ -8,7 +8,21 @@ import 'step_sensor_baseline.dart';
 
 /// Which source produced a reading — surfaced in debug logs and used by the UI
 /// to explain itself honestly.
-enum StepSource { healthConnect, sensor, none }
+enum StepSource {
+  healthConnect,
+  sensor,
+
+  /// Today's last successfully stored total, replayed because this particular
+  /// read couldn't get a fresh answer.
+  ///
+  /// TYPE_STEP_COUNTER is an on-change sensor: on many devices it reports only
+  /// when a step is actually taken, so reading it on a phone sitting on a desk
+  /// legitimately returns nothing. That is not a permission problem and must
+  /// never be presented as one.
+  cached,
+
+  none,
+}
 
 /// Why the counter can't produce a number, so the Activity card can show a
 /// real state with a real action instead of a silent, misleading 0.
@@ -24,6 +38,11 @@ enum StepUnavailableReason {
 
   /// No Health Connect AND no step-counter hardware.
   deviceUnsupported,
+
+  /// Everything is granted and enabled; the source just hasn't produced a
+  /// first reading for today yet. A waiting state, NOT an error — the UI must
+  /// not offer to "enable" something that is already on.
+  noReadingYet,
 }
 
 /// One resolved reading of today's activity.
@@ -144,6 +163,9 @@ class StepTrackingService {
 
   Future<StepPlatformStatus> platformStatus() => _platform.getStatus();
 
+  /// Arms the native local-midnight capture. Idempotent; safe on every launch.
+  Future<void> scheduleDayBoundary() => _platform.scheduleDayBoundary();
+
   /// Runs the real consent flow. [onNeedsActivityRecognition] is invoked when
   /// the sensor path needs ACTIVITY_RECOGNITION — supplied by the UI layer so
   /// this service stays free of permission_handler and stays unit-testable.
@@ -198,6 +220,46 @@ class StepTrackingService {
     await _storage.setBool(_kEnabled, false);
   }
 
+  /// Silently resumes tracking when the OS grant is already in place.
+  ///
+  /// Permissions live in Android, not in ZITLAS. A grant survives a sign-out,
+  /// a cleared cache and a reinstall, so any local flag that says "not enabled"
+  /// while the OS says "granted" is stale bookkeeping — and acting on it means
+  /// showing an Enable button to someone who already pressed it. This is called
+  /// on every launch: if a real source is readable, tracking turns itself back
+  /// on without a dialog.
+  ///
+  /// Returns whether tracking is active afterwards. Never prompts, never
+  /// launches a permission sheet — the UI owns that decision.
+  Future<bool> ensureTrackingActive() async {
+    if (isEnabled) return true;
+
+    final status = await _platform.getStatus();
+
+    if (status.healthConnect == HealthConnectAvailability.available) {
+      // Probing the real aggregate is how we learn whether the grant is still
+      // held — Health Connect can revoke it for an app that hasn't read in a
+      // long while, and only the API knows that.
+      final now = _now();
+      final probe = await _platform.getStepsBetween(startOfLocalDay(now), now);
+      if (probe.granted) {
+        if (kDebugMode) debugPrint('[STEPS] resuming — Health Connect already granted');
+        await _storage.setBool(_kEnabled, true);
+        await _storage.setBool(_kDenied, false);
+        return true;
+      }
+    }
+
+    if (status.sensorAvailable && status.activityRecognitionGranted) {
+      if (kDebugMode) debugPrint('[STEPS] resuming — activity recognition already granted');
+      await _storage.setBool(_kEnabled, true);
+      await _storage.setBool(_kDenied, false);
+      return true;
+    }
+
+    return false;
+  }
+
   /// The main entry point: read today's real steps, persist, and notify.
   ///
   /// [goal] is the athlete's effective daily goal, passed in by the caller
@@ -218,6 +280,12 @@ class StepTrackingService {
             : StepUnavailableReason.notEnabled,
       );
     }
+
+    // Close out any day the native midnight receiver captured while ZITLAS was
+    // shut. Must run BEFORE today's reading is taken, so the sensor path
+    // measures today from the real midnight origin rather than from wherever
+    // the app last happened to be open.
+    await _settleCapturedBoundary(now);
 
     final status = await _platform.getStatus();
     final start = startOfLocalDay(now);
@@ -264,12 +332,35 @@ class StepTrackingService {
       }
     }
 
-    // Nothing usable — report WHY rather than a misleading 0.
+    // No fresh reading this time. Before declaring anything wrong, replay
+    // today's last stored total — a stationary phone whose on-change sensor
+    // stayed quiet is the single most common way to get here, and showing an
+    // "Enable step tracking" prompt to someone whose tracking is enabled and
+    // working is what makes the feature look broken and gets it re-enabled
+    // over and over.
+    final today = readHistory()[dayKey];
+    if (today != null) {
+      if (kDebugMode) {
+        debugPrint('[STEPS] no fresh reading — replaying stored ${today.steps}');
+      }
+      return StepSnapshot(
+        dayKey: dayKey,
+        steps: today.steps,
+        goal: goal,
+        source: StepSource.cached,
+      );
+    }
+
+    // Genuinely nothing to show — report WHY rather than a misleading 0, and
+    // only blame permissions when a permission is actually missing.
+    final permissionMissing = status.sensorAvailable && !status.activityRecognitionGranted;
     final reason = switch (status.healthConnect) {
       HealthConnectAvailability.updateRequired =>
         StepUnavailableReason.providerUpdateRequired,
-      _ => status.sensorAvailable
-          ? StepUnavailableReason.permissionDenied
+      _ => status.anySourcePossible
+          ? (permissionMissing
+              ? StepUnavailableReason.permissionDenied
+              : StepUnavailableReason.noReadingYet)
           : StepUnavailableReason.deviceUnsupported,
     };
     if (kDebugMode) debugPrint('[STEPS] no usable source — reason = ${reason.name}');
@@ -307,6 +398,68 @@ class StepTrackingService {
     return snapshot;
   }
 
+  // ── Midnight rollover ───────────────────────────────────────────────────
+
+  /// Applies a midnight reading captured natively while the app was closed.
+  ///
+  /// Two things happen with one number: the day that ended gets its exact
+  /// closing total (last stored total + whatever was walked between the final
+  /// app read and 00:00), and the new day gets an origin anchored to the true
+  /// boundary. Without this the in-between steps are simply lost — the sensor
+  /// only reports a since-boot running total, so they cannot be recovered
+  /// after the fact by any amount of arithmetic.
+  Future<void> _settleCapturedBoundary(DateTime now) async {
+    final boundary = await _platform.consumeDayBoundary();
+    if (boundary == null) return;
+
+    final baseline = SensorBaseline.fromMap(_storage.getJson(_kBaseline));
+    final history = readHistory();
+    final goal = _storage.getInt(goalCacheKey) ?? 0;
+
+    // Finalise the closed day, but only from a baseline that actually belongs
+    // to it and to the same boot. A reboot between the last read and midnight
+    // makes the subtraction meaningless, and a stale baseline from an earlier
+    // day would credit the wrong date.
+    if (baseline != null &&
+        baseline.dayKey == boundary.dayKey &&
+        (boundary.bootTimeMillis - baseline.bootTimeMillis).abs() <= 90 * 1000) {
+      final closing = baseline.stepsAtBaseline +
+          (boundary.cumulative - baseline.baselineCumulative);
+      final existing = history[boundary.dayKey];
+      // Never let a boundary reduce a day that was already recorded higher —
+      // Health Connect may have contributed a larger, deduplicated total.
+      if (closing >= 0 && (existing == null || closing > existing.steps)) {
+        history[boundary.dayKey] = StepDaySummary(
+          date: boundary.dayKey,
+          steps: closing,
+          goal: existing?.goal ?? goal,
+          completed: stepGoalReached(steps: closing, goal: existing?.goal ?? goal),
+          lastUpdated: now,
+        );
+        await _persistHistory(history);
+        if (kDebugMode) {
+          debugPrint('[STEPS] midnight rollover: ${boundary.dayKey} closed at $closing');
+        }
+      }
+    }
+
+    // Anchor the NEW day at the boundary reading, with a zeroed total. This is
+    // the "reset today's counter" half of the rollover, and it happens without
+    // the athlete touching anything.
+    final newDayKey = localDayKey(now);
+    if (newDayKey != boundary.dayKey) {
+      await _storage.setJson(
+        _kBaseline,
+        SensorBaseline(
+          dayKey: newDayKey,
+          baselineCumulative: boundary.cumulative,
+          bootTimeMillis: boundary.bootTimeMillis,
+          stepsAtBaseline: 0,
+        ).toMap(),
+      );
+    }
+  }
+
   // ── Sensor baseline ─────────────────────────────────────────────────────
 
   Future<int> _applySensorReading(
@@ -328,16 +481,13 @@ class StepTrackingService {
       elapsedSincePreviousRead: elapsed,
     );
 
-    // A day rollover means the stored baseline belonged to yesterday — its
-    // final total is already in history (written on the last read of that
-    // day), so nothing is lost by re-anchoring here.
-    final resolved = SensorBaseline(
-      dayKey: dayKey,
-      baselineCumulative: delta.baseline.baselineCumulative,
-      bootTimeMillis: delta.baseline.bootTimeMillis,
-      stepsAtBaseline: delta.stepsToday,
-    );
-    await _storage.setJson(_kBaseline, resolved.toMap());
+    // Persist EXACTLY what the math produced. Rebuilding the baseline here
+    // with a different `stepsAtBaseline` than the origin it was computed
+    // against is what made the two disagree — the origin said "start of day"
+    // while the total said "everything so far", so every read added the day
+    // to itself. computeSensorDelta owns this pairing; nothing else may
+    // rewrite half of it.
+    await _storage.setJson(_kBaseline, delta.baseline.toMap());
 
     if (kDebugMode && delta.reason != 'ok') {
       debugPrint('[STEPS] sensor baseline: ${delta.reason}');
@@ -398,16 +548,120 @@ class StepTrackingService {
       lastUpdated: now,
     );
 
+    await _persistHistory(history);
+    if (kDebugMode) debugPrint('[STEPS] syncing daily summary (${snapshot.dayKey})');
+  }
+
+  Future<void> _persistHistory(Map<String, StepDaySummary> history) async {
     // Trim by local date order so the map can't grow without bound.
     final keys = history.keys.toList()..sort();
     while (keys.length > _historyDays) {
       history.remove(keys.removeAt(0));
     }
-
     await _storage.setJson(_kHistory, {
       for (final entry in history.entries) entry.key: entry.value.toMap(),
     });
-    if (kDebugMode) debugPrint('[STEPS] syncing daily summary (${snapshot.dayKey})');
+  }
+
+  /// Rebuilds past days from Health Connect's own records.
+  ///
+  /// This is what makes yesterday viewable at all. Health Connect stores
+  /// TIMESTAMPED records, so a completed day can be totalled correctly hours
+  /// or days after the fact — ZITLAS does not have to have been awake at
+  /// midnight, or even installed, to report it. The hardware counter can make
+  /// no such claim: it only knows a since-boot running total, so a day that
+  /// ended while the app was closed can never be reconstructed from it, and
+  /// this method leaves those days exactly as they were recorded rather than
+  /// inventing them.
+  ///
+  /// Reads through the same aggregate API as the live path, so a day totalled
+  /// here is deduplicated across every provider (phone, watch, fitness app) —
+  /// backfilling cannot introduce double counting.
+  ///
+  /// Returns how many days were (re)written.
+  Future<int> backfillFromHealthConnect({int days = 30}) async {
+    if (!isEnabled) return 0;
+    final status = await _platform.getStatus();
+    if (status.healthConnect != HealthConnectAvailability.available) return 0;
+
+    final now = _now();
+    final history = readHistory();
+    final goalFallback = _storage.getInt(goalCacheKey) ?? 0;
+    var written = 0;
+
+    // Skip index 0 (today) — the live path owns it and is fresher.
+    for (var i = 1; i <= days; i++) {
+      final dayStart = DateTime(now.year, now.month, now.day - i);
+      final dayEnd = DateTime(now.year, now.month, now.day - i + 1);
+      final key = localDayKey(dayStart);
+
+      final result = await _platform.getStepsBetween(dayStart, dayEnd);
+      if (!result.usable) continue;
+
+      final steps = result.steps!;
+      final existing = history[key];
+      // A day with no records in Health Connect and no local record is a day
+      // nothing was measured — leave it absent rather than writing a 0 that
+      // would drag the weekly average down and break a streak retroactively.
+      if (steps == 0 && existing == null) continue;
+      // Never overwrite a locally recorded day with a smaller HC total: the
+      // sensor path may legitimately have caught steps that no provider ever
+      // wrote to Health Connect.
+      if (existing != null && existing.steps >= steps) continue;
+
+      final goal = existing?.goal ?? goalFallback;
+      history[key] = StepDaySummary(
+        date: key,
+        steps: steps,
+        goal: goal,
+        completed: stepGoalReached(steps: steps, goal: goal),
+        lastUpdated: now,
+      );
+      written++;
+    }
+
+    if (written > 0) {
+      await _persistHistory(history);
+      if (kDebugMode) debugPrint('[STEPS] backfilled $written day(s) from Health Connect');
+    }
+    return written;
+  }
+
+  /// Seeds the local record from days already synced to Firestore.
+  ///
+  /// Local storage disappears on reinstall and never existed on a second
+  /// device, so a synced day is the only surviving copy of it. Merged rather
+  /// than assigned, and only where the synced day is HIGHER: a device that
+  /// recorded more steps locally than it managed to sync must not have its own
+  /// record reduced by a stale server copy.
+  ///
+  /// Returns how many days were added or corrected.
+  Future<int> hydrateHistory(Map<String, ({int steps, int goal})> synced) async {
+    if (synced.isEmpty) return 0;
+    final history = readHistory();
+    final now = _now();
+    var changed = 0;
+
+    for (final entry in synced.entries) {
+      final incoming = entry.value;
+      if (incoming.steps <= 0) continue;
+      final existing = history[entry.key];
+      if (existing != null && existing.steps >= incoming.steps) continue;
+      history[entry.key] = StepDaySummary(
+        date: entry.key,
+        steps: incoming.steps,
+        goal: incoming.goal,
+        completed: stepGoalReached(steps: incoming.steps, goal: incoming.goal),
+        lastUpdated: now,
+      );
+      changed++;
+    }
+
+    if (changed > 0) {
+      await _persistHistory(history);
+      if (kDebugMode) debugPrint('[STEPS] hydrated $changed day(s) from sync');
+    }
+    return changed;
   }
 
   /// Locally persisted daily summaries, keyed `YYYY-MM-DD`.

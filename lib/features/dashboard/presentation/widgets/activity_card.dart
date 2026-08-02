@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../core/steps/presentation/step_consent_sheet.dart';
+import '../../../../core/steps/step_metrics.dart';
 import '../../../../core/steps/step_tracking_service.dart';
 import '../../dashboard_controller.dart';
 import '../../models/activity_week.dart';
@@ -42,7 +44,15 @@ class ActivityCard extends StatelessWidget {
     final recovery = activity?.recoveryMode ?? false;
 
     // Tracking not usable yet — offer the real action instead of a fake 0.
-    if (snapshot != null && !snapshot.isAvailable) {
+    //
+    // `noReadingYet` is deliberately NOT routed here when a synced day doc
+    // exists: tracking is on and granted, the sensor simply hasn't reported
+    // this minute, and swapping a working card for an "Enable" button is what
+    // made the feature look like it switches itself off.
+    if (snapshot != null &&
+        !snapshot.isAvailable &&
+        !(snapshot.unavailableReason == StepUnavailableReason.noReadingYet &&
+            activity != null)) {
       return _StepTrackingPrompt(reason: snapshot.unavailableReason);
     }
 
@@ -53,7 +63,16 @@ class ActivityCard extends StatelessWidget {
     final goalDone = pctRounded >= 100;
     final streak = controller.currentStreak;
 
-    final mins = activity?.activeMinutes ?? 0;
+    // Real derived figures for today, plus the history stats the Dashboard is
+    // meant to show. All computed from recorded step counts — see step_metrics.
+    final km = distanceKm(steps: steps);
+    final kcal = estimatedCalories(steps: steps);
+    final history = controller.stepHistory;
+    final now = DateTime.now();
+    final yesterday = history.forDate(DateTime(now.year, now.month, now.day - 1));
+    final weeklyAverage = history.averageSteps(today: now, count: 7);
+
+    final mins = activity?.activeMinutes ?? estimatedActiveMinutes(steps: steps) ?? 0;
     final timeStr = mins >= 60 ? '${mins ~/ 60}h ${mins % 60}m' : '${mins}m';
 
     final statusText = controller.activityStatus;
@@ -186,11 +205,15 @@ class ActivityCard extends StatelessWidget {
                 ),
                 child: Row(
                   children: [
-                    _StatBlock(icon: '🔥', value: '${activity?.calories ?? 0} kcal', label: 'Calories'),
+                    // Derived from the real step count rather than read from
+                    // the day doc: nothing on mobile writes calories/distance
+                    // into Firestore, so those fields are always 0 and the card
+                    // used to show "0 kcal · 0.00 km" next to a full ring.
+                    _StatBlock(icon: '🔥', value: '$kcal kcal', label: 'Calories'),
                     const SizedBox(height: 40, child: VerticalDivider(color: DashboardColors.border)),
                     _StatBlock(
                       icon: '🚶',
-                      value: '${(activity?.distance ?? 0).toStringAsFixed(2)} km',
+                      value: '${km.toStringAsFixed(2)} km',
                       label: 'Distance',
                     ),
                     const SizedBox(height: 40, child: VerticalDivider(color: DashboardColors.border)),
@@ -200,25 +223,28 @@ class ActivityCard extends StatelessWidget {
               ),
               const SizedBox(height: 14),
               _WeekStrip(days: controller.weeklySummary),
-              if (streak > 0) ...[
-                const SizedBox(height: 14),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
-                  decoration: BoxDecoration(
-                    color: const Color(0x1FFF9800),
-                    border: Border.all(color: const Color(0x4DFF9800)),
-                    borderRadius: BorderRadius.circular(100),
+              const SizedBox(height: 14),
+              _HistorySummary(
+                yesterday: yesterday?.steps,
+                weeklyAverage: weeklyAverage,
+                currentStreak: streak,
+                longestStreak: controller.longestStreak,
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: TextButton(
+                  onPressed: () => context.push('/activity'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: DashboardColors.primary,
+                    padding: const EdgeInsets.symmetric(vertical: 10),
                   ),
-                  child: Text(
-                    '🔥 $streak Day Streak',
-                    style: const TextStyle(
-                      color: DashboardColors.primary,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                    ),
+                  child: const Text(
+                    'View step history',
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
                   ),
                 ),
-              ],
+              ),
               const SizedBox(height: 10),
               Text(
                 motiveMsg,
@@ -244,6 +270,90 @@ class ActivityCard extends StatelessWidget {
       buf.write(s[i]);
     }
     return buf.toString();
+  }
+}
+
+/// Yesterday, the weekly average and both streaks.
+///
+/// Every value comes from days that were actually recorded. A figure with no
+/// data behind it renders as "—" rather than 0, so an athlete on their first
+/// day isn't shown a wall of zeroes that reads like a bad week.
+class _HistorySummary extends StatelessWidget {
+  const _HistorySummary({
+    required this.yesterday,
+    required this.weeklyAverage,
+    required this.currentStreak,
+    required this.longestStreak,
+  });
+
+  final int? yesterday;
+  final double? weeklyAverage;
+  final int currentStreak;
+  final int longestStreak;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: DashboardColors.bgCardLight,
+        border: Border.all(color: DashboardColors.borderSub),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
+        child: Row(
+          children: [
+            _MiniStat(
+              label: 'Yesterday',
+              value: yesterday == null ? '—' : _compact(yesterday!),
+            ),
+            _MiniStat(
+              label: '7-day avg',
+              value: weeklyAverage == null ? '—' : _compact(weeklyAverage!.round()),
+            ),
+            _MiniStat(
+              label: 'Streak',
+              value: currentStreak > 0 ? '🔥 $currentStreak' : '—',
+            ),
+            _MiniStat(
+              label: 'Best',
+              value: longestStreak > 0 ? '$longestStreak' : '—',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _compact(int n) =>
+      n >= 10000 ? '${(n / 1000).toStringAsFixed(1)}k' : n.toString();
+}
+
+class _MiniStat extends StatelessWidget {
+  const _MiniStat({required this.label, required this.value});
+  final String label, value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w900,
+              color: DashboardColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 10.5, color: DashboardColors.textSecondary),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -274,6 +384,13 @@ class _StepTrackingPrompt extends StatelessWidget {
           "This device doesn't report step data to ZITLAS.",
           null,
         ),
+      // Tracking IS on. Nothing to enable, nothing to fix — the counter just
+      // hasn't reported yet today. Offering an "Enable" button here would ask
+      // the athlete to re-grant a permission they already gave.
+      StepUnavailableReason.noReadingYet => (
+          'Waiting for your first steps today. This updates as you move.',
+          null,
+        ),
       _ => ('Track your daily steps and hit your goal.', 'Enable'),
     };
 
@@ -281,10 +398,12 @@ class _StepTrackingPrompt extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SectionHeader(
+          SectionHeader(
             emoji: '👣',
             title: "Today's Activity",
-            subtitle: 'Step tracking not enabled',
+            subtitle: reason == StepUnavailableReason.noReadingYet
+                ? 'Tracking on'
+                : 'Step tracking not enabled',
           ),
           const SizedBox(height: 14),
           Text(

@@ -14,7 +14,7 @@ import '../features/diet/presentation/screens/diet_screen.dart';
 import '../features/expert_dashboard/presentation/screens/expert_dashboard_screen.dart';
 import '../features/experts/presentation/screens/expert_profile_screen.dart';
 import '../features/experts/presentation/screens/experts_screen.dart';
-import '../features/health/presentation/screens/health_screen.dart';
+import '../features/health/presentation/screens/step_history_route.dart';
 import '../features/membership/presentation/screens/membership_screen.dart';
 import '../features/notifications/presentation/screens/notifications_screen.dart';
 import '../features/payments/presentation/screens/payments_screen.dart';
@@ -105,7 +105,7 @@ GoRouter buildRouter(AuthState authState) {
       GoRoute(path: '/profile/help-support', builder: (context, state) => const HelpSupportScreen()),
       GoRoute(path: '/profile/notifications', builder: (context, state) => const NotificationSettingsScreen()),
       GoRoute(path: '/wallet', builder: (context, state) => const PaymentsScreen()),
-      GoRoute(path: '/activity', builder: (context, state) => const HealthScreen()),
+      GoRoute(path: '/activity', builder: (context, state) => const StepHistoryRoute()),
       // Full-screen voice call. A top-level route (not nested in the shell)
       // so the bottom nav and the Zino FAB don't sit on top of a call.
       // Declared BEFORE '/zino' so the more specific path matches first.

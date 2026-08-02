@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../../core/steps/step_history.dart';
 import '../../core/steps/step_tracking_service.dart';
 import 'data/dashboard_repository.dart';
 import 'data/health_status_store.dart';
@@ -263,6 +264,14 @@ class DashboardController extends ChangeNotifier {
   Future<void> _loadActivityHistory() async {
     try {
       activityHistory = await _repository.fetchActivityHistory(uid);
+      // Seed the local record from the synced day docs. Local storage is
+      // wiped by a reinstall and doesn't exist at all on a second device, so
+      // without this an athlete's history would appear to start over every
+      // time — even though every day of it is sitting in Firestore.
+      await _steps.hydrateHistory({
+        for (final e in activityHistory.entries)
+          e.key: (steps: e.value.steps, goal: e.value.effectiveGoal),
+      });
       _safeNotify();
     } catch (_) {
       // Weekly strip falls back to "missed" for unreadable days and the
@@ -457,6 +466,14 @@ class DashboardController extends ChangeNotifier {
   /// and on pull-to-refresh. Each call is a single aggregate/sensor read —
   /// cheap enough to run on resume, deliberately not polled on a timer.
   Future<void> refreshSteps() async {
+    // Permissions live in the OS, not in ZITLAS. If Android still says the
+    // grant is held, tracking resumes silently — this is what stops the
+    // "Enable" prompt reappearing after a sign-out, a cleared cache, or a
+    // reinstall on a phone that already granted it once.
+    if (!_steps.isEnabled) {
+      await _steps.ensureTrackingActive();
+    }
+
     if (!_steps.isEnabled) {
       // Still surface the reason so the card can offer "Enable" rather than
       // rendering a misleading 0.
@@ -464,6 +481,11 @@ class DashboardController extends ChangeNotifier {
       _safeNotify();
       return;
     }
+
+    // Re-arm the native midnight capture. Cheap, idempotent, and necessary:
+    // Android clears an app's alarms on force-stop, so this is the only thing
+    // that repairs daily rollover afterwards.
+    unawaited(_steps.scheduleDayBoundary());
     stepRefreshing = true;
     _safeNotify();
     try {
@@ -493,7 +515,52 @@ class DashboardController extends ChangeNotifier {
       stepRefreshing = false;
       _safeNotify();
     }
+
+    // Once per launch: rebuild past days from Health Connect's own timestamped
+    // records. This is the only thing that can recover a day ZITLAS wasn't
+    // open for, and it's what makes "Yesterday" real rather than blank.
+    if (!_backfilled) {
+      _backfilled = true;
+      try {
+        if (await _steps.backfillFromHealthConnect() > 0) await _loadActivity();
+      } catch (e) {
+        if (kDebugMode) debugPrint('[STEPS] backfill skipped: $e');
+      }
+    }
+
+    await _refreshStreaks();
   }
+
+  bool _backfilled = false;
+
+  /// Recomputes both streaks from the REAL recorded days and persists them.
+  ///
+  /// They used to be read from the user doc and never written by the app, so
+  /// on a phone-only account they sat at whatever the website last wrote —
+  /// usually 0, no matter how many goals were actually hit.
+  Future<void> _refreshStreaks() async {
+    final history = stepHistory;
+    if (history.isEmpty) return;
+    final now = DateTime.now();
+    final current = history.currentStreak(today: now);
+    final longest = history.longestStreak();
+    // The record can only ever grow — a 90-day local window must not shorten a
+    // longest streak that was set before the window began.
+    final best = longest > longestStreak ? longest : longestStreak;
+    if (current == currentStreak && best == longestStreak) return;
+
+    currentStreak = current;
+    longestStreak = best;
+    _safeNotify();
+    try {
+      await _repository.saveStreaks(uid, current: current, longest: best);
+    } catch (e) {
+      if (kDebugMode) debugPrint('[STEPS] streak sync deferred: $e');
+    }
+  }
+
+  /// Every locally recorded day, for the Dashboard stats and History screen.
+  StepHistory get stepHistory => StepHistory(_steps.readHistory());
 
   /// Runs the real consent + OS permission flow, then reads immediately so
   /// the ring fills in without another interaction.

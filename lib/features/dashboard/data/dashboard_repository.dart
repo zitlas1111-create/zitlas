@@ -97,6 +97,22 @@ class DashboardRepository {
     }, SetOptions(merge: true));
   }
 
+  /// Persists both streaks on the user doc.
+  ///
+  /// Same two fields the website maintains (`currentStreak`/`longestStreak`),
+  /// so a streak earned on the phone is the streak the web dashboard and the
+  /// coach view show.
+  Future<void> saveStreaks(
+    String uid, {
+    required int current,
+    required int longest,
+  }) {
+    return _userDoc(uid).set({
+      'currentStreak': current,
+      'longestStreak': longest,
+    }, SetOptions(merge: true));
+  }
+
   Future<List<WeightEntry>> fetchWeightHistory(String uid, {int limit = 14}) async {
     final snap = await _userDoc(uid)
         .collection('weight_log')

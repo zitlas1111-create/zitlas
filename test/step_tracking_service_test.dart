@@ -31,6 +31,14 @@ class _FakePlatform implements StepPlatform {
 
   int hcCallCount = 0;
   int sensorCallCount = 0;
+  int boundaryScheduleCount = 0;
+
+  /// The midnight reading the native receiver would have captured. Consumed
+  /// once, exactly like the real channel.
+  StepDayBoundaryReading? dayBoundary;
+
+  /// Per-day answers for the Health Connect backfill, keyed `YYYY-MM-DD`.
+  final hcByDay = <String, int>{};
 
   @override
   Future<StepPlatformStatus> getStatus() async => StepPlatformStatus(
@@ -48,7 +56,24 @@ class _FakePlatform implements StepPlatform {
   @override
   Future<HealthConnectSteps> getStepsBetween(DateTime start, DateTime end) async {
     hcCallCount++;
+    final key = '${start.year.toString().padLeft(4, '0')}-'
+        '${start.month.toString().padLeft(2, '0')}-'
+        '${start.day.toString().padLeft(2, '0')}';
+    final perDay = hcByDay[key];
+    if (perDay != null) return HealthConnectSteps(granted: true, steps: perDay);
     return hcSteps;
+  }
+
+  @override
+  Future<void> scheduleDayBoundary() async {
+    boundaryScheduleCount++;
+  }
+
+  @override
+  Future<StepDayBoundaryReading?> consumeDayBoundary() async {
+    final b = dayBoundary;
+    dayBoundary = null;
+    return b;
   }
 
   @override

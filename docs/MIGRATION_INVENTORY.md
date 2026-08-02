@@ -1492,3 +1492,121 @@ Profile row (`/profile/notifications`).
     alarms queued, but Android disables Wireless Debugging across a reboot, so
     the post-boot alarm queue could not be read. The boot receiver is declared
     and the permission granted; the check itself is still owed.
+
+---
+
+# Phase — Step Tracking Persistence (critical bug fix)
+
+## Root causes found
+
+Four separate defects, all reproduced before being fixed.
+
+**1. The daily total inflated on every read.** `computeSensorDelta`'s normal
+branch left `baselineCumulative` at the START of the day while
+`_applySensorReading` overwrote `stepsAtBaseline` with the running total. The
+two halves of the baseline then described different instants, so each refresh
+re-measured the whole day and added it to a figure that already contained it. A
+4,000-step day reported 9,000 after four reads. Proven with a throwaway test
+before the fix; that test is now `step_persistence_test.dart`.
+
+**2. The counter froze for the rest of the day.** Same root cause. The
+plausibility cap is sized per INTERVAL (5 steps/second since the last read),
+but the delta being compared against it was measured from the start of the day.
+After a couple of hours of walking, every subsequent read looked implausible,
+was rejected, and the count stuck.
+
+**3. "Enable step tracking" reappeared on a working, granted device.** Two
+causes. `refresh()` mapped ANY unreadable source to `permissionDenied` without
+checking whether a permission was actually missing — and TYPE_STEP_COUNTER is
+an on-change sensor that legitimately reports nothing on a stationary phone.
+Separately, `AccountGuard`'s purge list did not preserve the step keys, so
+every sign-out deleted `zitlas_step_tracking_enabled` and the sensor baseline.
+The OS grant survived; ZITLAS's memory of it did not.
+
+**4. Yesterday could not be viewed.** Nothing ever read Health Connect for a
+past day, and there was no history screen. Local history only ever contained
+days the app happened to be open for.
+
+## Fixes
+
+| Fix | Where |
+|-----|-------|
+| Baseline re-anchors on every read; origin and total always describe the same instant | `step_sensor_baseline.dart`, `step_tracking_service.dart` |
+| Service persists exactly the baseline the math produced | `step_tracking_service.dart` |
+| `StepSource.cached` replays today's stored total when a read comes back empty | `step_tracking_service.dart` |
+| `StepUnavailableReason.noReadingYet` — a waiting state, never an Enable button | `step_tracking_service.dart`, `activity_card.dart` |
+| `ensureTrackingActive()` resumes silently whenever the OS grant is already held | `step_tracking_service.dart`, `dashboard_controller.dart` |
+| Step/permission/baseline keys preserved across sign-out | `account_guard.dart` |
+| Native local-midnight capture (AlarmManager + BroadcastReceiver, no Flutter engine) | `StepDayBoundary.kt` (new), `AndroidManifest.xml` |
+| Boundary folded into both days on next launch, consume-once | `step_tracking_service.dart` |
+| Health Connect backfill of the last 30 days | `step_tracking_service.dart` |
+| Local history hydrated from synced day docs (survives reinstall/new device) | `step_tracking_service.dart`, `dashboard_controller.dart` |
+| Streaks computed from real recorded days and persisted | `step_history.dart`, `dashboard_controller.dart`, `dashboard_repository.dart` |
+| Step History screen (Today / Yesterday / 7 / 30 days) | `step_history_screen.dart` (new) |
+| Distance / calories / active time from real height+weight | `step_metrics.dart` (new) |
+
+## How midnight rollover works
+
+`StepDayBoundaryReceiver` is armed by AlarmManager for 00:00:05 local, re-armed
+on every fire, on every app launch, and on BOOT_COMPLETED. It is plain Kotlin —
+no Flutter engine, no foreground service — so it costs nothing until it fires
+and lands on time regardless of whether ZITLAS is running.
+
+It reads TYPE_STEP_COUNTER once and writes `{dayKey, cumulative, bootTimeMillis}`
+into the same SharedPreferences file Dart uses. On the next launch,
+`_settleCapturedBoundary()` uses that one number twice: yesterday's closing
+total is `stepsAtBaseline + (boundary - baselineCumulative)`, and today's origin
+is anchored at `boundary` with a zeroed total. That is what recovers the steps
+walked between the last time the app was open and midnight — they are otherwise
+unrecoverable, because the hardware counter has no timestamps.
+
+Guards: the boundary is consumed once (replaying it would re-anchor and lose a
+day), it is ignored if the baseline belongs to a different day or a different
+boot, and it can never REDUCE a day already recorded higher.
+
+Health Connect needs none of this — its records are timestamped, so a completed
+day is totalled retrospectively by `backfillFromHealthConnect()`.
+
+## How reboot recovery works
+
+`StepBootReceiver` re-arms the midnight capture on `BOOT_COMPLETED` /
+`MY_PACKAGE_REPLACED` / `QUICKBOOT_POWERON`. The step COUNT itself needs no
+recovery: Health Connect records are written by their own providers, and the
+hardware counter accumulates in silicon. A reboot mid-day is detected by the
+boot timestamp travelling with each reading, so the counter restarting at 0 is
+re-anchored rather than subtracted (which would emit a large negative delta).
+
+## Permissions are requested once
+
+`ensureTrackingActive()` runs on every step refresh. If the local flag says
+"not enabled" but Android still reports the grant — Health Connect via a real
+aggregate probe, or ACTIVITY_RECOGNITION via `checkSelfPermission` — tracking
+turns itself back on with no dialog. It never prompts and never launches a
+permission sheet; only an explicit tap on "Enable" does that. Combined with the
+`AccountGuard` fix, a grant given once survives sign-out, cache purge and
+reinstall.
+
+## Validation
+
+- `flutter analyze lib/ test/` — 21 issues, **all info-level**. No warnings or errors.
+- `flutter test` — **389/389 passed** (351 before, **+38 new**).
+- `flutter build apk --debug` — **succeeded**.
+- **Discrimination proof**: the inflation and freeze tests were written against
+  the OLD code first and observed to FAIL (4,000 steps reported as 9,000; a
+  10-second follow-up read frozen at the previous total) before the fix landed.
+- **Real device (OnePlus, Android 15):**
+  - `[STEPS] backfilled 2 day(s) from Health Connect` — 2026-08-01 (1,739) and
+    2026-07-31 (2,465) recovered into local history. Yesterday is now viewable.
+  - `[STEPS] no fresh reading — replaying stored 43` — the stationary-sensor
+    path replays the real total instead of showing an Enable prompt.
+  - Midnight alarm confirmed queued via `dumpsys alarm` for
+    `StepDayBoundaryReceiver` at 00:00:05, alongside the 8 notification alarms.
+  - Receiver confirmed FIRING WITH THE APP CLOSED (temporary 60-second alarm,
+    reverted afterwards): `ZitlasSteps: midnight boundary fired`, then
+    `step counter unreadable, no boundary written` — correct, because
+    `ACTIVITY_RECOGNITION: granted=false` on this account (it uses Health
+    Connect). The receiver wrote nothing rather than guessing.
+  - **Not verified on device:** the sensor-only midnight capture writing a real
+    boundary value (this account has no ACTIVITY_RECOGNITION grant, so the
+    sensor path is inactive), and post-reboot re-arming (Android disables
+    Wireless Debugging across a reboot). Both are covered by unit tests only.

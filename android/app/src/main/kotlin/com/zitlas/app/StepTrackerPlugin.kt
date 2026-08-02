@@ -93,6 +93,26 @@ class StepTrackerPlugin(
             "openHealthConnectSettings" -> {
                 result.success(openHealthConnectSettings())
             }
+            // Arms the native midnight capture. Called from Dart on every
+            // launch so the alarm is repaired if Android ever dropped it (a
+            // force-stop clears an app's alarms, and only reopening restores
+            // them).
+            "scheduleDayBoundary" -> {
+                StepDayBoundary.scheduleNext(activity.applicationContext)
+                result.success(true)
+            }
+            // Hands Dart whatever the midnight receiver captured, then clears
+            // it. Consume-once: the reading is folded into the daily record on
+            // the Dart side, and replaying it later would re-apply a boundary
+            // that has already been accounted for.
+            "consumeDayBoundary" -> {
+                val prefs = StepDayBoundary.prefs(activity.applicationContext)
+                val json = prefs.getString(StepDayBoundary.KEY_BOUNDARY, null)
+                if (json != null) {
+                    prefs.edit().remove(StepDayBoundary.KEY_BOUNDARY).commit()
+                }
+                result.success(json)
+            }
             else -> result.notImplemented()
         }
     }
