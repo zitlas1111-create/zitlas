@@ -99,6 +99,63 @@ def _db() -> firestore.Client:
     return db
 
 
+def _age_from_dob(dob) -> int | None:
+    """Whole years from a `YYYY-MM-DD` date of birth, or None if unusable."""
+    if not dob:
+        return None
+    try:
+        born = datetime.fromisoformat(str(dob)[:10])
+    except (ValueError, TypeError):
+        return None
+    today = now()
+    age = today.year - born.year - ((today.month, today.day) < (born.month, born.day))
+    return age if 0 < age < 130 else None
+
+
+def _athlete_profile_summary(user_data: dict | None) -> dict:
+    """The minimum an expert needs to judge a coaching request.
+
+    Deliberately NOT the whole user document. An expert deciding on a pending
+    request is not yet this athlete's coach, so they get name, photo, goal and
+    the body metrics relevant to programming — not email, phone, address,
+    wallet or assessment history.
+
+    BMI is computed here from real height/weight rather than read from
+    `calculations`: that block is only refreshed when the athlete re-runs the
+    Assessment, so it can be months out of date, while height/weight are edited
+    directly in Personal Info. Every value is None when the athlete hasn't
+    provided it — never a placeholder, because an expert acting on an invented
+    weight is worse than one who can see the field is blank.
+    """
+    data = user_data or {}
+    info = data.get("personalInfo") or {}
+    survey = data.get("survey") or {}
+    goal = data.get("goal") or {}
+
+    def _num(*values):
+        for v in values:
+            if isinstance(v, (int, float)) and v > 0:
+                return float(v)
+        return None
+
+    height_cm = _num(info.get("heightCm"), survey.get("height_cm"))
+    weight_kg = _num(info.get("weightKg"), survey.get("weight_kg"))
+
+    bmi = None
+    if height_cm and weight_kg and 50 < height_cm < 260:
+        bmi = round(weight_kg / ((height_cm / 100) ** 2), 1)
+
+    return {
+        "photo": info.get("photo") or data.get("photo"),
+        "gender": info.get("gender"),
+        "age": _age_from_dob(info.get("dob")),
+        "heightCm": height_cm,
+        "weightKg": weight_kg,
+        "bmi": bmi,
+        "goalType": goal.get("type"),
+    }
+
+
 class RequestBody(BaseModel):
     expertId: str
     planType: str
@@ -232,14 +289,28 @@ async def create_request(body: RequestBody, caller: dict = Depends(verify_fireba
             "status": "pending",
             "isPremium": is_premium,
             "createdAt": _now.isoformat(),
+            "updatedAt": _now.isoformat(),
             "reservationAmount": amount,
             "reservedAt": _now.isoformat(),
             "expiresAt": expires.isoformat(),
             "paymentStatus": "reserved",
+            # Snapshot of the athlete an expert needs to judge the request.
+            #
+            # Copied server-side ON PURPOSE rather than read live by the
+            # expert's client: Security Rules only let an expert read
+            # users/{athleteId} once they are the ACTIVE coach
+            # (isActiveCoachOf), and that is exactly right — a pending request
+            # must not hand an expert read access to the athlete's whole
+            # profile. So the backend, which does have Admin access, copies
+            # the few fields the decision actually needs and nothing else.
+            # It is a point-in-time snapshot by design: it records what was
+            # true when the request was made.
+            "athleteProfile": _athlete_profile_summary(user_data),
         })
         print(f"[COACHING REQUEST] [6] reservation created — requestId={request_id} "
               f"amount={amount} newReserved={wallet['reserved']} expiresAt={expires.isoformat()}")
-        return {"requestId": request_id, "amount": amount, "expiresAt": expires.isoformat()}
+        return {"requestId": request_id, "amount": amount, "expiresAt": expires.isoformat(),
+                "athleteName": athlete_name}
 
     try:
         result = _txn(db.transaction())
@@ -261,6 +332,15 @@ async def create_request(body: RequestBody, caller: dict = Depends(verify_fireba
                "Your coaching request has been sent. Payment has been securely reserved. "
                "You will only be charged if the expert accepts.",
                category="expert", type="coaching_requested", action="coaches")
+        # The EXPERT is the one who has to act, and until now only the athlete
+        # was told anything — the expert learned about a request solely by
+        # happening to have their dashboard open. Sent after the transaction
+        # commits, so a notification can never advertise a request that rolled
+        # back.
+        notify(db, body.expertId, "New Personal Coaching Request",
+               f"{result['athleteName']} has requested you as a Personal Coach.",
+               category="expert", type="coaching_request_received",
+               action="expert_dashboard", priority="high")
     except Exception:
         # Notification failure must never fail a reservation that already
         # committed — log it and move on.
@@ -336,6 +416,7 @@ async def accept_request(body: ActionBody, caller: dict = Depends(verify_firebas
         tx.update(request_ref, {
             "status": "active", "paymentStatus": "debited",
             "acceptedAt": _now.isoformat(), "activatedAt": _now.isoformat(),
+            "updatedAt": _now.isoformat(),
             "walletTransactionId": wallet_txn_id,
         })
 

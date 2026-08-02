@@ -312,3 +312,174 @@ def test_relationship_sweep_leaves_unexpired_relationships_alone(fake_db, app, c
     expired = coaching_sweep.sweep_expired_relationships()
     assert expired == 0
     assert fake_db.store[f"personal_coaching/{ATHLETE_UID}"]["status"] == "active"
+
+
+# ══════════════════════════════════════════════════════════════════════
+# Personal Coach assignment — the expert's side of the handshake
+# ══════════════════════════════════════════════════════════════════════
+
+
+def _notifications_for(fake_db, uid):
+    """Every notifications/* doc addressed to `uid`."""
+    return [d for k, d in fake_db.store.items()
+            if k.startswith("notifications/") and d.get("userId") == uid]
+
+
+def test_expert_is_notified_of_a_new_request(fake_db, app, client):
+    """The expert is the one who has to act.
+
+    Before this, only the athlete was told anything — an expert learned about a
+    request solely by happening to have their dashboard open at the time.
+    """
+    _set_wallet(fake_db, ATHLETE_UID, balance=1000)
+    fake_db.store[f"users/{ATHLETE_UID}"]["name"] = "Rohit Sharma"
+    _as(app, ATHLETE_UID)
+
+    r = client.post("/api/coaching/request", json={"expertId": EXPERT_UID, "planType": "diet"})
+    assert r.status_code == 200, r.text
+
+    to_expert = _notifications_for(fake_db, EXPERT_UID)
+    assert len(to_expert) == 1, "the expert must be told exactly once"
+    note = to_expert[0]
+    assert note["title"] == "New Personal Coaching Request"
+    assert "Rohit Sharma" in note["message"]
+    assert note["type"] == "coaching_request_received"
+    assert note["action"] == "expert_dashboard"
+    assert note["isRead"] is False
+
+    # The athlete still gets their own confirmation.
+    assert len(_notifications_for(fake_db, ATHLETE_UID)) == 1
+
+
+def test_request_carries_the_athlete_profile_the_expert_needs(fake_db, app, client):
+    """Copied server-side because Security Rules (correctly) stop an expert
+    reading users/{athleteId} until they are the ACTIVE coach."""
+    _set_wallet(fake_db, ATHLETE_UID, balance=1000)
+    fake_db.store[f"users/{ATHLETE_UID}"].update({
+        "name": "Rohit Sharma",
+        "personalInfo": {
+            "photo": "https://example.com/a.jpg",
+            "gender": "male",
+            "dob": "1998-04-12",
+            "heightCm": 175,
+            "weightKg": 72,
+        },
+        "goal": {"type": "muscle_gain"},
+    })
+    _as(app, ATHLETE_UID)
+
+    r = client.post("/api/coaching/request", json={"expertId": EXPERT_UID, "planType": "diet"})
+    assert r.status_code == 200, r.text
+
+    doc = fake_db.store[f"personal_coach_requests/{r.json()['requestId']}"]
+    profile = doc["athleteProfile"]
+    assert profile["photo"] == "https://example.com/a.jpg"
+    assert profile["gender"] == "male"
+    assert profile["heightCm"] == 175
+    assert profile["weightKg"] == 72
+    assert profile["goalType"] == "muscle_gain"
+    # 72 / 1.75^2 = 23.5
+    assert profile["bmi"] == 23.5
+    assert profile["age"] and 20 < profile["age"] < 40
+
+
+def test_profile_summary_omits_what_the_athlete_never_entered(fake_db, app, client):
+    """A blank field stays blank. An expert acting on an invented weight is
+    worse than one who can see the field is empty."""
+    _set_wallet(fake_db, ATHLETE_UID, balance=1000)
+    _as(app, ATHLETE_UID)
+
+    r = client.post("/api/coaching/request", json={"expertId": EXPERT_UID, "planType": "diet"})
+    profile = fake_db.store[f"personal_coach_requests/{r.json()['requestId']}"]["athleteProfile"]
+
+    assert profile["heightCm"] is None
+    assert profile["weightKg"] is None
+    assert profile["bmi"] is None, "BMI must not be invented from a missing height"
+    assert profile["age"] is None
+
+
+def test_profile_summary_never_leaks_private_fields(fake_db, app, client):
+    """The snapshot is a deliberate subset — not the user document."""
+    _set_wallet(fake_db, ATHLETE_UID, balance=1000)
+    fake_db.store[f"users/{ATHLETE_UID}"].update({
+        "personalInfo": {"email": "rohit@example.com", "mobile": "9999999999",
+                         "city": "Pune", "gender": "male"},
+        "membership": {"plan": "premium"},
+    })
+    _as(app, ATHLETE_UID)
+
+    r = client.post("/api/coaching/request", json={"expertId": EXPERT_UID, "planType": "diet"})
+    profile = fake_db.store[f"personal_coach_requests/{r.json()['requestId']}"]["athleteProfile"]
+
+    assert set(profile.keys()) == {"photo", "gender", "age", "heightCm", "weightKg", "bmi", "goalType"}
+    assert "email" not in profile
+    assert "mobile" not in profile
+    assert "wallet" not in profile
+
+
+def test_request_identifies_the_expert_by_expertId(fake_db, app, client):
+    """The field Security Rules and both dashboards query on.
+
+    The rule used to check `coachId`, which these documents have never had, so
+    no request was readable by the expert it was addressed to.
+    """
+    _set_wallet(fake_db, ATHLETE_UID, balance=1000)
+    _as(app, ATHLETE_UID)
+
+    r = client.post("/api/coaching/request", json={"expertId": EXPERT_UID, "planType": "diet"})
+    doc = fake_db.store[f"personal_coach_requests/{r.json()['requestId']}"]
+
+    assert doc["expertId"] == EXPERT_UID
+    assert doc["athleteId"] == ATHLETE_UID
+    assert "coachId" not in doc, "the requests collection identifies the expert as expertId"
+    assert doc["status"] == "pending"
+    assert doc["createdAt"] and doc["updatedAt"]
+
+
+def test_accept_creates_the_assignment_and_stamps_updatedAt(fake_db, app, client):
+    _set_wallet(fake_db, ATHLETE_UID, balance=1000)
+    _as(app, ATHLETE_UID)
+    request_id = client.post(
+        "/api/coaching/request", json={"expertId": EXPERT_UID, "planType": "diet"}
+    ).json()["requestId"]
+
+    _as(app, EXPERT_UID)
+    r = client.post("/api/coaching/accept", json={"requestId": request_id})
+    assert r.status_code == 200, r.text
+
+    # The assignment is ONE doc keyed by the athlete — it cannot duplicate.
+    rel = fake_db.store[f"personal_coaching/{ATHLETE_UID}"]
+    assert rel["coachId"] == EXPERT_UID
+    assert rel["athleteId"] == ATHLETE_UID
+    assert rel["status"] == "active"
+    assert rel["requestId"] == request_id
+
+    req = fake_db.store[f"personal_coach_requests/{request_id}"]
+    assert req["status"] == "active"
+    assert req["updatedAt"]
+
+    # And the athlete is told.
+    titles = [n["title"] for n in _notifications_for(fake_db, ATHLETE_UID)]
+    assert "Congratulations!" in titles
+
+
+def test_reject_notifies_the_athlete_and_frees_them_to_choose_again(fake_db, app, client):
+    _set_wallet(fake_db, ATHLETE_UID, balance=1000)
+    _as(app, ATHLETE_UID)
+    request_id = client.post(
+        "/api/coaching/request", json={"expertId": EXPERT_UID, "planType": "diet"}
+    ).json()["requestId"]
+
+    _as(app, EXPERT_UID)
+    assert client.post("/api/coaching/reject", json={"requestId": request_id}).status_code == 200
+
+    assert fake_db.store[f"personal_coach_requests/{request_id}"]["status"] == "declined"
+    assert f"personal_coaching/{ATHLETE_UID}" not in fake_db.store
+
+    titles = [n["title"] for n in _notifications_for(fake_db, ATHLETE_UID)]
+    assert "Request declined" in titles
+
+    # No open request remains, so another coach can be asked immediately.
+    _as(app, ATHLETE_UID)
+    again = client.post("/api/coaching/request", json={"expertId": EXPERT_UID, "planType": "training"})
+    assert again.status_code == 200, again.text

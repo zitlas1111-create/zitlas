@@ -160,9 +160,16 @@ service cloud.firestore {
 
     // ── personal_coach_requests — backend-only writes ──
     match /personal_coach_requests/{reqId} {
+      // The expert is identified by `expertId` on THIS collection. It used to
+      // read `coachId`, which these documents have never had — that field
+      // exists only on personal_coaching (the relationship). The effect was
+      // that no document ever satisfied the expert's half of this condition,
+      // so the expert dashboard's
+      // `where('expertId', '==', uid)` listener was rejected outright and a
+      // new coaching request never reached the expert at all.
       allow read: if signedIn()
         && (resource.data.athleteId == request.auth.uid
-            || resource.data.coachId == request.auth.uid);
+            || resource.data.expertId == request.auth.uid);
       allow write: if false;  // backend (Admin SDK) only
     }
 
