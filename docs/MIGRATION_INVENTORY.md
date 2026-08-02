@@ -1610,3 +1610,332 @@ reinstall.
     boundary value (this account has no ACTIVITY_RECOGNITION grant, so the
     sensor path is inactive), and post-reboot re-arming (Android disables
     Wireless Debugging across a reboot). Both are covered by unit tests only.
+
+---
+
+# Phase — Wallet (critical fix)
+
+## Root cause
+
+**The Wallet was never migrated.** `/wallet` routed to `PaymentsScreen`, which
+returned `PlaceholderScreen(title: 'Wallet', subtitle: 'Wallet balance,
+top-up, transaction history. See features/payments.')` — a Phase-1 stub. The
+Dashboard's balance chip read the real figure from `users/{uid}.wallet` and
+navigated to it, so tapping a live ₹4,97,622 balance opened an empty page with
+a wrench icon. Nothing was throwing; there was simply no wallet module.
+
+Nothing else in the chain was broken. The audit traced UI → controller →
+repository → API client → FastAPI → Firestore and found the backend
+(`routes/payment.py`, `routes/coaching.py`) correct and complete.
+
+## Data model (from the website + Security Rules, not invented)
+
+`users/{uid}.wallet` = `{balance, reserved, total_added, total_spent,
+transactions[]}`, each entry `{id, type, amount, description, date}`.
+
+Two constraints drove the design:
+
+1. **The client may never write the wallet.** `firestore.rules` enforces
+   `createOmits(['wallet'])` / `updateKeeps(['wallet'])`. Money moves only via
+   `POST /api/payment/verify` (credit, after an HMAC check) and
+   `POST /api/payment/charge` (debit), both transactional. So there is no
+   `credit()`/`debit()` in the repository, and the balance on screen only ever
+   changes because the server changed it.
+2. **`wallet_transactions` is unreadable by any client**
+   (`allow read, write: if false`). That collection is the internal audit log,
+   not the athlete's statement. The statement is the `transactions` array on
+   the wallet — exactly what `components/wallet.js` renders.
+
+## "Automatically create the wallet document if missing" — deliberately not done
+
+The task asks for this; Security Rules forbid it, and they are right to. A
+client that writes its own wallet is a client asserting its own balance. A
+missing `wallet` field is a normal state for a new account (the backend writes
+it on the first credit), so it is modelled as `Wallet.empty` with
+`exists: false` and renders as a real ₹0 empty state. **It never crashes and
+never blocks the screen** — which is what the requirement was actually
+protecting against. `test/wallet_test.dart` asserts the app performs no write.
+
+## Files
+
+**New:** `models/wallet.dart`, `data/wallet_repository.dart`,
+`data/razorpay_checkout.dart`, `wallet_controller.dart`,
+`presentation/screens/wallet_screen.dart`,
+`presentation/screens/transaction_history_screen.dart`,
+`presentation/widgets/wallet_transaction_row.dart`,
+`presentation/widgets/add_funds_sheet.dart`, `test/wallet_test.dart`,
+`test/wallet_screen_test.dart`.
+**Deleted:** `presentation/screens/payments_screen.dart` (the placeholder).
+**Modified:** `lib/app/router.dart`, `pubspec.yaml` (+`razorpay_flutter`).
+
+## Behaviour
+
+- **Live balance** via a Firestore snapshot listener — a top-up completed on
+  the website, or a coaching charge accepted by an expert, appears without a
+  refresh.
+- **Available, not raw balance,** is the headline figure; `reserved` (locked by
+  an open coaching request) is called out separately. Showing reserved money as
+  spendable is how an athlete reaches a checkout that declines them.
+- **Direction comes from the transaction TYPE, never the amount's sign** — the
+  backend stores positive amounts in both directions, so keying off the number
+  renders every debit as money in.
+- **Real top-ups.** `razorpay_flutter` opens the native sheet with a `key_id`
+  issued per-order by the server; no key is compiled into the app, and a
+  payment is worth nothing until `/verify` checks its HMAC. Nothing is credited
+  locally.
+- **States:** spinner → content, a ₹0 empty state, and an error state with a
+  retry that re-subscribes. No raw exception can reach the UI: a Dart `Error`
+  always maps to a generic message (a bug found by test — `StateError`'s
+  "Bad state: …" text was leaking through the length check).
+
+## Balance = credits − debits
+
+`Wallet.ledgerBalance` computes it, and `ledgerDisagrees` flags a divergence.
+The app **reports** a mismatch (debug log) and keeps displaying the SERVER
+balance — that is what the backend will actually spend against, and a
+client-recomputed figure would offer money that isn't there.
+
+**This found a real discrepancy in production data** on the test account:
+stored balance ₹4,97,622 vs credits (₹5,00,840) − debits (₹3,208) = ₹4,97,632
+— a **₹10 gap**. All three current backend balance writes append a matching
+ledger entry, so this predates the backend-only wallet (`wallet.js`'s own
+comments describe the client-side `attemptCharge`/`deduct` writes it "just
+moved away from"). Not fixable from the app, and it must not be: flagged here
+for a backend reconciliation.
+
+## Validation
+
+- `flutter analyze lib/ test/` — 23 issues, **all info-level**. No warnings or errors.
+- `flutter test` — **437/437 passed** (389 before, **+48 new**).
+- `flutter build apk --debug` — **succeeded**.
+- **Real device (OnePlus, Android 15):** wallet opened against the live
+  account — `[WALLET] fetch uid=D4Ms… exists=true balance=497622.0 reserved=0.0
+  available=497622.0 transactions=11`. Screenshot confirms ₹4,97,622 (correct
+  `en-IN` grouping), Added ₹5,00,840 / Spent ₹3,208 / Balance ₹4,97,622, and
+  three real transactions with correct signs, descriptions and timestamps.
+- **Not verified on device:** a live Razorpay payment end-to-end (it would
+  charge real money), and the history/add-funds screens visually — both are
+  covered by widget tests instead.
+
+---
+
+# Phase — Personal Coach Assignment (Phase 1)
+
+## Root cause: the request never reached the expert
+
+`firestore.rules` granted the expert a read on `personal_coach_requests` via
+`resource.data.coachId`. **That field has never existed on this collection** —
+`coachId` lives only on `personal_coaching` (the relationship). Requests have
+always identified the expert as `expertId`.
+
+So no document ever satisfied the expert's half of the condition, and the
+expert dashboard's `where('expertId', '==', uid)` listener — the same query the
+website runs at `expert-dashboard.js:1400` — was rejected outright. A coaching
+request reached Firestore correctly and then reached nobody. This affected web
+and mobile equally.
+
+There was no rules test for the collection at all, which is why it survived.
+
+## Architecture used — no new collections, no parallel implementation
+
+| Concern | Where it already lived |
+|---|---|
+| Request | `personal_coach_requests/{PCR_…}` — backend-written |
+| **Assignment** | `personal_coaching/{athleteUid}` — backend-written |
+| Notifications | `notifications/{id}` via `coaching_service.notify()` |
+| Routes | `POST /api/coaching/request \| accept \| reject \| withdraw` |
+
+**`coach_assignments` was NOT created.** The task allows it only "if the
+assignment collection does not exist" — it does. `personal_coaching/{athleteUid}`
+is the assignment, and keying it by the athlete is what makes "no duplicate
+assignments" true by construction: there is physically no room for a second
+row, and `/accept` rejects a competing coach with
+`athlete_has_other_active_coach`.
+
+**`assignedCoachId` / `coachStatus` on the user doc, and `activeClientCount` /
+`assignedUsers` on the expert doc, were NOT added.** They would be copies of
+data that already has one owner, and copies drift. `activeClientCount` is
+derived live from `personal_coaching where coachId == uid`, which cannot
+disagree with the list it sits above.
+
+## What was actually missing, and what was built
+
+1. **The rules bug above.** One line: `coachId` → `expertId`. Deployed.
+2. **The expert was never notified.** `/request` notified only the athlete;
+   the expert learned about a request by happening to have their dashboard
+   open. Added a "New Personal Coaching Request" notification, sent after the
+   transaction commits so it can never advertise a request that rolled back.
+3. **The expert had no profile to judge on.** Rules correctly stop an expert
+   reading `users/{athleteId}` until they are the ACTIVE coach — a pending
+   request must not hand over the whole profile. So the backend now copies a
+   deliberate subset (`photo, gender, age, heightCm, weightKg, bmi, goalType`)
+   onto the request. BMI is computed from real height/weight rather than the
+   `calculations` block, which only refreshes on an Assessment re-run. Every
+   field is null when unset — an expert acting on an invented weight is worse
+   than one who can see the field is blank.
+4. **No "My Personal Coach" card.** Added, fed by a LIVE listener on
+   `personal_coaching/{uid}`, so an acceptance appears on the athlete's
+   dashboard without a refresh. Photo + verified badge from `experts/{coachId}`
+   (public, signed-in-readable). Message opens the existing chat room via the
+   same `chat_<athleteId>_<expertId>` id the rest of the app uses; Call is
+   present but says Phase 7 rather than silently doing nothing.
+5. **No coaching counts.** Added Athletes / Pending / Accepted / Declined to
+   the coaching section, derived from the streams already held.
+6. **Unretryable failures said "try again".** `/request` returns specific
+   refusals (`open_request_exists`, `active_coaching_exists`,
+   `expert_not_found`, `insufficient_balance`); each now gets the sentence that
+   explains what to do next.
+
+## Files
+
+**Backend:** `routes/coaching.py` (expert notification, `_athlete_profile_summary`,
+`updatedAt`), `tests/test_coaching.py` (+7).
+**Rules:** `firestore.rules`, `tests/firestore-rules/rules.test.js` (+8 — the
+collection had zero coverage).
+**Flutter — new:** `dashboard/models/assigned_coach.dart`,
+`dashboard/presentation/widgets/my_coach_card.dart`, `test/coach_assignment_test.dart`.
+**Flutter — modified:** `dashboard_repository.dart` (`watchAssignedCoach`),
+`dashboard_controller.dart` (live listener), `dashboard_screen.dart`,
+`expert_models.dart` (`CoachingAthleteProfile`), `coaching_section.dart`
+(profile facts + summary), `expert_dashboard_controller.dart`
+(`declinedCoaching`), `experts_repository.dart` (`CoachingRequestException`),
+`personal_coaching_sheet.dart`.
+
+## Persistence
+
+The assignment is one Firestore document. Nothing about it is stored on the
+handset, so logout, login, app restart and phone restart are not special cases
+— the listener re-attaches and reads the same doc. Duplicate prevention is
+structural (doc id = athlete uid) plus the transactional guards in `/request`
+(`open_request_exists`) and `/accept`.
+
+## Validation
+
+- `flutter analyze lib/ test/` — 23 issues, **all info-level**.
+- `flutter test` — **456/456 passed** (437 before, **+19 new**).
+- Backend `pytest` — **35 passed**, +7 new all passing. 5 pre-existing failures
+  in `test_coaching.py` are unrelated to this work: they assert ₹499 prices
+  while `PLATFORM_CHARGES_FREE=true` zeroes every amount (confirmed identical
+  on a clean checkout via `git stash`). Not touched — out of scope.
+- `flutter build apk --debug` — succeeded, installed.
+- **Deployed:** `firebase deploy --only firestore:rules` → "released rules
+  firestore.rules to cloud.firestore". Backend pushed to `main` (f9f5487) for
+  Render; `https://zitlas.com/api/system/trial-mode` responds 200.
+- **NOT verified end-to-end on device.** That needs two real accounts (an
+  athlete and the expert they request) driven through the UI. Everything up to
+  it is proven: rules deployed, backend live, app installs and runs with zero
+  permission errors, and the request→accept→assignment→notification chain is
+  covered by unit tests on both sides.
+- The 8 new rules tests **could not be executed** — the emulator needs Java,
+  which isn't installed here. They are written against the deployed rule.
+
+## Phase 2 depends on
+
+`personal_coaching/{athleteUid}` with `status: 'active'` and a live
+`endDateTs`. `isActiveCoachOf(athleteId)` in `firestore.rules` already gates
+`coaching_plans`, `users/{uid}` reads and chat on exactly that, so expert diet
+and workout editing can build on it directly.
+
+---
+
+# Phase 2 — Personal Coach Plan Management (partial)
+
+## Architecture: reused, not rebuilt
+
+The website already implements this phase in
+`frontend/components/coaching-workspace.js` (2,164 lines). Its data model is
+the contract, and this work adopts it field-for-field so a plan written on the
+phone opens on the web and vice versa:
+
+```
+coaching_plans/{athleteUid}
+  diet:    { planId, days:[ {day, meals:[ {id, name, time,
+             options:[{name, calories, protein, notes}] } ]} ] }
+  dietSelections: { '<day>:<mealId>': optionIndex }
+  training: { planId, days:[...] }
+  dietVersion / trainingVersion, dietUpdatedAt / trainingUpdatedAt
+coaching_plans/{athleteUid}/versions/{id}   — snapshot per save
+```
+
+**No new collections. No duplicate plans.** The key design point — and the
+whole of "AI never overwrites coach modifications" — is that the coach plan
+lives in its OWN document. `users/{uid}.dietPlan` (the AI plan) is never
+written by any of this code, so regenerating one cannot touch the other. A
+test asserts exactly that.
+
+## Delivered
+
+**Data spine** — `coaching/models/coach_diet_plan.dart`,
+`coaching/models/coach_plan_version.dart`,
+`coaching/data/coaching_plan_repository.dart`:
+- Publish diet/training, each versioned independently.
+- **Every publish snapshots to `versions/`.** A rollback is saved FORWARD as a
+  new revision rather than rewinding, so the revision being replaced stays
+  visible and nothing is ever deleted.
+- **Athlete notified** on every publish, in the exact `notifications` doc shape
+  `ZitlasNotify.send()` writes, so it renders identically on both platforms.
+- **`planId` fail-closed stamp.** A plan authored against a goal the athlete
+  has since reset retires itself instead of continuing to prescribe.
+
+**Athlete side** — the coach's plan now appears on the Diet screen via a LIVE
+listener (`coach_diet_card.dart`), above the AI plan rather than replacing it.
+Options render as a real choice; the athlete's pick writes `dietSelections`.
+
+**Protein variety (Step 3)** — `coaching/models/protein_variety.dart`
+classifies dishes into 10 sources by name and reports per-source meal counts,
+flagging a week that leans on one source (>50% of protein meals, or fewer than
+3 sources) with concrete alternatives. Counts MEALS, not options: three chicken
+options at lunch is one chicken meal, because the athlete eats one.
+
+**Security (Step 10)** — `coaching_plans` already gated reads/writes on
+`isActiveCoachOf`, so an unassigned expert was never able to reach an athlete.
+But the ATHLETE had blanket write, which let them rewrite their own coach's
+prescription and show it back as the coach's. Tightened to: coach authors;
+athlete may change only `dietSelections` (plus deleting the legacy
+`athleteContext` pair that `coaching-reset.js` clears on a Goal Reset — traced
+from every athlete-side write on the website before restricting). Deployed.
+
+## Bugs found and fixed
+
+**Hard casts threw on the real production document.** `dietVersion` and
+selection indices are written by the website too, and JS stores numbers as
+strings. `(x as num?)` took the whole coach plan down with
+`type 'String' is not a subtype of type 'num?'`. Now coerced through the
+codebase's own `asNum`. Caught on device, not by the unit tests — five
+regression tests added.
+
+**"Paneer Bhurji" was classified as an egg dish.** `bhurji` is a preparation
+(a scramble), not an ingredient, and Paneer Bhurji is one of the commonest
+vegetarian breakfasts in India. It miscounted a paneer meal AND made a
+vegetarian week look like it contained egg.
+
+## NOT delivered — still open for the rest of Phase 2
+
+Stated plainly, because these are the larger half of the spec:
+
+- **The coach-side editors in Flutter.** A coach can currently author plans
+  only through the website's coaching workspace. The data layer, versioning,
+  notifications and security they need are done and tested; the editor UI
+  (meal/option/macro editing, food-dataset search, budget warning, workout
+  sets/reps/rest) is not built.
+- **The rich athlete profile (Step 1).** `athlete_profile_screen.dart` is
+  still the thin read-only summary — diet preferences, lifestyle, fitness
+  block, private coach notes are not there.
+- **The athlete-facing change history (Step 9).** Versions are recorded and
+  readable; nothing renders them yet.
+
+## Validation
+
+- `flutter analyze lib/ test/` — 23 issues, **all info-level**.
+- `flutter test` — **495/495 passed** (485 before, **+39 new** in
+  `test/coach_plan_test.dart`).
+- `tests/firestore-rules/rules.test.js` — **+11** for `coaching_plans`.
+  NOT EXECUTED: the emulator needs Java, which isn't installed here.
+- `flutter build apk --debug` — succeeded, installed.
+- Rules deployed (`firebase deploy --only firestore:rules`, compiled clean).
+- **Real device, real Firestore:**
+  `[COACH PLAN] D4Ms… diet=7d v4 training=false v0` — an existing production
+  coach plan (7 days, version 4) read successfully, and
+  `[DIET] coach plan retired — authored for plan_1784204757943, live plan is
+  plan_1785567755379` — the fail-closed guard firing on real data, correctly
+  retiring a plan written for a goal this athlete has since reset.

@@ -25,6 +25,7 @@ const {
   assertSucceeds,
   assertFails,
 } = require('@firebase/rules-unit-testing');
+const { deleteField } = require('firebase/firestore');
 
 const PROJECT_ID = 'zitlas-b8677';
 const A = 'athleteA';
@@ -79,6 +80,13 @@ beforeEach(async () => {
     });
     await db.doc(`chat_rooms/chat_${A}_${C}/messages/m1`).set({ senderId: A, text: 'hi' });
     await db.doc(`review_requests/rr1`).set({ userId: A, athleteId: A, expertId: C, status: 'pending' });
+    // A PENDING coaching request from athlete A to expert D — deliberately D
+    // (an expert who is NOT yet A's coach), because that is exactly the state
+    // the expert has to be able to read in order to accept or decline.
+    await db.doc(`personal_coach_requests/pcr1`).set({
+      requestId: 'pcr1', athleteId: A, athleteName: 'Athlete A',
+      expertId: D, expertName: 'Coach D', status: 'pending', planType: 'diet',
+    });
     await db.doc(`meal_checkins/mc1`).set({ athleteId: A, coachId: C, status: 'pending' });
     await db.doc(`workout_checkins/wc1`).set({ athleteId: A, coachId: C, status: 'pending' });
     await db.doc(`coaching_meal_requests/cmr1`).set({ athleteId: A, coachId: C, status: 'pending' });
@@ -439,5 +447,103 @@ describe('coach relationship EXPIRY', () => {
   });
   it('EXPIRED coach can no longer read athlete coaching_plans', async () => {
     await assertFails(asC().doc(`coaching_plans/${A}`).get());
+  });
+});
+
+
+// ── personal_coach_requests — the request must reach the expert ──────────
+//
+// This collection identifies the expert as `expertId`. The rule previously
+// checked `coachId`, a field that exists only on personal_coaching, so no
+// document ever satisfied the expert's half of the condition and the expert
+// dashboard's `where('expertId', '==', uid)` listener was rejected outright —
+// a coaching request never reached the expert it was addressed to. There was
+// no test here at all, which is why that survived.
+describe('personal_coach_requests — athlete owner + addressed expert', () => {
+  it('athlete CAN read their own request', async () => {
+    await assertSucceeds(asA().doc('personal_coach_requests/pcr1').get());
+  });
+  it('the ADDRESSED expert CAN read the request (the whole point)', async () => {
+    await assertSucceeds(asD().doc('personal_coach_requests/pcr1').get());
+  });
+  it('the addressed expert CAN run the dashboard query', async () => {
+    await assertSucceeds(
+      asD().collection('personal_coach_requests').where('expertId', '==', D).get());
+  });
+  it('an unrelated expert CANNOT read it', async () => {
+    await assertFails(asC().doc('personal_coach_requests/pcr1').get());
+  });
+  it('another athlete CANNOT read it', async () => {
+    await assertFails(asB().doc('personal_coach_requests/pcr1').get());
+  });
+  it('nobody can list every request unfiltered', async () => {
+    await assertFails(asD().collection('personal_coach_requests').get());
+  });
+  it('the client CANNOT write a request — backend Admin SDK only', async () => {
+    await assertFails(asA().doc('personal_coach_requests/pcrFake').set({
+      athleteId: A, expertId: D, status: 'pending',
+    }));
+  });
+  it('the expert CANNOT flip a request to accepted client-side', async () => {
+    // Accepting moves money. It happens only inside the backend transaction.
+    await assertFails(asD().doc('personal_coach_requests/pcr1').update({ status: 'active' }));
+  });
+});
+
+
+// ── coaching_plans — the coach authors, the athlete only picks ───────────
+//
+// The plan document is the coach's professional prescription. The athlete's
+// one legitimate write is `dietSelections` (which option they chose per meal),
+// which is exactly what coaching-workspace.js writes from the athlete side.
+// Blanket athlete write would let them rewrite the plan and then present it
+// back as their coach's instruction.
+describe('coaching_plans — coach authors, athlete selects', () => {
+  it('the athlete CAN read their own coach plan', async () => {
+    await assertSucceeds(asA().doc(`coaching_plans/${A}`).get());
+  });
+  it('the ACTIVE coach CAN read it', async () => {
+    await assertSucceeds(asC().doc(`coaching_plans/${A}`).get());
+  });
+  it('an unassigned expert CANNOT read it', async () => {
+    await assertFails(asD().doc(`coaching_plans/${A}`).get());
+  });
+  it('an unassigned expert CANNOT write it', async () => {
+    await assertFails(asD().doc(`coaching_plans/${A}`).set({ diet: { days: [] } }, { merge: true }));
+  });
+  it('another athlete CANNOT read it', async () => {
+    await assertFails(asB().doc(`coaching_plans/${A}`).get());
+  });
+  it('the ACTIVE coach CAN publish a diet', async () => {
+    await assertSucceeds(
+      asC().doc(`coaching_plans/${A}`).set({ diet: { days: [] }, dietVersion: 1 }, { merge: true }));
+  });
+  it('the athlete CAN record their meal selections', async () => {
+    await assertSucceeds(
+      asA().doc(`coaching_plans/${A}`).set({ dietSelections: { 'Monday:meal_0': 1 } }, { merge: true }));
+  });
+  it('the athlete CANNOT rewrite the coach-authored diet', async () => {
+    await assertFails(
+      asA().doc(`coaching_plans/${A}`).set({ diet: { days: ['forged'] } }, { merge: true }));
+  });
+  it('the athlete CANNOT rewrite the coach-authored training', async () => {
+    await assertFails(
+      asA().doc(`coaching_plans/${A}`).set({ training: { days: ['forged'] } }, { merge: true }));
+  });
+  it('only the coach can write a version snapshot', async () => {
+    await assertSucceeds(
+      asC().doc(`coaching_plans/${A}/versions/diet_1`).set({ type: 'diet', data: {}, version: 1 }));
+    await assertFails(
+      asA().doc(`coaching_plans/${A}/versions/diet_2`).set({ type: 'diet', data: {}, version: 2 }));
+  });
+  it('the athlete CAN still clear the legacy athleteContext on a goal reset', async () => {
+    // coaching-reset.js:125 deletes this pair. Tightening the rule must not
+    // break the athlete's own Goal Reset.
+    await assertSucceeds(asA().doc(`coaching_plans/${A}`).update({
+      athleteContext: deleteField(), athleteContextUpdatedAt: deleteField(),
+    }));
+  });
+  it('nobody can delete the plan or its history', async () => {
+    await assertFails(asC().doc(`coaching_plans/${A}`).delete());
   });
 });

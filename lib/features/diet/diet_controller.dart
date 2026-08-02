@@ -6,6 +6,8 @@ import '../../core/network/api_exception.dart';
 import 'models/diet_profile.dart';
 import 'models/swap_result.dart';
 import '../expert_dashboard/models/expert_models.dart' show ExpertProfile;
+import '../coaching/data/coaching_plan_repository.dart';
+import '../coaching/models/coach_diet_plan.dart';
 import 'data/diet_repository.dart';
 import 'models/diet_calculations.dart';
 import 'models/diet_day.dart';
@@ -37,16 +39,22 @@ const _weekdayNames = [
 /// (left over from before a goal reset) from ever being rendered or
 /// silently kept, matching `validateDietStorage()` on the website exactly.
 class DietController extends ChangeNotifier {
-  DietController({required this.uid, required DietRepository repository})
-    : _repository = repository { // ignore: prefer_initializing_formals
+  DietController({
+    required this.uid,
+    required DietRepository repository,
+    CoachingPlanRepository? coachingPlans,
+  }) : _repository = repository, // ignore: prefer_initializing_formals
+       _coachingPlans = coachingPlans ?? CoachingPlanRepository() {
     _init();
   }
 
   final String uid;
   final DietRepository _repository;
+  final CoachingPlanRepository _coachingPlans;
 
   StreamSubscription<Map<String, dynamic>?>? _userDocSub;
   StreamSubscription<List<DietReviewRequest>>? _reviewsSub;
+  StreamSubscription<CoachingPlanDoc>? _coachPlanSub;
   bool _disposed = false;
   bool _dayAutoSelected = false;
   Map<String, dynamic>? _lastUserDoc;
@@ -119,6 +127,83 @@ class DietController extends ChangeNotifier {
         // Review banner just stays hidden — non-critical for the core screen.
       },
     );
+
+    // The coach-authored diet, live. This is what makes an edit published by
+    // the coach — from the app or from the website's coaching workspace —
+    // appear here without the athlete refreshing anything.
+    _coachPlanSub = _coachingPlans.watch(uid).listen(
+      (doc) {
+        coachPlan = doc;
+        _safeNotify();
+      },
+      onError: (Object e) {
+        // A coach plan the athlete can't read (relationship lapsed, offline)
+        // just isn't shown — the AI plan below it is unaffected.
+        if (kDebugMode) debugPrint('[DIET] coach plan unavailable: $e');
+      },
+    );
+  }
+
+  /// The coach-authored plan document, or null until the first snapshot.
+  CoachingPlanDoc? coachPlan;
+
+  /// The coach's diet, but ONLY when it should actually be shown.
+  ///
+  /// Fails closed on two independent conditions:
+  ///  * a plan authored against a DIFFERENT `planId` — the athlete reset their
+  ///    goal, so that prescription is for a goal nobody has any more;
+  ///  * a plan with no meals in it — a coach who has opened the editor but not
+  ///    published anything must not blank out the athlete's AI plan.
+  ///
+  /// When this is null the existing AI plan renders exactly as before, so
+  /// nothing about the current screen changes for an athlete without a coach.
+  CoachDietPlan? get activeCoachDiet {
+    final doc = coachPlan;
+    if (doc == null || !doc.exists) return null;
+    if (!doc.diet.hasDays) return null;
+    if (doc.isStaleFor(livePlanId)) {
+      if (kDebugMode) {
+        debugPrint('[DIET] coach plan retired — authored for ${doc.diet.planId}, '
+            'live plan is $livePlanId');
+      }
+      return null;
+    }
+    return doc.diet;
+  }
+
+  bool get hasCoachDiet => activeCoachDiet != null;
+
+  /// Records which option the athlete picked for a coach-authored meal.
+  ///
+  /// The athlete's ONLY write to the coach's document — Security Rules now
+  /// permit them `dietSelections` and nothing else, so this cannot become a
+  /// way to edit the prescription itself. Optimistically applied so the radio
+  /// moves immediately; the live listener confirms it a moment later.
+  Future<void> selectCoachMealOption(String day, String mealId, int optionIndex) async {
+    final doc = coachPlan;
+    if (doc == null) return;
+    final next = {...doc.selections, '$day:$mealId': optionIndex};
+    coachPlan = CoachingPlanDoc(
+      diet: doc.diet,
+      training: doc.training,
+      selections: next,
+      coachId: doc.coachId,
+      coachName: doc.coachName,
+      planType: doc.planType,
+      dietVersion: doc.dietVersion,
+      trainingVersion: doc.trainingVersion,
+      dietUpdatedAt: doc.dietUpdatedAt,
+      trainingUpdatedAt: doc.trainingUpdatedAt,
+      exists: doc.exists,
+    );
+    _safeNotify();
+    try {
+      await _coachingPlans.saveSelections(uid, next);
+    } catch (e) {
+      // The listener will restore the stored value on its next snapshot, so a
+      // failed write self-corrects rather than leaving a lie on screen.
+      if (kDebugMode) debugPrint('[DIET] selection save failed: $e');
+    }
   }
 
   void _onUserDoc(Map<String, dynamic>? data) {
@@ -555,6 +640,7 @@ class DietController extends ChangeNotifier {
     _disposed = true;
     _userDocSub?.cancel();
     _reviewsSub?.cancel();
+    _coachPlanSub?.cancel();
     super.dispose();
   }
 }

@@ -9,6 +9,7 @@ import '../../../../core/theme/zitlas_tokens.dart';
 import '../../../auth/auth_state.dart';
 import '../../data/diet_repository.dart';
 import '../../diet_controller.dart';
+import '../widgets/coach_diet_card.dart';
 import '../widgets/diet_day_focus_card.dart';
 import '../widgets/diet_day_selector.dart';
 import '../widgets/diet_empty_state.dart';
@@ -148,6 +149,19 @@ class _DietContent extends StatelessWidget {
           onSelect: controller.selectDay,
         ),
         const SizedBox(height: 16),
+        // The coach's prescription sits ABOVE the AI plan, not instead of it:
+        // the athlete follows their coach, but the generated plan stays
+        // visible and untouched underneath. Absent for anyone without a coach,
+        // so this screen is unchanged for them.
+        if (controller.activeCoachDiet != null)
+          CoachDietCard(
+            plan: controller.activeCoachDiet!,
+            dayIndex: dayIndex,
+            coachName: controller.coachPlan?.coachName ?? 'Your coach',
+            updatedAt: controller.coachPlan?.dietUpdatedAt,
+            selections: controller.coachPlan?.selections ?? const {},
+            onSelect: controller.selectCoachMealOption,
+          ),
         DietDayFocusCard(day: day),
         if (day.theme != null || day.nutritionTip != null) const SizedBox(height: 16),
         ...List.generate(day.meals.length, (mealIndex) {

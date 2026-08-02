@@ -176,7 +176,25 @@ service cloud.firestore {
     // ── coaching_plans/{athleteUid} (+ versions) ──
     match /coaching_plans/{athleteUid} {
       allow read: if isUser(athleteUid) || isActiveCoachOf(athleteUid);
-      allow create, update: if isUser(athleteUid) || isActiveCoachOf(athleteUid);
+      // Only the COACH authors the plan. The athlete's single write is
+      // `dietSelections` — which option they picked per meal, exactly what
+      // coaching-workspace.js writes from the athlete side.
+      //
+      // The athlete used to have blanket write here, which let them rewrite
+      // the plan their coach authored and then show it back as the coach's
+      // prescription. Restricting it costs the athlete nothing they legitimately
+      // do and closes a forgeable-record hole.
+      //
+      // The athlete's allowed fields, traced from every athlete-side write on
+      // the website: `dietSelections` (coaching-workspace.js:998, diet.js:2043)
+      // and the deletion of the legacy `athleteContext` pair that
+      // coaching-reset.js:125 clears on a Goal Reset. Nothing else — and never
+      // `diet` or `training`.
+      allow create: if isActiveCoachOf(athleteUid)
+        || (isUser(athleteUid) && createOmits(['diet', 'training']));
+      allow update: if isActiveCoachOf(athleteUid)
+        || (isUser(athleteUid)
+            && changedOnly(['dietSelections', 'athleteContext', 'athleteContextUpdatedAt']));
       allow delete: if false;
       match /versions/{vid} {
         allow read: if isUser(athleteUid) || isActiveCoachOf(athleteUid);
