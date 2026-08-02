@@ -4,10 +4,30 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../../core/network/api_client.dart';
+import '../../../core/network/api_exception.dart';
 import '../../diet/models/diet_plan_content.dart';
 import '../../expert_dashboard/models/expert_models.dart';
 import '../../workout/models/workout_plan_content.dart';
 import '../models/expert_listing.dart';
+
+/// Why a coaching request was refused, in words an athlete can act on.
+///
+/// [code] is the backend's own machine-readable reason (`open_request_exists`,
+/// `active_coaching_exists`, ...) so callers can branch without matching on
+/// prose.
+class CoachingRequestException implements Exception {
+  const CoachingRequestException(this.message, {this.code});
+
+  final String message;
+  final String? code;
+
+  /// False when retrying the exact same request cannot possibly succeed —
+  /// the athlete has to change something first.
+  bool get isRetryable => code == null;
+
+  @override
+  String toString() => message;
+}
 
 /// Athlete-side data access for the Expert marketplace/profile/review-request
 /// system. Every collection and field name here was traced read-only from
@@ -216,7 +236,49 @@ class ExpertsRepository {
   /// `isPremium`/exact `price` are also server-computed from the expert's
   /// own pricing, so this call only needs `expertId`/`planType`.
   Future<void> submitCoachingRequest({required String expertId, required String planType}) async {
-    await _api.post('/api/coaching/request', body: {'expertId': expertId, 'planType': planType});
+    try {
+      await _api.post('/api/coaching/request', body: {'expertId': expertId, 'planType': planType});
+    } on ApiException catch (e) {
+      // The backend's refusals are specific and mostly UNRETRYABLE — telling
+      // an athlete who already has a pending request to "try again" sends
+      // them round a loop that can only fail. Each one gets the sentence that
+      // actually explains what to do next.
+      throw CoachingRequestException(_messageFor(e), code: _codeOf(e));
+    }
+  }
+
+  static String? _codeOf(ApiException e) {
+    final body = e.body;
+    if (body is! Map) return null;
+    final detail = body['detail'];
+    if (detail is String) return detail;
+    if (detail is Map && detail['error'] is String) return detail['error'] as String;
+    return null;
+  }
+
+  static String _messageFor(ApiException e) {
+    final detail = (e.body is Map) ? (e.body as Map)['detail'] : null;
+    switch (_codeOf(e)) {
+      case 'open_request_exists':
+        return 'You already have a coaching request awaiting a response. '
+            'Withdraw it before requesting another coach.';
+      case 'active_coaching_exists':
+        return 'You already have an active personal coach. End that coaching '
+            'before starting with someone else.';
+      case 'expert_not_found':
+        return "This coach isn't available right now. Please choose another.";
+      case 'insufficient_balance':
+        final required = (detail is Map) ? detail['required'] : null;
+        return required == null
+            ? "Your wallet doesn't have enough to reserve this plan."
+            : "Your wallet doesn't have enough to reserve this plan (₹$required needed).";
+      case 'invalid_plan_type':
+        return 'That coaching plan is no longer offered. Please pick another.';
+    }
+    if (e.statusCode == 503) {
+      return "Coaching isn't reachable right now. Please try again in a moment.";
+    }
+    return 'Could not send your request. Please try again.';
   }
 
   /// `POST /api/coaching/withdraw` — releases the wallet reservation via the

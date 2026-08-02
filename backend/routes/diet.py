@@ -94,6 +94,13 @@ async def search_foods(
                 "category": f.get("category"),
                 "region": f.get("region"),
                 "type": f.get("type"),
+                # Budget tier and diet suitability travel with every result so
+                # the coach workspace can flag a food that breaks the athlete's
+                # budget or diet BEFORE it is added — the dataset holds no
+                # rupee cost, so the tier is the only real cost signal there is.
+                "budgetCategory": f.get("budgetCategory"),
+                "dietSuitable": f.get("dietSuitable") or [],
+                "allergens": f.get("allergens") or [],
                 # The exact display string the plans store, so the editor can
                 # insert a food in the same shape the generator produces.
                 "display": food_engine.format_food_line(f),

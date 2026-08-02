@@ -91,6 +91,12 @@ class ExpertDashboardController extends ChangeNotifier {
   List<CoachingRelationship> get myAthletes =>
       relationships.where((r) => r.isActive).toList();
 
+  /// Requests this expert declined. Split out from [pastCoaching] (which also
+  /// holds expired/ended/withdrawn) so the coaching summary can report what
+  /// the EXPERT decided separately from what simply lapsed.
+  List<CoachingRequest> get declinedCoaching =>
+      coachingRequests.where((r) => r.status == 'declined').toList();
+
   // ── Derived: stats grid ────────────────────────────────────────────────
   //
   // The website has two competing writers for these numbers

@@ -141,8 +141,11 @@ class WalletController extends ChangeNotifier {
     if (lower.contains('timeout') || lower.contains('timed out')) {
       return 'That took too long. Please try again.';
     }
-    // Messages raised by WalletRepository are already athlete-facing.
-    if (raw.isNotEmpty && raw.length < 200) return raw;
+    // Messages raised by WalletRepository are already athlete-facing, and they
+    // are always Exceptions. An ERROR is a programming fault — its text is a
+    // stack-trace fragment ("Bad state: ...", "type 'X' is not a subtype...")
+    // and must never be shown to an athlete, however short it happens to be.
+    if (e is Exception && raw.isNotEmpty && raw.length < 200) return raw;
     return 'Something went wrong loading your wallet. Please try again.';
   }
 

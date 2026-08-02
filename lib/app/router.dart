@@ -17,7 +17,7 @@ import '../features/experts/presentation/screens/experts_screen.dart';
 import '../features/health/presentation/screens/step_history_route.dart';
 import '../features/membership/presentation/screens/membership_screen.dart';
 import '../features/notifications/presentation/screens/notifications_screen.dart';
-import '../features/payments/presentation/screens/payments_screen.dart';
+import '../features/payments/presentation/screens/wallet_screen.dart';
 import '../features/profile/presentation/screens/help_support_screen.dart';
 import '../features/profile/presentation/screens/notification_settings_screen.dart';
 import '../features/profile/presentation/screens/personal_info_screen.dart';
@@ -104,7 +104,7 @@ GoRouter buildRouter(AuthState authState) {
       GoRoute(path: '/profile/personal-info', builder: (context, state) => const PersonalInfoScreen()),
       GoRoute(path: '/profile/help-support', builder: (context, state) => const HelpSupportScreen()),
       GoRoute(path: '/profile/notifications', builder: (context, state) => const NotificationSettingsScreen()),
-      GoRoute(path: '/wallet', builder: (context, state) => const PaymentsScreen()),
+      GoRoute(path: '/wallet', builder: (context, state) => const WalletScreen()),
       GoRoute(path: '/activity', builder: (context, state) => const StepHistoryRoute()),
       // Full-screen voice call. A top-level route (not nested in the shell)
       // so the bottom nav and the Zino FAB don't sit on top of a call.

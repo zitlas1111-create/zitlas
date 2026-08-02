@@ -83,6 +83,10 @@ class _ExpertCoachingSectionState extends State<ExpertCoachingSection> {
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
       children: [
         const EdSectionLabel('Personal Coaching'),
+        if (!c.coachingLoading && c.coachingError == null) ...[
+          _CoachingSummary(controller: c),
+          const SizedBox(height: 12),
+        ],
         EdTabStrip(
           labels: const ['Pending', 'Active', 'Past Clients'],
           badges: [c.pendingCoaching.length, 0, 0],
@@ -155,7 +159,10 @@ class _CoachingCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              EdAvatar(name: req.athleteName ?? 'Athlete', size: 42),
+              _AthleteAvatar(
+                name: req.athleteName ?? 'Athlete',
+                photo: req.athleteProfile?.photo,
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -224,6 +231,13 @@ class _CoachingCard extends StatelessWidget {
               ),
             ],
           ),
+          // The profile an expert needs to judge the request. Only shown while
+          // the decision is still theirs to make — once accepted, the full
+          // athlete profile is available to them properly.
+          if (req.status == 'pending' && (req.athleteProfile?.hasAny ?? false)) ...[
+            const SizedBox(height: 12),
+            _AthleteFacts(profile: req.athleteProfile!, requestedAt: req.createdAt),
+          ],
           if (req.status == 'pending') ...[
             const SizedBox(height: 14),
             Row(
@@ -254,6 +268,194 @@ class _CoachingCard extends StatelessWidget {
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+/// The athlete's photo, falling back to the initials avatar the rest of the
+/// dashboard uses when there is no photo (or it fails to load).
+class _AthleteAvatar extends StatelessWidget {
+  const _AthleteAvatar({required this.name, this.photo});
+
+  final String name;
+  final String? photo;
+
+  @override
+  Widget build(BuildContext context) {
+    final url = photo?.trim();
+    if (url == null || url.isEmpty || !url.startsWith('http')) {
+      return EdAvatar(name: name, size: 42);
+    }
+    return ClipOval(
+      child: Image.network(
+        url,
+        width: 42,
+        height: 42,
+        fit: BoxFit.cover,
+        // A broken photo URL must never blank the card — the initials avatar
+        // is a complete answer on its own.
+        errorBuilder: (_, _, _) => EdAvatar(name: name, size: 42),
+        loadingBuilder: (context, child, progress) =>
+            progress == null ? child : EdAvatar(name: name, size: 42),
+      ),
+    );
+  }
+}
+
+/// Age / gender / height / weight / BMI / goal, plus when the request came in.
+///
+/// Only facts that exist are rendered. A missing height is omitted rather than
+/// shown as "—": an expert scanning a queue should see what they know, not a
+/// grid of blanks.
+class _AthleteFacts extends StatelessWidget {
+  const _AthleteFacts({required this.profile, this.requestedAt});
+
+  final CoachingAthleteProfile profile;
+  final DateTime? requestedAt;
+
+  @override
+  Widget build(BuildContext context) {
+    final facts = <(String, String)>[
+      if (profile.age != null) ('Age', '${profile.age}'),
+      if (profile.gender != null) ('Gender', _capitalise(profile.gender!)),
+      if (profile.heightCm != null) ('Height', '${_trim(profile.heightCm!)} cm'),
+      if (profile.weightKg != null) ('Weight', '${_trim(profile.weightKg!)} kg'),
+      if (profile.bmi != null) ('BMI', _trim(profile.bmi!)),
+      if (profile.goalType != null) ('Goal', _capitalise(profile.goalType!)),
+    ];
+    if (facts.isEmpty && requestedAt == null) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: ZitlasTokens.bgCardLight,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: ZitlasTokens.borderSub),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (facts.isNotEmpty)
+            Wrap(
+              spacing: 16,
+              runSpacing: 8,
+              children: [
+                for (final (label, value) in facts)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        label.toUpperCase(),
+                        style: const TextStyle(
+                          color: ZitlasTokens.textMuted,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 1),
+                      Text(
+                        value,
+                        style: const TextStyle(
+                          color: ZitlasTokens.textPrimary,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
+          if (requestedAt != null) ...[
+            if (facts.isNotEmpty) const SizedBox(height: 8),
+            Text(
+              'Requested ${_relative(requestedAt!)}',
+              style: const TextStyle(
+                color: ZitlasTokens.textMuted,
+                fontSize: 10.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  static String _trim(num v) =>
+      v == v.roundToDouble() ? v.round().toString() : v.toStringAsFixed(1);
+
+  static String _capitalise(String s) =>
+      s.isEmpty ? s : s[0].toUpperCase() + s.substring(1).replaceAll('_', ' ');
+
+  static String _relative(DateTime when) {
+    final diff = DateTime.now().difference(when);
+    if (diff.inMinutes < 1) return 'just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    if (diff.inDays == 1) return 'yesterday';
+    if (diff.inDays < 30) return '${diff.inDays} days ago';
+    return '${when.day}/${when.month}/${when.year}';
+  }
+}
+
+/// Coaching at a glance: assigned athletes, and how the request queue stands.
+///
+/// Every number is derived from the two live streams the section already
+/// holds — no extra reads, and nothing can disagree with the list below it.
+class _CoachingSummary extends StatelessWidget {
+  const _CoachingSummary({required this.controller});
+
+  final ExpertDashboardController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = controller;
+    // `myAthletes` counts ACTIVE relationships (personal_coaching), which is
+    // the real client list; `activeCoaching` counts accepted REQUESTS. They
+    // usually match, and when they don't the relationship is the truth — a
+    // request whose 30 days lapsed is no longer a client.
+    final stats = <(String, String, int)>[
+      ('👥', 'Athletes', c.myAthletes.length),
+      ('🕒', 'Pending', c.pendingCoaching.length),
+      ('✅', 'Accepted', c.activeCoaching.length),
+      ('✕', 'Declined', c.declinedCoaching.length),
+    ];
+
+    return ZitlasCard(
+      child: Row(
+        children: [
+          for (final (icon, label, value) in stats)
+            Expanded(
+              child: Column(
+                children: [
+                  Text(icon, style: const TextStyle(fontSize: 14)),
+                  const SizedBox(height: 3),
+                  Text(
+                    '$value',
+                    style: TextStyle(
+                      color: value > 0 && label == 'Pending'
+                          ? ZitlasTokens.primary
+                          : ZitlasTokens.textPrimary,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 1),
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      color: ZitlasTokens.textMuted,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );

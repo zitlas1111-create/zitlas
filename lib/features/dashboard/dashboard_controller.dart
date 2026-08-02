@@ -7,6 +7,7 @@ import '../../core/steps/step_tracking_service.dart';
 import 'data/dashboard_repository.dart';
 import 'data/health_status_store.dart';
 import 'models/activity_day_model.dart';
+import 'models/assigned_coach.dart';
 import 'models/activity_week.dart';
 import 'models/daily_score.dart';
 import 'models/goal_model.dart';
@@ -108,6 +109,11 @@ class DashboardController extends ChangeNotifier {
   double? mealScoreAvg;
   bool hasActiveCoaching = false;
 
+  /// The athlete's assigned Personal Coach — null when unassigned. Fed by a
+  /// live listener so an acceptance lands without a refresh.
+  AssignedCoach? assignedCoach;
+  StreamSubscription<AssignedCoach?>? _coachSub;
+
   // -- Health Status / Recovery Mode (health-status.js) --
   HealthAdjustment? healthToday;
   bool healthTodayGreat = false;
@@ -189,6 +195,7 @@ class DashboardController extends ChangeNotifier {
     );
 
     unawaited(_loadOneTimeSections());
+    _watchAssignedCoach();
   }
 
   void _applyUserDoc(Map<String, dynamic>? data) {
@@ -316,6 +323,27 @@ class DashboardController extends ChangeNotifier {
       // Defaults to false — expert promo may show when it shouldn't in the
       // rare case this read fails, which is the safer failure direction.
     }
+  }
+
+  /// The assigned coach, live.
+  ///
+  /// A listener rather than a one-shot read: the moment the expert accepts,
+  /// the backend writes the relationship and this card appears on the
+  /// athlete's dashboard without them touching anything.
+  void _watchAssignedCoach() {
+    _coachSub?.cancel();
+    _coachSub = _repository.watchAssignedCoach(uid).listen(
+      (coach) {
+        assignedCoach = coach;
+        // Keeps the expert-review promo suppressed the instant an assignment
+        // lands, instead of waiting for the next one-shot read.
+        if (coach != null) hasActiveCoaching = true;
+        _safeNotify();
+      },
+      onError: (Object e) {
+        if (kDebugMode) debugPrint('[COACH] assignment stream error: $e');
+      },
+    );
   }
 
   Future<void> _loadHealthStatus() async {
@@ -605,6 +633,7 @@ class DashboardController extends ChangeNotifier {
     _disposed = true;
     _userDocSub?.cancel();
     _unreadSub?.cancel();
+    _coachSub?.cancel();
     super.dispose();
   }
 }

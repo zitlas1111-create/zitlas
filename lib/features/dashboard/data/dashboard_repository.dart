@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 
 import '../models/activity_day_model.dart';
+import '../models/assigned_coach.dart';
 import '../models/goal_model.dart';
 import '../models/weight_entry.dart';
 
@@ -156,6 +158,41 @@ class DashboardRepository {
   Future<bool> hasActiveCoaching(String uid) async {
     final doc = await _firestore.collection('personal_coaching').doc(uid).get();
     return doc.exists && doc.data()?['status'] == 'active';
+  }
+
+  /// The athlete's assigned coach, live.
+  ///
+  /// `personal_coaching/{uid}` IS the assignment — there is no separate
+  /// assignment collection and deliberately no denormalised `assignedCoachId`
+  /// on the user doc. One document, written only by the backend inside the
+  /// accept transaction, is what makes "no duplicate assignments" true by
+  /// construction: the doc id is the athlete's uid, so a second concurrent
+  /// accept overwrites rather than duplicating, and the transaction rejects
+  /// it anyway (`athlete_has_other_active_coach`).
+  ///
+  /// The coach's photo and verified badge come from `experts/{coachId}`,
+  /// which is readable by any signed-in user — those are public professional
+  /// details, not private ones.
+  Stream<AssignedCoach?> watchAssignedCoach(String uid) {
+    return _firestore.collection('personal_coaching').doc(uid).snapshots().asyncMap(
+      (snap) async {
+        final data = snap.data();
+        if (data == null || data['status'] != 'active') return null;
+        final coachId = data['coachId'] as String?;
+        if (coachId == null) return null;
+
+        Map<String, dynamic>? expert;
+        try {
+          expert = (await _firestore.collection('experts').doc(coachId).get()).data();
+        } catch (e) {
+          // The card still renders from the relationship alone — a missing
+          // expert doc costs a photo and a badge, not the assignment.
+          if (kDebugMode) debugPrint('[COACH] expert profile unavailable: $e');
+        }
+
+        return AssignedCoach.from(relationship: data, expert: expert);
+      },
+    );
   }
 
   Future<void> saveGoal(String uid, GoalModel goal) {

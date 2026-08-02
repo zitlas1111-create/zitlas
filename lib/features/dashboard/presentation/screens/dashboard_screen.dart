@@ -15,6 +15,7 @@ import '../widgets/expert_review_promo_card.dart';
 import '../widgets/goal_card.dart';
 import '../widgets/greeting_section.dart';
 import '../widgets/health_status_card.dart';
+import '../widgets/my_coach_card.dart';
 import '../widgets/quick_stats_row.dart';
 import '../widgets/recent_chats_card.dart';
 import '../widgets/swot_widget_card.dart';
@@ -155,6 +156,18 @@ class _DashboardBodyState extends State<_DashboardBody> with WidgetsBindingObser
                             child: const GoalCard(),
                           ),
                           const SizedBox(height: 16),
+                          // The assigned coach sits directly under the goal —
+                          // once an athlete has a coach, that relationship is
+                          // the most important thing on this screen. The
+                          // expert-review promo below already hides itself
+                          // when coaching is active, so the two never stack.
+                          if (controller.assignedCoach != null) ...[
+                            MyCoachCard(
+                              coach: controller.assignedCoach!,
+                              athleteId: controller.uid,
+                            ),
+                            const SizedBox(height: 16),
+                          ],
                           const ExpertReviewPromoCard(),
                           const SizedBox(height: 16),
                           // #healthStatusMount — sits between the expert

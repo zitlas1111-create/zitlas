@@ -266,6 +266,60 @@ class ReviewRequest {
   }
 }
 
+/// The athlete snapshot the backend copies onto a coaching request.
+///
+/// Written server-side (`_athlete_profile_summary` in
+/// `backend/routes/coaching.py`) because Security Rules only let an expert
+/// read `users/{athleteId}` once they are the ACTIVE coach — a pending request
+/// must not grant access to the athlete's whole profile. Every field is
+/// nullable: an athlete who hasn't filled in their height renders as "—", not
+/// as a made-up number.
+class CoachingAthleteProfile {
+  const CoachingAthleteProfile({
+    this.photo,
+    this.gender,
+    this.age,
+    this.heightCm,
+    this.weightKg,
+    this.bmi,
+    this.goalType,
+  });
+
+  final String? photo;
+  final String? gender;
+  final int? age;
+  final num? heightCm;
+  final num? weightKg;
+  final num? bmi;
+  final String? goalType;
+
+  /// True when there is at least one real figure to show. Requests made
+  /// before this snapshot existed have none, and the card says so rather than
+  /// rendering a row of dashes.
+  bool get hasAny =>
+      photo != null ||
+      gender != null ||
+      age != null ||
+      heightCm != null ||
+      weightKg != null ||
+      bmi != null ||
+      goalType != null;
+
+  static CoachingAthleteProfile? fromMap(Object? raw) {
+    if (raw is! Map) return null;
+    final m = raw.cast<String, dynamic>();
+    return CoachingAthleteProfile(
+      photo: _asString(m['photo']),
+      gender: _asString(m['gender']),
+      age: asNum(m['age'])?.toInt(),
+      heightCm: asNum(m['heightCm']),
+      weightKg: asNum(m['weightKg']),
+      bmi: asNum(m['bmi']),
+      goalType: _asString(m['goalType']),
+    );
+  }
+}
+
 /// `personal_coach_requests` doc where `expertId == uid`.
 class CoachingRequest {
   const CoachingRequest({
@@ -281,6 +335,7 @@ class CoachingRequest {
     this.price,
     this.isPremium = false,
     this.createdAt,
+    this.athleteProfile,
   });
 
   final String id;
@@ -300,6 +355,10 @@ class CoachingRequest {
   final num? price;
   final bool isPremium;
   final DateTime? createdAt;
+
+  /// Server-copied athlete snapshot — null on requests created before it
+  /// existed.
+  final CoachingAthleteProfile? athleteProfile;
 
   /// `PC_PLAN_ICONS` (ED:1434).
   String get planIcon {
@@ -349,6 +408,7 @@ class CoachingRequest {
       price: asNum(m['price']),
       isPremium: m['isPremium'] == true,
       createdAt: _asDate(m['createdAt']),
+      athleteProfile: CoachingAthleteProfile.fromMap(m['athleteProfile']),
     );
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/zitlas_tokens.dart';
+import '../../data/experts_repository.dart';
 import '../../expert_profile_controller.dart';
 
 /// `initPersonalCoaching()`'s request sheet (cprofile.js:3892+) — 2-step:
@@ -218,7 +219,20 @@ class _PersonalCoachingSheetState extends State<_PersonalCoachingSheet> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Coaching request sent.')));
     } else {
       setState(() => _submitting = false);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not send request — please try again.')));
+      // The backend's refusals are specific (already have a pending request,
+      // already have a coach, coach gone, not enough balance) and mostly
+      // unretryable — show the real reason rather than a "try again" that
+      // cannot work. Held long enough to read a full sentence.
+      final error = widget.controller.submitError;
+      final message = error is CoachingRequestException
+          ? error.message
+          : 'Could not send your request. Please check your connection and try again.';
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+          content: Text(message),
+          duration: const Duration(seconds: 6),
+        ));
     }
   }
 }
