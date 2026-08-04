@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -65,10 +66,55 @@ class _ChatBodyState extends State<_ChatBody> {
   final _scroll = ScrollController();
   bool _sending = false;
 
+  /// Live coaching status for THIS pair, or null while it loads / when this
+  /// thread isn't a coaching one at all.
+  ///
+  /// History always stays readable — an athlete's conversation with a former
+  /// coach is theirs. Only the composer closes.
+  StreamSubscription<CoachingRelationship?>? _relSub;
+  CoachingRelationship? _relationship;
+  bool _relLoaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _relSub = ExpertsRepository(
+      firestore: FirebaseFirestore.instance,
+      auth: FirebaseAuth.instance,
+    ).watchMyCoachingRelationship(widget.athleteId).listen(
+      (rel) {
+        if (!mounted) return;
+        setState(() {
+          _relationship = rel;
+          _relLoaded = true;
+        });
+      },
+      onError: (_) {
+        // Unreadable status must not lock a working chat — fail OPEN here.
+        // The Firestore rule on chat_rooms is the real gate; this is UI.
+        if (mounted) setState(() => _relLoaded = true);
+      },
+    );
+  }
+
+  /// True when this thread is with a coach whose relationship has ENDED.
+  ///
+  /// Deliberately narrow: only when we have loaded a relationship, it names
+  /// THIS expert, and it is no longer active. An ordinary expert chat (a plan
+  /// review, say) is never locked by this.
+  bool get _coachingEnded {
+    if (!_relLoaded) return false;
+    final rel = _relationship;
+    if (rel == null) return false;
+    if (widget.expertId == null || rel.coachId != widget.expertId) return false;
+    return !rel.isActive;
+  }
+
   @override
   void dispose() {
     _controller.dispose();
     _scroll.dispose();
+    _relSub?.cancel();
     super.dispose();
   }
 
@@ -116,11 +162,14 @@ class _ChatBodyState extends State<_ChatBody> {
                 },
               ),
             ),
-            _InputBar(
-              controller: _controller,
-              sending: _sending,
-              onSend: _send,
-            ),
+            if (_coachingEnded)
+              const _CoachingEndedBar()
+            else
+              _InputBar(
+                controller: _controller,
+                sending: _sending,
+                onSend: _send,
+              ),
           ],
         ),
       ),
@@ -216,6 +265,51 @@ class _InputBar extends StatelessWidget {
             icon: sending
                 ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                 : const Icon(Icons.send_rounded, color: ZitlasTokens.primary),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+
+/// Replaces the composer once coaching has ended.
+///
+/// The conversation above stays exactly where it was — nothing is hidden or
+/// deleted. This only says why there is no longer a place to type.
+class _CoachingEndedBar extends StatelessWidget {
+  const _CoachingEndedBar();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(18, 14, 18, 20),
+      decoration: const BoxDecoration(
+        color: ZitlasTokens.bgCard,
+        border: Border(top: BorderSide(color: ZitlasTokens.borderSub)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            'Personal Coaching ended.',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              color: ZitlasTokens.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 3),
+          const Text(
+            'Your conversation is kept here. Start a new coaching relationship '
+            'to continue chatting.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 11.5,
+              height: 1.45,
+              color: ZitlasTokens.textSecondary,
+            ),
           ),
         ],
       ),

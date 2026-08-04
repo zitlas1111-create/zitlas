@@ -14,6 +14,7 @@ import '../widgets/dashboard_header.dart';
 import '../widgets/expert_review_promo_card.dart';
 import '../widgets/goal_card.dart';
 import '../widgets/greeting_section.dart';
+import '../widgets/find_coach_card.dart';
 import '../widgets/health_status_card.dart';
 import '../widgets/my_coach_card.dart';
 import '../widgets/quick_stats_row.dart';
@@ -165,7 +166,14 @@ class _DashboardBodyState extends State<_DashboardBody> with WidgetsBindingObser
                             MyCoachCard(
                               coach: controller.assignedCoach!,
                               athleteId: controller.uid,
+                              onEndCoaching: controller.endCoaching,
                             ),
+                            const SizedBox(height: 16),
+                          ] else if (!controller.userDocLoading) ...[
+                            // Replaces the coach card the moment coaching ends
+                            // — the assignment listener stops emitting, so this
+                            // swaps in without any explicit refresh.
+                            const FindCoachCard(),
                             const SizedBox(height: 16),
                           ],
                           const ExpertReviewPromoCard(),

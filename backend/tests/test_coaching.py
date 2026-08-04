@@ -483,3 +483,117 @@ def test_reject_notifies_the_athlete_and_frees_them_to_choose_again(fake_db, app
     _as(app, ATHLETE_UID)
     again = client.post("/api/coaching/request", json={"expertId": EXPERT_UID, "planType": "training"})
     assert again.status_code == 200, again.text
+
+
+# ══════════════════════════════════════════════════════════════════════
+# END COACHING
+# ══════════════════════════════════════════════════════════════════════
+
+
+def _activate(fake_db, app, client):
+    """Runs a real request+accept so an ACTIVE relationship exists."""
+    _set_wallet(fake_db, ATHLETE_UID, balance=1000)
+    fake_db.store[f"users/{ATHLETE_UID}"]["name"] = "Rohit Sharma"
+    _as(app, ATHLETE_UID)
+    request_id = client.post(
+        "/api/coaching/request", json={"expertId": EXPERT_UID, "planType": "diet"}
+    ).json()["requestId"]
+    _as(app, EXPERT_UID)
+    assert client.post("/api/coaching/accept", json={"requestId": request_id}).status_code == 200
+    return request_id
+
+
+def test_end_coaching_retires_the_relationship(fake_db, app, client):
+    request_id = _activate(fake_db, app, client)
+    _as(app, ATHLETE_UID)
+
+    r = client.post("/api/coaching/end")
+    assert r.status_code == 200, r.text
+
+    rel = fake_db.store[f"personal_coaching/{ATHLETE_UID}"]
+    assert rel["status"] == "ended"
+    assert rel["endedBy"] == "athlete"
+    assert rel["endedAt"]
+
+    # The originating request is closed too — a client cannot write this
+    # collection at all, which is exactly why this lives server-side.
+    assert fake_db.store[f"personal_coach_requests/{request_id}"]["status"] == "ended"
+
+
+def test_end_coaching_deletes_nothing(fake_db, app, client):
+    """Access ends; the athlete's record does not."""
+    _activate(fake_db, app, client)
+    fake_db.store[f"coaching_plans/{ATHLETE_UID}"] = {"diet": {"days": ["authored"]}}
+    _as(app, ATHLETE_UID)
+
+    assert client.post("/api/coaching/end").status_code == 200
+
+    assert f"personal_coaching/{ATHLETE_UID}" in fake_db.store
+    assert f"coaching_plans/{ATHLETE_UID}" in fake_db.store
+    assert fake_db.store[f"coaching_plans/{ATHLETE_UID}"]["diet"]["days"] == ["authored"]
+    # The wallet transaction from the accept is untouched — money that changed
+    # hands is not unwound by ending a relationship.
+    assert any(k.startswith("wallet_transactions/") for k in fake_db.store)
+
+
+def test_end_coaching_notifies_both_sides(fake_db, app, client):
+    _activate(fake_db, app, client)
+    _as(app, ATHLETE_UID)
+    before_coach = len(_notifications_for(fake_db, EXPERT_UID))
+
+    assert client.post("/api/coaching/end").status_code == 200
+
+    coach_notes = _notifications_for(fake_db, EXPERT_UID)
+    assert len(coach_notes) == before_coach + 1
+    assert "Rohit Sharma" in coach_notes[-1]["message"]
+    assert coach_notes[-1]["type"] == "coaching_ended"
+
+    athlete_notes = [n for n in _notifications_for(fake_db, ATHLETE_UID)
+                     if n["type"] == "coaching_ended"]
+    assert len(athlete_notes) == 1
+    # The athlete is told their data survives — that is what they worry about.
+    assert "still here" in athlete_notes[0]["message"]
+
+
+def test_end_coaching_is_idempotent(fake_db, app, client):
+    """A double-tap must not notify the coach twice."""
+    _activate(fake_db, app, client)
+    _as(app, ATHLETE_UID)
+
+    assert client.post("/api/coaching/end").status_code == 200
+    after_first = len(_notifications_for(fake_db, EXPERT_UID))
+
+    r2 = client.post("/api/coaching/end")
+    assert r2.status_code == 200
+    assert r2.json()["already"] is True
+    assert len(_notifications_for(fake_db, EXPERT_UID)) == after_first
+
+
+def test_end_coaching_without_a_coach_is_a_404(fake_db, app, client):
+    _as(app, ATHLETE_UID)
+    r = client.post("/api/coaching/end")
+    assert r.status_code == 404
+    assert r.json()["detail"] == "no_coaching_relationship"
+
+
+def test_ending_frees_the_athlete_to_request_again(fake_db, app, client):
+    """No manual cleanup between one coach and the next."""
+    _activate(fake_db, app, client)
+    _as(app, ATHLETE_UID)
+    assert client.post("/api/coaching/end").status_code == 200
+
+    again = client.post("/api/coaching/request",
+                        json={"expertId": EXPERT_UID, "planType": "training"})
+    assert again.status_code == 200, again.text
+
+
+def test_an_athlete_can_only_end_their_own_coaching(fake_db, app, client):
+    """The route derives the athlete from the token, never from the body."""
+    _activate(fake_db, app, client)
+
+    # The EXPERT calling /end acts only on their own (nonexistent) relationship.
+    _as(app, EXPERT_UID)
+    r = client.post("/api/coaching/end")
+    assert r.status_code == 404
+
+    assert fake_db.store[f"personal_coaching/{ATHLETE_UID}"]["status"] == "active"

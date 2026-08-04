@@ -547,3 +547,71 @@ describe('coaching_plans — coach authors, athlete selects', () => {
     await assertFails(asC().doc(`coaching_plans/${A}`).delete());
   });
 });
+
+
+// ── Ending coaching revokes access, and deletes nothing ─────────────────
+//
+// Access is gated on isActiveCoachOf(), which requires status == 'active'.
+// Flipping that one field is what withdraws the coach from the athlete's
+// profile, plans, versions and meal photos — there is deliberately no second
+// "revoke" mechanism to keep in sync.
+describe('end coaching — revocation', () => {
+  it('the athlete CAN retire their own relationship', async () => {
+    await assertSucceeds(asA().doc(`personal_coaching/${A}`).update({
+      status: 'ended', endedAt: new Date().toISOString(),
+      endedBy: 'athlete', reason: 'athlete',
+    }));
+  });
+  it('endedBy and reason are allowed — both clients write them', async () => {
+    // They were missing from changedOnly() while cprofile.js:4252 and
+    // ExpertsRepository.endCoaching both wrote them, so every End Coaching
+    // attempt was rejected and the feature never worked on either platform.
+    await assertSucceeds(
+      asA().doc(`personal_coaching/${A}`).update({ status: 'ended', endedBy: 'athlete' }));
+  });
+  it('the athlete still CANNOT rewrite the coach or the fee', async () => {
+    await assertFails(asA().doc(`personal_coaching/${A}`).update({ coachId: D }));
+    await assertFails(asA().doc(`personal_coaching/${A}`).update({ fee: 0 }));
+  });
+  it('the COACH cannot end the relationship from the client', async () => {
+    await assertFails(asC().doc(`personal_coaching/${A}`).update({ status: 'ended' }));
+  });
+  it('nobody can delete the relationship record', async () => {
+    await assertFails(asA().doc(`personal_coaching/${A}`).delete());
+  });
+  it('the athlete keeps reading their own meal photos forever', async () => {
+    await assertSucceeds(asA().doc('meal_checkins/mc1').get());
+  });
+  it('an unrelated expert can never read a meal photo', async () => {
+    await assertFails(asD().doc('meal_checkins/mc1').get());
+  });
+});
+
+// The ex-coach's loss of access, verified against a RETIRED relationship.
+describe('end coaching — the ex-coach', () => {
+  before(async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await ctx.firestore().doc(`personal_coaching/${A}`).set(
+        { athleteId: A, coachId: C, status: 'ended', endDateTs: future }, { merge: true });
+    });
+  });
+  it('CANNOT read the athlete profile', async () => {
+    await assertFails(asC().doc(`users/${A}`).get());
+  });
+  it('CANNOT read the coach-authored plans', async () => {
+    await assertFails(asC().doc(`coaching_plans/${A}`).get());
+  });
+  it('CANNOT read the plan version history', async () => {
+    await assertFails(asC().doc(`coaching_plans/${A}/versions/diet_1`).get());
+  });
+  it('CANNOT read the athlete meal photos', async () => {
+    await assertFails(asC().doc('meal_checkins/mc1').get());
+  });
+  it('CANNOT publish a new plan', async () => {
+    await assertFails(
+      asC().doc(`coaching_plans/${A}`).set({ diet: { days: [] } }, { merge: true }));
+  });
+  it('CANNOT review a meal', async () => {
+    await assertFails(asC().doc('meal_checkins/mc1').update({ status: 'reviewed' }));
+  });
+});

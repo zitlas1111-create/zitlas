@@ -2,7 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
 import '../../core/steps/step_history.dart';
+import '../experts/data/experts_repository.dart';
 import '../../core/steps/step_tracking_service.dart';
 import 'data/dashboard_repository.dart';
 import 'data/health_status_store.dart';
@@ -114,6 +118,27 @@ class DashboardController extends ChangeNotifier {
   AssignedCoach? assignedCoach;
   StreamSubscription<AssignedCoach?>? _coachSub;
 
+  /// Ends the athlete's Personal Coaching.
+  ///
+  /// The card disappears on its own: `watchAssignedCoach` only emits an
+  /// assignment while `status == 'active'`, so the live listener replaces it
+  /// with the "find a coach" prompt as soon as the backend commits. Nothing
+  /// here clears local state optimistically — the relationship document is the
+  /// single source of truth, and pretending otherwise is how the two drift.
+  Future<void> endCoaching() async {
+    await _experts.endCoaching(uid);
+    // Re-enables the expert-review promo immediately; the user-doc listener
+    // would otherwise leave it suppressed until its next snapshot.
+    hasActiveCoaching = false;
+    _safeNotify();
+  }
+
+  ExpertsRepository get _experts => _expertsRepo ??= ExpertsRepository(
+        firestore: FirebaseFirestore.instance,
+        auth: FirebaseAuth.instance,
+      );
+  ExpertsRepository? _expertsRepo;
+
   // -- Health Status / Recovery Mode (health-status.js) --
   HealthAdjustment? healthToday;
   bool healthTodayGreat = false;
@@ -185,8 +210,8 @@ class DashboardController extends ChangeNotifier {
     );
 
     _unreadSub = _repository.watchUnreadNotificationCount(uid).listen(
-      (count) {
-        unreadNotifications = count;
+      (unread) {
+        unreadNotifications = unread;
         _safeNotify();
       },
       onError: (_) {
