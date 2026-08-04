@@ -2037,3 +2037,104 @@ having actually answered something.
 - **Device install NOT completed this round** — the phone dropped off wireless
   ADB mid-build and did not return. The previous build of this work was
   verified on-device; this one is not.
+
+---
+
+# Phase 3 — Meal Snap, Coach Review & Compliance (partial)
+
+## Architecture: the website already had this
+
+`frontend/pages/diet/diet.js` (~2160-2600) implements the whole flow. Its
+contract is adopted field-for-field, so a meal snapped on the phone appears in
+the website's coaching workspace and vice versa. **No new collections.**
+
+`meal_checkins/{checkinId}`:
+```
+checkinId, athleteId, athleteName, coachId, day, mealType, mealName,
+imageUrl, timestamp, status: 'pending'|'reviewed',
+reaction, score, comment, reviewedAt, reviewedBy,
+estimatedCalories/Protein/Carbs/Fat, foodRecognition, confidenceScore
+```
+Reactions are the website's own five: `perfect | great | good |
+needs_improvement | not_recommended`.
+
+## Upload — Firebase Storage, with the site's existing fallback
+
+`assets/js/chat-attachments.js` already does compress → **Firebase Storage** →
+`POST /api/chat/upload` fallback. `MealPhotoUploader` mirrors it exactly,
+uploading to `meal_checkins/{uid}/{ts}_{rand}.jpg` in the same bucket
+certificates use. The fallback is the point: an athlete photographing lunch
+must not lose it because a bucket rule changed.
+
+Nutrition estimation reuses `POST /api/meal/estimate-nutrition`, which already
+existed and already documented the `meal_checkins` fields it populates. It runs
+IN PARALLEL with the upload and is allowed to fail — its fields stay null,
+meaning "not estimated", never "zero".
+
+## The active-coach gate
+
+Meal Snap renders **nothing at all** without a live `personal_coaching`
+relationship — not a disabled button. The gate is re-checked at send time too,
+because a relationship can lapse while the camera is open.
+
+## Compliance — honest about gaps
+
+A meal nobody photographed is **UNKNOWN, not a failure**, and is reported
+separately. A photo the coach hasn't opened is **the coach's backlog, not the
+athlete's non-compliance** — quality rate is null until something is rated
+rather than 0%. One meal slot counts once however many photos were taken, so a
+keen athlete can't score over 100%. Expected meals come from the athlete's own
+profile, not a constant.
+
+Insights name the meal and the count that produced them, and nothing fires from
+a single data point — one skipped breakfast is a Tuesday, not a pattern.
+Protein is only commented on where the vision model actually estimated it.
+
+## Files
+
+**New:** `coaching/data/meal_photo_uploader.dart`,
+`coaching/data/meal_checkin_repository.dart`,
+`coaching/models/meal_checkin.dart`, `coaching/models/meal_compliance.dart`,
+`coaching/presentation/screens/meal_review_screen.dart`,
+`diet/presentation/widgets/meal_snap_button.dart`,
+`test/meal_checkin_test.dart`, `storage.rules`.
+**Modified:** `diet_controller.dart` (relationship + check-in listeners, submit),
+`diet_screen.dart`, `diet_meal_card.dart` (a `footer` slot — the card still
+knows nothing about coaching), `athlete_profile_screen.dart`, `pubspec.yaml`
+(+`firebase_storage`, +`flutter_image_compress`).
+
+## storage.rules — WRITTEN, NOT DEPLOYED
+
+No `storage.rules` existed in this repo, so the live bucket runs whatever the
+Firebase console was last set to — not visible from here. Deploying replaces
+those rules, and a missing path would instantly break live certificate uploads
+or chat images. All four production paths were traced from real upload code
+(`certificates/`, `chat_uploads/`, `meal_checkins/`, `meal_snaps/`) and are
+covered, but **this needs checking against the live bucket before deploy.**
+
+Worth stating plainly: a Storage download URL carries its own token and works
+for anyone holding it, whatever these rules say. Meal photos stay confidential
+because the URL only ever appears inside a `meal_checkins` document, which
+`firestore.rules` already restricts to the athlete and their coach.
+
+## NOT delivered
+
+- **The daily 12:00 AM step/compliance summary to the coach** (Steps 9-10). The
+  notification scheduler and step archiving both exist; the job that composes
+  and sends the summary does not.
+- **The athlete's meal-history screen** (Step 6). Check-ins render inline on
+  each meal card with rating and comment; there is no separate history view.
+- Meal reminders (Step 14) already exist from the notification phase and were
+  not touched.
+
+## Validation
+
+- `flutter analyze lib/ test/` — 22 issues, **all info-level**.
+- `flutter test` — **554/554 passed** (528 before, **+26 new**).
+- `flutter build apk --debug` — succeeded; installed and launched on the
+  OnePlus with **no crashes and no errors** in logcat.
+- **The Snap → review → notify loop is NOT device-verified.** It needs two real
+  accounts (an athlete with an active coach, and that coach), and the signed-in
+  test account has no active coaching relationship — so the button correctly
+  renders nothing, which is itself the gate working, but the loop is unproven
+  on a device.

@@ -1,0 +1,79 @@
+rules_version = '2';
+
+// ZITLAS — Firebase Storage rules
+// =================================================================
+// NOT YET DEPLOYED. No storage.rules existed in this repository, which means
+// the live bucket is running whatever was last set in the Firebase console —
+// unknown from here. Deploying this file REPLACES those rules, so it needs a
+// deliberate decision, not a side effect of a feature branch.
+//
+// Every path below was traced from real production upload code:
+//   certificates/{expertId}/...  — assets/js/certificate-manager.js:77
+//   chat_uploads/{uid}/...       — assets/js/chat-attachments.js (default prefix)
+//   meal_checkins/{uid}/...      — pages/diet/diet.js:2565 (coach review)
+//   meal_snaps/{uid}/...         — pages/diet/diet.js:2375 (AI-only, no coach)
+//
+// WHAT THESE RULES CAN AND CANNOT DO. A Firebase Storage download URL carries
+// its own access token and works for anyone holding it, regardless of what is
+// written here — these rules govern the API paths, not a leaked URL. Meal
+// photos stay confidential because the URL only ever appears inside a
+// meal_checkins document, and firestore.rules already restricts that document
+// to the athlete and their assigned coach. That is the same model the website
+// has always relied on; it is stated here so nobody mistakes these rules for a
+// stronger guarantee than they are.
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function signedIn() { return request.auth != null; }
+    function isUser(uid) { return signedIn() && request.auth.uid == uid; }
+
+    // Images only, and the same 10 MB ceiling the upload code enforces
+    // client-side — a limit that only exists on the client is not a limit.
+    function isImageUnder10MB() {
+      return request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    // Meal photos. The athlete writes their own; reads are open to any signed-in
+    // caller because the coach must be able to load them and Storage rules
+    // cannot see the coaching relationship (that lives in Firestore). The URL
+    // itself is the secret, and it is only ever published into a meal_checkins
+    // document that firestore.rules restricts to the athlete and their coach.
+    match /meal_checkins/{uid}/{file} {
+      allow read: if signedIn();
+      allow write: if isUser(uid) && isImageUnder10MB();
+    }
+
+    // AI-only Snap Meal — no coach involved, so nobody else needs to read it.
+    match /meal_snaps/{uid}/{file} {
+      allow read: if isUser(uid);
+      allow write: if isUser(uid) && isImageUnder10MB();
+    }
+
+    // Chat attachments — readable by any signed-in user for the same reason as
+    // meal photos: room membership is a Firestore fact, not a Storage one.
+    match /chat_uploads/{uid}/{file} {
+      allow read: if signedIn();
+      allow write: if isUser(uid) && isImageUnder10MB();
+    }
+
+    // Expert certificates. Readable by any signed-in user (athletes check a
+    // coach's credentials before hiring them); written only by that expert.
+    // PDFs are allowed here as well as images.
+    match /certificates/{expertId}/{file} {
+      allow read: if signedIn();
+      allow write: if isUser(expertId)
+        && request.resource.size < 10 * 1024 * 1024
+        && (request.resource.contentType.matches('image/.*')
+            || request.resource.contentType == 'application/pdf');
+    }
+
+    // Everything else is closed. If a path is missing from this file it will
+    // start failing the moment these rules are deployed — which is exactly why
+    // this needs checking against the live bucket before it goes out.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

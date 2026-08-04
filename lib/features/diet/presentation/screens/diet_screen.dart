@@ -16,6 +16,7 @@ import '../widgets/diet_empty_state.dart';
 import '../widgets/diet_expert_review_banner.dart';
 import '../widgets/diet_meal_card.dart';
 import '../widgets/diet_meal_swap_sheet.dart';
+import '../widgets/meal_snap_button.dart';
 import '../widgets/diet_plan_header_card.dart';
 import '../widgets/diet_request_review_sheet.dart';
 
@@ -168,6 +169,13 @@ class _DietContent extends StatelessWidget {
           final meal = day.meals[mealIndex];
           return DietMealCard(
             meal: meal,
+            // Meal Snap renders itself as nothing for an athlete without an
+            // active Personal Coach, so this is safe to always pass.
+            footer: MealSnapRow(
+              controller: controller,
+              mealName: meal.mealName,
+              athleteName: userName,
+            ),
             onSwap: () => showMealSwapSheet(
               context,
               controller: controller,

@@ -7,10 +7,20 @@ import '../../models/diet_meal.dart';
 /// (when applicable) the expert-modified badge + swap action — matches
 /// `renderDay()`'s meal card markup in `diet.js`.
 class DietMealCard extends StatelessWidget {
-  const DietMealCard({super.key, required this.meal, required this.onSwap});
+  const DietMealCard({
+    super.key,
+    required this.meal,
+    required this.onSwap,
+    this.footer,
+  });
 
   final DietMeal meal;
   final VoidCallback? onSwap;
+
+  /// Rendered under the meal's contents — the Meal Snap row for athletes with
+  /// an active Personal Coach, absent for everyone else. Passed in rather than
+  /// built here so this card keeps knowing nothing about coaching.
+  final Widget? footer;
 
   @override
   Widget build(BuildContext context) {
@@ -105,6 +115,7 @@ class DietMealCard extends StatelessWidget {
                 ),
             ],
           ),
+          if (footer != null) footer!,
         ],
       ),
     );

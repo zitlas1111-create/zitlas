@@ -1,0 +1,254 @@
+import 'dart:io';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
+
+import '../../../core/network/api_client.dart';
+import '../models/meal_checkin.dart';
+import 'meal_photo_uploader.dart';
+
+/// `meal_checkins/{checkinId}` — photographed meals and the coach's reviews.
+///
+/// Reuses the collection and document shape `frontend/pages/diet/diet.js`
+/// already writes, so a meal submitted on the phone appears in the website's
+/// coaching workspace and vice versa. Notifications go through the existing
+/// `notifications` + `coaching_notifications` pair, matching what the website
+/// sends on the same events.
+class MealCheckinRepository {
+  MealCheckinRepository({
+    FirebaseFirestore? firestore,
+    MealPhotoUploader? uploader,
+    ApiClient? api,
+  })  : _db = firestore ?? FirebaseFirestore.instance,
+        _uploader = uploader ?? MealPhotoUploader(),
+        _api = api ?? ApiClient();
+
+  final FirebaseFirestore _db;
+  final MealPhotoUploader _uploader;
+  final ApiClient _api;
+
+  /// This athlete's check-ins, live. Newest first.
+  Stream<List<MealCheckin>> watchForAthlete(String athleteId) {
+    return _db
+        .collection('meal_checkins')
+        .where('athleteId', isEqualTo: athleteId)
+        .snapshots()
+        .map(_parse);
+  }
+
+  /// Everything awaiting or carrying this coach's review, live.
+  Stream<List<MealCheckin>> watchForCoach(String coachId) {
+    return _db
+        .collection('meal_checkins')
+        .where('coachId', isEqualTo: coachId)
+        .snapshots()
+        .map(_parse);
+  }
+
+  List<MealCheckin> _parse(QuerySnapshot<Map<String, dynamic>> snap) {
+    final list = [
+      for (final d in snap.docs) ?MealCheckin.fromMap(d.data()),
+    ];
+    // Sorted client-side so no composite index is needed alongside the
+    // equality filter — a coaching relationship is 30 days of meals at most.
+    list.sort((a, b) {
+      final at = a.timestamp, bt = b.timestamp;
+      if (at == null && bt == null) return 0;
+      if (at == null) return 1;
+      if (bt == null) return -1;
+      return bt.compareTo(at);
+    });
+    if (kDebugMode) debugPrint('[MEAL CHECKIN] snapshot — ${list.length} total');
+    return list;
+  }
+
+  /// Uploads the photo, estimates its nutrition, writes the check-in and
+  /// notifies the coach.
+  ///
+  /// The AI estimate runs ALONGSIDE the upload and is allowed to fail: a
+  /// nutrition guess is a bonus, and losing the athlete's check-in because a
+  /// vision model timed out would be absurd. Its fields stay null in that
+  /// case — null meaning "not estimated", never "zero".
+  Future<MealCheckin> submit({
+    required File photo,
+    required String athleteId,
+    required String athleteName,
+    required String coachId,
+    required String mealName,
+    required String day,
+    DateTime? now,
+  }) async {
+    final at = now ?? DateTime.now();
+    final stamp = at.millisecondsSinceEpoch;
+    final id = 'MCI_${stamp}_${(stamp % 100000).toRadixString(36)}';
+
+    if (kDebugMode) debugPrint('[MEAL CHECKIN] submitting $mealName for $athleteId');
+
+    final results = await Future.wait([
+      _uploader.upload(photo),
+      _estimateNutrition(photo),
+    ]);
+    final imageUrl = results[0] as String;
+    final estimate = results[1] as Map<String, dynamic>?;
+
+    final checkin = MealCheckin(
+      checkinId: id,
+      athleteId: athleteId,
+      athleteName: athleteName,
+      coachId: coachId,
+      day: day,
+      mealType: mealName.toLowerCase(),
+      mealName: mealName,
+      imageUrl: imageUrl,
+      timestamp: at,
+      status: 'pending',
+      estimatedCalories: estimate == null ? null : asNumOrNull(estimate['calories']),
+      estimatedProtein: estimate == null ? null : asNumOrNull(estimate['protein']),
+      estimatedCarbs: estimate == null ? null : asNumOrNull(estimate['carbs']),
+      estimatedFat: estimate == null ? null : asNumOrNull(estimate['fat']),
+      foodRecognition: [
+        if (estimate?['food_recognition'] is List)
+          for (final f in estimate!['food_recognition'] as List)
+            if (f is String && f.trim().isNotEmpty) f.trim(),
+      ],
+      confidenceScore: estimate == null ? null : asNumOrNull(estimate['confidence_score']),
+    );
+
+    await _db.collection('meal_checkins').doc(id).set(checkin.toMap());
+    if (kDebugMode) debugPrint('[MEAL CHECKIN] document created — $id');
+
+    await _notifyCoach(checkin);
+    return checkin;
+  }
+
+  /// The coach's verdict. Writes the review and notifies the athlete.
+  ///
+  /// `status`, `reaction`, `score`, `comment`, `reviewedAt` and `reviewedBy`
+  /// are exactly the fields the website's own review sets, so a meal reviewed
+  /// here shows as reviewed there.
+  Future<void> review({
+    required MealCheckin checkin,
+    required MealReaction reaction,
+    required String coachName,
+    String? comment,
+    DateTime? now,
+  }) async {
+    final at = now ?? DateTime.now();
+    if (kDebugMode) {
+      debugPrint('[MEAL CHECKIN] review ${checkin.checkinId} -> ${reaction.id}');
+    }
+
+    await _db.collection('meal_checkins').doc(checkin.checkinId).set({
+      'status': 'reviewed',
+      'reaction': reaction.id,
+      'score': reaction.score,
+      'comment': (comment?.trim().isEmpty ?? true) ? null : comment!.trim(),
+      'reviewedAt': at.toIso8601String(),
+      'reviewedBy': coachName,
+    }, SetOptions(merge: true));
+
+    await _notifyAthlete(checkin: checkin, reaction: reaction, comment: comment, coachName: coachName);
+  }
+
+  /// `POST /api/meal/estimate-nutrition` — the route that already exists.
+  ///
+  /// Returns null on any failure. Deliberately swallows everything: this is a
+  /// nice-to-have running in parallel with the upload, and the caller treats
+  /// null as "not estimated".
+  Future<Map<String, dynamic>?> _estimateNutrition(File photo) async {
+    try {
+      final bytes = await photo.readAsBytes();
+      final res = await _api.postMultipartBytes(
+        '/api/meal/estimate-nutrition',
+        fileField: 'file',
+        fileName: 'meal.jpg',
+        fileBytes: bytes,
+        timeout: const Duration(seconds: 45),
+      );
+      if (res is Map<String, dynamic>) return res;
+      if (res is Map) return res.cast<String, dynamic>();
+      return null;
+    } catch (e) {
+      if (kDebugMode) debugPrint('[MEAL CHECKIN] nutrition estimate unavailable: $e');
+      return null;
+    }
+  }
+
+  Future<void> _notifyCoach(MealCheckin c) async {
+    final at = DateTime.now();
+    final stamp = at.millisecondsSinceEpoch;
+    final name = c.athleteName ?? 'Your athlete';
+    try {
+      // Both records the website writes on this event, so the coach's existing
+      // in-app toast AND their Notification Centre both fire.
+      await _db.collection('coaching_notifications').doc('CN_${stamp}_meal').set({
+        'id': 'CN_${stamp}_meal',
+        'toId': c.coachId,
+        'fromId': c.athleteId,
+        'fromName': name,
+        'text': '📸 $name submitted ${c.mealName} for review.',
+        'type': 'meal_checkin',
+        'createdAt': at.toIso8601String(),
+        'read': false,
+      });
+      await _db.collection('notifications').doc('NTF_${stamp}_meal').set({
+        'notificationId': 'NTF_${stamp}_meal',
+        'userId': c.coachId,
+        'title': '📷 $name submitted a meal',
+        'message': '${c.mealName} — ${c.day ?? "today"}. Review pending.',
+        'category': 'meal_snap',
+        'icon': null,
+        'type': 'meal_checkin',
+        'action': 'expert_dashboard',
+        'actionId': null,
+        'expertId': null,
+        'isRead': false,
+        'priority': 'high',
+        'createdAt': at.toIso8601String(),
+      });
+    } catch (e) {
+      // The check-in is already saved. Losing a notification is worth a log,
+      // not a failed submit the athlete would retry (and thereby double-post).
+      if (kDebugMode) debugPrint('[MEAL CHECKIN] coach notification failed: $e');
+    }
+  }
+
+  Future<void> _notifyAthlete({
+    required MealCheckin checkin,
+    required MealReaction reaction,
+    required String coachName,
+    String? comment,
+  }) async {
+    final at = DateTime.now();
+    final stamp = at.millisecondsSinceEpoch;
+    final trimmed = comment?.trim();
+    try {
+      await _db.collection('notifications').doc('NTF_${stamp}_mealrev').set({
+        'notificationId': 'NTF_${stamp}_mealrev',
+        'userId': checkin.athleteId,
+        'title': '${reaction.icon} ${checkin.mealName} reviewed — ${reaction.label}',
+        'message': (trimmed == null || trimmed.isEmpty)
+            ? '$coachName reviewed your ${checkin.mealName.toLowerCase()}.'
+            : trimmed,
+        'category': 'meal_snap',
+        'icon': null,
+        'type': 'meal_reviewed',
+        'action': 'diet',
+        'actionId': null,
+        'expertId': null,
+        'isRead': false,
+        'priority': 'high',
+        'createdAt': at.toIso8601String(),
+      });
+    } catch (e) {
+      if (kDebugMode) debugPrint('[MEAL CHECKIN] athlete notification failed: $e');
+    }
+  }
+}
+
+/// Local coercion so a string from the vision model still parses.
+num? asNumOrNull(Object? v) {
+  if (v is num) return v;
+  if (v is String) return num.tryParse(v.trim());
+  return null;
+}

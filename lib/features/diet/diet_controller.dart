@@ -1,13 +1,20 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
 import '../../core/network/api_exception.dart';
 import 'models/diet_profile.dart';
 import 'models/swap_result.dart';
-import '../expert_dashboard/models/expert_models.dart' show ExpertProfile;
+import '../expert_dashboard/models/expert_models.dart' show CoachingRelationship, ExpertProfile;
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
 import '../coaching/data/coaching_plan_repository.dart';
+import '../coaching/data/meal_checkin_repository.dart';
 import '../coaching/models/coach_diet_plan.dart';
+import '../coaching/models/meal_checkin.dart';
+import '../experts/data/experts_repository.dart';
 import 'data/diet_repository.dart';
 import 'models/diet_calculations.dart';
 import 'models/diet_day.dart';
@@ -43,18 +50,30 @@ class DietController extends ChangeNotifier {
     required this.uid,
     required DietRepository repository,
     CoachingPlanRepository? coachingPlans,
+    ExpertsRepository? experts,
+    MealCheckinRepository? mealCheckins,
   }) : _repository = repository, // ignore: prefer_initializing_formals
-       _coachingPlans = coachingPlans ?? CoachingPlanRepository() {
+       _coachingPlans = coachingPlans ?? CoachingPlanRepository(),
+       _experts = experts ??
+           ExpertsRepository(
+             firestore: FirebaseFirestore.instance,
+             auth: FirebaseAuth.instance,
+           ),
+       _mealCheckins = mealCheckins ?? MealCheckinRepository() {
     _init();
   }
 
   final String uid;
   final DietRepository _repository;
   final CoachingPlanRepository _coachingPlans;
+  final ExpertsRepository _experts;
+  final MealCheckinRepository _mealCheckins;
 
   StreamSubscription<Map<String, dynamic>?>? _userDocSub;
   StreamSubscription<List<DietReviewRequest>>? _reviewsSub;
   StreamSubscription<CoachingPlanDoc>? _coachPlanSub;
+  StreamSubscription<CoachingRelationship?>? _relSub;
+  StreamSubscription<List<MealCheckin>>? _checkinSub;
   bool _disposed = false;
   bool _dayAutoSelected = false;
   Map<String, dynamic>? _lastUserDoc;
@@ -128,6 +147,19 @@ class DietController extends ChangeNotifier {
       },
     );
 
+    // The relationship gate. Meal Snap and the coach's plan both hang off
+    // this being active.
+    _relSub = _experts.watchMyCoachingRelationship(uid).listen(
+      (rel) {
+        coachRelationship = rel;
+        _safeNotify();
+        _watchCheckins();
+      },
+      onError: (Object e) {
+        if (kDebugMode) debugPrint('[DIET] coaching relationship unavailable: $e');
+      },
+    );
+
     // The coach-authored diet, live. This is what makes an edit published by
     // the coach — from the app or from the website's coaching workspace —
     // appear here without the athlete refreshing anything.
@@ -146,6 +178,106 @@ class DietController extends ChangeNotifier {
 
   /// The coach-authored plan document, or null until the first snapshot.
   CoachingPlanDoc? coachPlan;
+
+  /// The athlete-coach relationship. Meal Snap exists ONLY while this is
+  /// active — an athlete without a coach has nobody to send a photo to, so the
+  /// button is absent rather than disabled.
+  CoachingRelationship? coachRelationship;
+
+  /// This athlete's photographed meals, live, so a coach's review lands on
+  /// the meal card without a refresh.
+  List<MealCheckin> mealCheckins = const [];
+
+  /// True only for an athlete with a live, unexpired Personal Coach.
+  bool get hasActiveCoach => coachRelationship?.isActive == true;
+
+  String? get activeCoachId => hasActiveCoach ? coachRelationship?.coachId : null;
+
+  /// The most recent check-in for a meal on the CURRENT day, or null.
+  ///
+  /// Matched on the meal name the athlete photographed, lower-cased — the same
+  /// key `diet.js` writes, so a meal snapped on the website shows here too.
+  MealCheckin? checkinFor(String mealName) {
+    final wanted = mealName.toLowerCase();
+    final now = DateTime.now();
+    for (final c in mealCheckins) {
+      if (c.mealType != wanted) continue;
+      final t = c.timestamp;
+      if (t == null) continue;
+      if (t.year == now.year && t.month == now.month && t.day == now.day) return c;
+    }
+    return null;
+  }
+
+  /// Subscribes to this athlete's meal check-ins once a coach exists.
+  ///
+  /// Only attached when there IS a coach — an athlete without one has no
+  /// check-ins to read, and opening a listener for them is a query that can
+  /// only ever return nothing.
+  void _watchCheckins() {
+    if (!hasActiveCoach) {
+      _checkinSub?.cancel();
+      _checkinSub = null;
+      if (mealCheckins.isNotEmpty) {
+        mealCheckins = const [];
+        _safeNotify();
+      }
+      return;
+    }
+    if (_checkinSub != null) return;
+    _checkinSub = _mealCheckins.watchForAthlete(uid).listen(
+      (list) {
+        mealCheckins = list;
+        _safeNotify();
+      },
+      onError: (Object e) {
+        if (kDebugMode) debugPrint('[DIET] meal check-ins unavailable: $e');
+      },
+    );
+  }
+
+  bool snappingMeal = false;
+
+  /// Submits a photographed meal to the assigned coach.
+  ///
+  /// Returns null on success, or a message to show. Guarded on an ACTIVE
+  /// relationship at the moment of sending, not just when the button was
+  /// drawn — a relationship can lapse while the camera is open.
+  Future<String?> submitMealPhoto({
+    required File photo,
+    required String mealName,
+    required String athleteName,
+  }) async {
+    final coachId = activeCoachId;
+    if (coachId == null) {
+      return 'Your coaching has ended, so there is nobody to review this meal.';
+    }
+    if (snappingMeal) return null;
+    snappingMeal = true;
+    _safeNotify();
+    try {
+      await _mealCheckins.submit(
+        photo: photo,
+        athleteId: uid,
+        athleteName: athleteName,
+        coachId: coachId,
+        mealName: mealName,
+        day: _weekdayName(DateTime.now()),
+      );
+      return null;
+    } catch (e) {
+      if (kDebugMode) debugPrint('[DIET] meal submit failed: $e');
+      final raw = e.toString().replaceFirst('Exception: ', '');
+      return raw.length < 160 ? raw : 'Could not send that photo. Please try again.';
+    } finally {
+      snappingMeal = false;
+      _safeNotify();
+    }
+  }
+
+  static String _weekdayName(DateTime d) => const [
+        'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
+      ][d.weekday - 1];
 
   /// The coach's diet, but ONLY when it should actually be shown.
   ///
@@ -641,6 +773,8 @@ class DietController extends ChangeNotifier {
     _userDocSub?.cancel();
     _reviewsSub?.cancel();
     _coachPlanSub?.cancel();
+    _relSub?.cancel();
+    _checkinSub?.cancel();
     super.dispose();
   }
 }

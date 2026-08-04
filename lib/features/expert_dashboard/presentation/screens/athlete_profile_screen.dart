@@ -4,6 +4,7 @@ import '../../../../core/steps/step_history.dart';
 import '../../../../core/theme/zitlas_tokens.dart';
 import '../../../coaching/data/coaching_plan_repository.dart';
 import '../../../coaching/presentation/screens/coach_diet_editor_screen.dart';
+import '../../../coaching/presentation/screens/meal_review_screen.dart';
 import '../../../coaching/presentation/widgets/coach_notes_sheet.dart';
 import '../../../coaching/presentation/widgets/plan_history_sheet.dart';
 import '../../../diet/models/diet_profile.dart';
@@ -119,6 +120,15 @@ class AthleteProfileScreen extends StatelessWidget {
                           coachId: coachId!,
                           repository: repository,
                         ),
+                        onMeals: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => MealReviewScreen(
+                              coachId: coachId!,
+                              coachName: coachName ?? 'Coach',
+                              athleteId: athleteId,
+                            ),
+                          ),
+                        ),
                       ),
                       const SizedBox(height: 12),
                     ],
@@ -174,10 +184,11 @@ class _PlanActions extends StatelessWidget {
     required this.onEditDiet,
     required this.onHistory,
     required this.onNotes,
+    required this.onMeals,
   });
 
   final CoachingPlanDoc planDoc;
-  final VoidCallback onEditDiet, onHistory, onNotes;
+  final VoidCallback onEditDiet, onHistory, onNotes, onMeals;
 
   @override
   Widget build(BuildContext context) {
@@ -242,6 +253,15 @@ class _PlanActions extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: _Action(
+              icon: Icons.photo_camera_rounded,
+              label: 'Meal reviews',
+              onTap: onMeals,
+            ),
           ),
           if (!planDoc.canEditDiet)
             const Padding(
