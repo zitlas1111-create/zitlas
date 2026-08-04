@@ -1939,3 +1939,101 @@ Stated plainly, because these are the larger half of the spec:
   `[DIET] coach plan retired — authored for plan_1784204757943, live plan is
   plan_1785567755379` — the fail-closed guard firing on real data, correctly
   retiring a plan written for a goal this athlete has since reset.
+
+---
+
+# Phase 2B — Coach Workspace (diet half complete)
+
+Builds on Phase 2A's spine. No new collections, no second repository, no
+second coaching model — `CoachingPlanRepository`, `CoachDietPlan`,
+`coaching_plans/{athleteUid}` and its `versions/` subcollection are reused
+exactly as they were.
+
+## Delivered
+
+**The coach diet editor** (`coaching/presentation/screens/coach_diet_editor_screen.dart`)
+— add / rename / delete / duplicate / reorder meals, set meal times, copy a
+whole day onto another, and per-food: add from the dataset, replace, edit
+(calories / protein / carbs / fat / note), delete.
+
+Edits are a LOCAL DRAFT until Publish. The athlete holds a live listener, so a
+half-built week would otherwise stream to them meal by meal; the draft means
+the coach decides exactly when the athlete sees anything. A test asserts
+nothing reaches Firestore before Publish.
+
+**Food search reuses `showFoodSearchSheet`** against the real 4,520-food
+database. `GET /api/diet/foods/search` now also returns `budgetCategory`,
+`dietSuitable` and `allergens` — the compliance checks below are impossible
+without them, and they were simply not in the response.
+
+**Compliance engine** (`coaching/models/plan_compliance.dart`) — checks every
+food against the athlete's own recorded profile: allergies (matched against
+BOTH the dataset's allergen tags and the food name, because the athlete types
+free text and the tagging is not exhaustive), diet type, never-eaten, disliked,
+budget tier. Warns, never blocks — a coach can have a clinical reason to
+prescribe something the athlete dislikes, and an editor that refuses to save is
+one that gets worked around.
+
+**Athlete preferences are permanently on screen** while the week is written,
+never behind a tap. A coach who has to go looking for an allergy is a coach who
+will sometimes not look.
+
+**Protein variety panel** — per-source meal counts with bars, the >50% warning,
+and named alternatives.
+
+**Rich athlete profile** (`expert_dashboard/presentation/widgets/athlete_profile_sections.dart`)
+— identity/body/goal, food preferences, lifestyle, fitness, assessment. Every
+value reads a field that genuinely exists on `users/{athleteId}`; anything the
+athlete never provided renders "Not recorded" rather than a plausible number.
+
+**Private coach notes** at `experts/{coachId}/athlete_notes/{athleteId}` —
+under the COACH. `coaching_plans/{athleteUid}` is athlete-readable, so a note
+kept there would be visible to the person it is about. New rule grants the
+subcollection to its owner alone (`experts/{uid}` itself is world-readable to
+signed-in users; a subcollection does not inherit that).
+
+**Version history + rollback sheet** over Phase 2A's `versions/`.
+
+## On budget: there is no rupee cost in ZITLAS
+
+The spec asks for "₹250/day vs ₹212/day". **The 4,520-food dataset has no price
+field** — only `budgetCategory` (Low/Medium/High) and `budget_tier_detailed`
+(Budget/Standard/Premium/Luxury) — and the athlete's intake records a TIER
+(Economy/Standard/Premium), not an amount. A rupee figure would have to be
+invented, and a coach shown a fabricated "₹212/day" would trust it.
+
+So budget intelligence reports the real signal: how many of the week's foods
+sit above the tier the athlete said they could afford, as a count and a
+percentage, with saving still allowed. If real prices are wanted, the dataset
+needs a cost column first.
+
+## Bugs found
+
+**The "no food profile recorded" message was unreachable.** `mealsPerDay`
+defaults to 3, so the preferences strip always had at least one chip and the
+empty-state branch could never render — an athlete who recorded nothing showed
+"🍽 3 meals/day" as though it were their answer. Now gated on the athlete
+having actually answered something.
+
+## NOT delivered
+
+- **The coach workout editor** (Step 7). The data layer (`saveTraining`,
+  versioning, notification) is done and tested from Phase 2A; the editor UI is
+  not built. `exercise_editor_sheet.dart` exists to reuse.
+- **The athlete-facing change history** (Step 10) — versions are recorded and
+  the coach can browse/restore them; the athlete-side "Eggs → Paneer" diff view
+  is not built.
+- Meal timings / water goal / wake-bed times / workout adherence / body fat in
+  the profile: **ZITLAS does not collect these anywhere**, so they are shown as
+  "Not recorded" rather than fabricated.
+
+## Validation
+
+- `flutter analyze lib/ test/` — 22 issues, **all info-level**.
+- `flutter test` — **528/528 passed** (495 before, **+33 new** across
+  `plan_compliance_test.dart` and `coach_workspace_test.dart`).
+- Rules deployed (compiled clean).
+- `flutter build apk --debug` — **succeeded**.
+- **Device install NOT completed this round** — the phone dropped off wireless
+  ADB mid-build and did not return. The previous build of this work was
+  verified on-device; this one is not.

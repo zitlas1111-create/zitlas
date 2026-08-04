@@ -36,6 +36,8 @@ class CoachMealOption {
     required this.name,
     this.calories,
     this.protein,
+    this.carbs,
+    this.fat,
     this.notes,
   });
 
@@ -46,18 +48,30 @@ class CoachMealOption {
   /// day's total must not silently count a blank as nothing.
   final num? calories;
   final num? protein;
+
+  /// Carbs and fat EXTEND the website's shape rather than replace it. The
+  /// workspace writes with `set(merge)` and ignores fields it doesn't know, so
+  /// adding these is additive — a plan edited on the phone still opens on the
+  /// web, it simply shows the two macros the web editor doesn't collect.
+  final num? carbs;
+  final num? fat;
+
   final String? notes;
 
   CoachMealOption copyWith({
     String? name,
     Object? calories = _unset,
     Object? protein = _unset,
+    Object? carbs = _unset,
+    Object? fat = _unset,
     Object? notes = _unset,
   }) {
     return CoachMealOption(
       name: name ?? this.name,
       calories: calories == _unset ? this.calories : calories as num?,
       protein: protein == _unset ? this.protein : protein as num?,
+      carbs: carbs == _unset ? this.carbs : carbs as num?,
+      fat: fat == _unset ? this.fat : fat as num?,
       notes: notes == _unset ? this.notes : notes as String?,
     );
   }
@@ -66,6 +80,8 @@ class CoachMealOption {
         'name': name,
         'calories': calories,
         'protein': protein,
+        'carbs': carbs,
+        'fat': fat,
         'notes': notes,
       };
 
@@ -78,6 +94,8 @@ class CoachMealOption {
       name: name,
       calories: asNum(m['calories']),
       protein: asNum(m['protein']),
+      carbs: asNum(m['carbs']),
+      fat: asNum(m['fat']),
       notes: (m['notes'] as String?)?.trim().isEmpty == true ? null : m['notes'] as String?,
     );
   }

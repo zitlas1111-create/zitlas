@@ -126,6 +126,12 @@ class _ExpertDashboardBodyState extends State<_ExpertDashboardBody> {
           repository: c.repository,
           athleteId: rel.athleteId ?? '',
           athleteName: rel.athleteName ?? 'Athlete',
+          // Passing the coach's identity turns the profile from a read-only
+          // summary into the coaching workspace: it can now open the plan
+          // editors and own the private notes.
+          coachId: c.uid,
+          coachName: c.profile?.name ?? 'Your coach',
+          planType: rel.planType ?? 'complete',
         ),
       ),
     );

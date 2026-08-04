@@ -97,6 +97,18 @@ service cloud.firestore {
       allow update: if isUser(uid)
         && updateKeeps(['verified', 'approved', 'verification', 'verificationStatus']);
       allow delete: if false;
+
+      // PRIVATE coach notes — the coach's own working notes on an athlete.
+      //
+      // Deliberately NOT on coaching_plans/{athleteUid}: that document is
+      // readable by the athlete, so a note stored there would be visible to
+      // the person it is about. Stored under the COACH instead, where only
+      // they can reach it. Note that `experts/{uid}` itself is world-readable
+      // to signed-in users; a subcollection does NOT inherit that, and this
+      // rule grants the owner alone.
+      match /athlete_notes/{athleteId} {
+        allow read, write: if isUser(uid);
+      }
     }
 
     // ── expert_certificates ──

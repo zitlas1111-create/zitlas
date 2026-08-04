@@ -319,6 +319,41 @@ class ExpertRepository {
 
   // ── Personal coaching ──────────────────────────────────────────────────
 
+  // ── Private coach notes ────────────────────────────────────────────────
+
+  /// The coach's own working notes on one athlete.
+  ///
+  /// Stored at `experts/{coachId}/athlete_notes/{athleteId}` — under the
+  /// COACH, not the athlete. `coaching_plans/{athleteUid}` is readable by the
+  /// athlete, so a note kept there would be visible to the person it is about.
+  /// Security Rules grant this subcollection to its owner alone.
+  Stream<String?> watchCoachNote({required String coachId, required String athleteId}) {
+    return _db
+        .collection('experts')
+        .doc(coachId)
+        .collection('athlete_notes')
+        .doc(athleteId)
+        .snapshots()
+        .map((s) => s.data()?['note'] as String?);
+  }
+
+  Future<void> saveCoachNote({
+    required String coachId,
+    required String athleteId,
+    required String note,
+  }) {
+    return _db
+        .collection('experts')
+        .doc(coachId)
+        .collection('athlete_notes')
+        .doc(athleteId)
+        .set({
+      'note': note,
+      'athleteId': athleteId,
+      'updatedAt': DateTime.now().toIso8601String(),
+    }, SetOptions(merge: true));
+  }
+
   /// `personal_coach_requests` where `expertId == uid` (ED:1399).
   Stream<List<CoachingRequest>> watchCoachingRequests(String uid) {
     return _db
