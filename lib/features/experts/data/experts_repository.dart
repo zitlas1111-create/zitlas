@@ -315,6 +315,16 @@ class ExpertsRepository {
       if (detail == 'no_coaching_relationship') {
         throw Exception('You do not have an active Personal Coach.');
       }
+      // A 404/405 means the ROUTE is missing from the server that answered —
+      // an unfinished deployment, not the athlete's network. Telling them to
+      // check their connection would send them chasing a problem they cannot
+      // fix and cannot see.
+      if (e.statusCode == 404 || e.statusCode == 405) {
+        throw Exception(
+          "Ending coaching isn't available on the server yet. Please try again "
+          'later, or contact support if it persists.',
+        );
+      }
       throw Exception(
         'Could not end your coaching just now. Please check your connection '
         'and try again.',

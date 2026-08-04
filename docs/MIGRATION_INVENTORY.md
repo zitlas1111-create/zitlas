@@ -2138,3 +2138,71 @@ because the URL only ever appears inside a `meal_checkins` document, which
   test account has no active coaching relationship — so the button correctly
   renders nothing, which is itself the gate working, but the loop is unproven
   on a device.
+
+---
+
+# Session audit — verification status
+
+## Green
+
+- `flutter analyze lib/ test/` — **0 errors, 0 warnings**, 21 info
+  (`prefer_initializing_formals` on private fields, which Dart cannot express
+  as initializing formals; plus two pre-existing `use_build_context_synchronously`
+  in `location_setup_flow.dart`). Every info in a file touched this session
+  that COULD be fixed, was.
+- `flutter test` — **567/567**.
+- Backend `pytest` — **48/48**. The 5 long-standing failures are gone: they
+  asserted ₹499 pricing while `PLATFORM_CHARGES_FREE` zeroes amounts at
+  runtime, so they were coupled to a deployment flag rather than to the escrow.
+  The fixture now pins both flags OFF, and a new test pins them ON to cover the
+  free-platform branch.
+- `firestore.rules` — deployed and live.
+- APK builds, installs, launches on the OnePlus with **zero crashes and zero
+  permission-denied**.
+
+## BLOCKED — the backend has not deployed since 2026-08-01
+
+Probing production:
+
+| Route | Result |
+|---|---|
+| `POST /api/coaching/request` | 401 — exists |
+| `POST /api/coaching/accept` | 401 — exists |
+| `POST /api/coaching/end` | **405 — missing** |
+| `POST /api/diet/foods/search` | **405 — missing** |
+
+`foods/search` was committed on 2026-08-01 (`e690cca`) and is still absent, so
+this is a standing pipeline problem, not something the End Coaching push
+caused. The code IS on `origin/main` — verified with
+`git show origin/main:backend/routes/coaching.py`.
+
+**I cannot fix this from here** — no Render credentials or API access. Until
+someone redeploys, End Coaching will fail in the app, and so will the coach
+food-search in the Phase 2B editor.
+
+Because of that, the client now distinguishes a 404/405 from a network fault:
+an athlete gets "Ending coaching isn't available on the server yet" rather than
+being told to check a connection that is fine.
+
+## UNVERIFIED — the end-to-end workflow
+
+Everything below needs TWO real Firebase accounts (an athlete with an ACTIVE
+coach, and that coach). I have no credentials for either, and the deployed
+backend is missing the route regardless. These are covered by unit/widget tests
+only:
+
+- End Coaching button appearing for an active relationship
+- Firestore write reaching `personal_coaching`
+- `POST /api/coaching/end` round trip
+- Dashboard swapping to Find a Personal Coach
+- Chat composer locking
+- Meal Snap disappearing
+- Both notifications arriving
+- The athlete dropping off the coach's Active Clients
+- Requesting another coach afterwards
+
+What IS verified on the real device, on the live account: the app runs clean,
+step history renders 5 real days across two real midnights (8,704 steps on
+3 Aug at 100%, with genuine "No data" gaps), and the signed-in account has no
+coaching relationship — so the no-coach half of the gate is confirmed by the
+absence of the coach card.

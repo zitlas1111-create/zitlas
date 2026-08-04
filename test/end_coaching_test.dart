@@ -204,6 +204,18 @@ void main() {
     });
   });
 
+  group('failure messages tell the truth about the cause', () {
+    // Production currently answers 405 on /api/coaching/end because the route
+    // is not in the deployed build. Telling the athlete to "check your
+    // connection" would send them chasing a problem they cannot see or fix.
+    test('a missing route is reported as a server gap, not a network fault', () {
+      const message = "Ending coaching isn't available on the server yet. "
+          'Please try again later, or contact support if it persists.';
+      expect(message, isNot(contains('connection')));
+      expect(message, contains('server'));
+    });
+  });
+
   group('what replaces the card', () {
     testWidgets('an athlete with no coach is invited to find one', (tester) async {
       await tester.pumpWidget(const MaterialApp(
