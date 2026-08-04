@@ -572,3 +572,99 @@ async def reject_request(body: ActionBody, caller: dict = Depends(verify_firebas
             print(traceback.format_exc())
 
     return {"success": True, "requestId": body.requestId, **result}
+
+
+# ══════════════════════════════════════════════════════════════════════
+# END COACHING — athlete-initiated termination
+#
+# Server-side because it is a MULTI-DOCUMENT state change that must not
+# half-apply: the relationship, the originating request, and both
+# notifications. It also touches personal_coach_requests, which no client
+# may write at all (`allow write: if false`) — the website's own attempt
+# to update it client-side has always failed silently into a .catch().
+#
+# Access revocation needs no separate step and deliberately has none:
+# firestore.rules' isActiveCoachOf() gates every coach read on
+# `status == 'active'`, so flipping this one field is what withdraws the
+# coach from the athlete's profile, plans, versions and check-ins at once.
+# A second "revoke" mechanism would be a second thing to keep in sync.
+#
+# Nothing is deleted. Plans, chat history, coach notes, meal photos and
+# the assessment all remain — only access to them ends.
+# ══════════════════════════════════════════════════════════════════════
+
+
+@router.post("/end")
+async def end_coaching(caller: dict = Depends(verify_firebase_token)):
+    athlete_uid = caller["uid"]
+    print(f"[COACHING END] request received — athlete={athlete_uid}")
+
+    db = _db()
+    rel_ref = db.collection("personal_coaching").document(athlete_uid)
+
+    @firestore.transactional
+    def _txn(tx):
+        rel_snap = rel_ref.get(transaction=tx)
+        if not rel_snap.exists:
+            raise HTTPException(status_code=404, detail="no_coaching_relationship")
+        rel = rel_snap.to_dict() or {}
+
+        # Idempotent: a double-tap, or a retry after a dropped response, is
+        # not an error and must not re-notify the coach a second time.
+        if rel.get("status") != "active":
+            print(f"[COACHING END] already {rel.get('status')} — no-op")
+            return {"already": True, "coachId": rel.get("coachId"),
+                    "coachName": rel.get("coachName"),
+                    "athleteName": rel.get("athleteName")}
+
+        _now = now()
+        tx.update(rel_ref, {
+            "status": "ended",
+            "endedAt": _now.isoformat(),
+            "endedBy": "athlete",
+            "reason": "athlete",
+        })
+
+        # The originating request, so the expert's queue stops showing this as
+        # a live client. Only ever the athlete's OWN request.
+        request_id = rel.get("requestId")
+        if request_id:
+            req_ref = db.collection("personal_coach_requests").document(request_id)
+            req_snap = req_ref.get(transaction=tx)
+            if req_snap.exists and (req_snap.to_dict() or {}).get("athleteId") == athlete_uid:
+                tx.update(req_ref, {"status": "ended", "updatedAt": _now.isoformat()})
+
+        return {"already": False, "coachId": rel.get("coachId"),
+                "coachName": rel.get("coachName"),
+                "athleteName": rel.get("athleteName")}
+
+    try:
+        result = _txn(db.transaction())
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[COACHING END] UNEXPECTED transaction failure — athlete={athlete_uid}: "
+              f"{type(e).__name__}: {e}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500,
+                             detail=f"coaching_end_failed: {type(e).__name__}: {e}")
+
+    if not result.get("already"):
+        athlete_name = result.get("athleteName") or "Your athlete"
+        coach_name = result.get("coachName") or "your coach"
+        try:
+            notify(db, result.get("coachId"), "Coaching ended",
+                   f"{athlete_name} has ended their Personal Coaching with you.",
+                   category="expert", type="coaching_ended", action="expert_dashboard")
+            notify(db, athlete_uid, "Personal Coaching ended",
+                   f"Your coaching with {coach_name} has ended. Your plans and history "
+                   "are still here — you can request a new coach whenever you like.",
+                   category="expert", type="coaching_ended", action="coaches")
+        except Exception:
+            # The relationship has already ended. A failed notification is a
+            # log line, not a reason to tell the athlete it didn't work.
+            print(f"[COACHING END] notification write failed (non-fatal) — athlete={athlete_uid}")
+            print(traceback.format_exc())
+
+    print(f"[COACHING END] done — athlete={athlete_uid} already={result.get('already')}")
+    return {"success": True, **result}

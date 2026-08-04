@@ -295,12 +295,31 @@ class ExpertsRepository {
 
   /// `openEndCoachingModal()` confirm handler — athlete-initiated end of an
   /// active relationship.
-  Future<void> endCoaching(String athleteUid) {
-    return _db.collection('personal_coaching').doc(athleteUid).update({
-      'status': 'ended',
-      'endedAt': DateTime.now().toIso8601String(),
-      'endedBy': 'athlete',
-    });
+  /// Ends the athlete's Personal Coaching.
+  ///
+  /// Routed through `POST /api/coaching/end` rather than writing Firestore
+  /// directly, for two reasons the client cannot satisfy on its own: the
+  /// change spans the relationship AND the originating request (which no
+  /// client may write at all), and both parties must be notified. The backend
+  /// does all of it inside one transaction.
+  ///
+  /// Access revocation needs no separate call — `isActiveCoachOf()` in
+  /// firestore.rules gates every coach read on `status == 'active'`, so the
+  /// coach loses the athlete's profile, plans, versions and meal photos the
+  /// moment that field changes.
+  Future<void> endCoaching(String athleteUid) async {
+    try {
+      await _api.post('/api/coaching/end');
+    } on ApiException catch (e) {
+      final detail = (e.body is Map) ? (e.body as Map)['detail'] : null;
+      if (detail == 'no_coaching_relationship') {
+        throw Exception('You do not have an active Personal Coach.');
+      }
+      throw Exception(
+        'Could not end your coaching just now. Please check your connection '
+        'and try again.',
+      );
+    }
   }
 
   // ── Chat (Ask Expert) ──────────────────────────────────────────────────

@@ -163,9 +163,17 @@ service cloud.firestore {
     match /personal_coaching/{athleteUid} {
       allow read: if isUser(athleteUid)
         || (signedIn() && resource.data.coachId == request.auth.uid);
-      // Athlete may ONLY retire the relationship (status + its timestamps).
+      // Athlete may ONLY retire the relationship (status + its timestamps +
+      // who ended it and why).
+      //
+      // `endedBy` and `reason` were missing from this list while BOTH clients
+      // write them (cprofile.js:4252, ExpertsRepository.endCoaching) — so
+      // every End Coaching attempt was rejected with permission-denied and the
+      // feature has never worked on either platform. They are provenance
+      // fields on the athlete's own relationship; allowing them grants nothing
+      // beyond the termination this rule already permits.
       allow update: if isUser(athleteUid)
-        && changedOnly(['status', 'priorStatus', 'resetAt', 'endedAt'])
+        && changedOnly(['status', 'priorStatus', 'resetAt', 'endedAt', 'endedBy', 'reason'])
         && request.resource.data.status in ['reset', 'ended'];
       allow create, delete: if false;  // backend (Admin SDK) only
     }
@@ -226,11 +234,20 @@ service cloud.firestore {
       allow delete: if false;
     }
     match /meal_checkins/{id} {
+      // The athlete keeps their own photos forever. The COACH's access is
+      // conditional on the relationship still being active — ending coaching
+      // must revoke access to the athlete's meal photos, not just stop new
+      // ones arriving. Nothing is deleted; an ex-coach simply can no longer
+      // read them.
       allow read: if signedIn()
-        && (resource.data.athleteId == request.auth.uid || resource.data.coachId == request.auth.uid);
+        && (resource.data.athleteId == request.auth.uid
+            || (resource.data.coachId == request.auth.uid
+                && isActiveCoachOf(resource.data.athleteId)));
       allow create: if signedIn() && request.resource.data.athleteId == request.auth.uid;
       allow update: if signedIn()
-        && (resource.data.athleteId == request.auth.uid || resource.data.coachId == request.auth.uid);
+        && (resource.data.athleteId == request.auth.uid
+            || (resource.data.coachId == request.auth.uid
+                && isActiveCoachOf(resource.data.athleteId)));
       allow delete: if false;
     }
     match /workout_checkins/{id} {
