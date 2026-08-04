@@ -285,6 +285,9 @@ class ExpertProfileController extends ChangeNotifier {
 
   String chatId() => _repository.chatIdFor(athleteId: userId, expertId: expertId);
 
+  /// The single, canonical End Coaching call — see `ActiveCoachingBanner`.
+  Future<void> endCoaching() => _repository.endCoaching(userId);
+
   void _safeNotify() {
     if (!_disposed) notifyListeners();
   }

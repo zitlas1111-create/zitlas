@@ -117,90 +117,29 @@ void main() {
   });
 
   group('the card', () {
-    Future<void> pump(
-      WidgetTester tester, {
-      Future<void> Function()? onEnd,
-    }) async {
+    // End Coaching does NOT live on this card — see
+    // test/active_coaching_banner_test.dart. It lives exactly once, on the
+    // Coach Profile screen. Two implementations of the same button used to
+    // exist (this card, and an orphaned `/coaching` route nothing linked to)
+    // — both are gone; MyCoachCard now only ever links out to that one place.
+    Future<void> pump(WidgetTester tester) async {
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(
           body: MyCoachCard(
             coach: AssignedCoach.from(relationship: relationship())!,
             athleteId: athlete,
-            onEndCoaching: onEnd,
           ),
         ),
       ));
       await tester.pumpAndSettle();
     }
 
-    testWidgets('End Coaching sits alongside the other actions', (tester) async {
-      await pump(tester, onEnd: () async {});
+    testWidgets('Message, Call and Profile are the only actions', (tester) async {
+      await pump(tester);
       expect(find.text('Message'), findsOneWidget);
       expect(find.text('Call'), findsOneWidget);
       expect(find.text('Profile'), findsOneWidget);
-      expect(find.text('End Coaching'), findsOneWidget);
-    });
-
-    testWidgets('it is absent when no end action is available', (tester) async {
-      // The card itself only renders for an ACTIVE relationship, so there is
-      // no state where a disabled "End Coaching" is shown to someone without
-      // a coach.
-      await pump(tester);
       expect(find.text('End Coaching'), findsNothing);
-    });
-
-    testWidgets('the confirmation spells out what ends AND what is kept',
-        (tester) async {
-      await pump(tester, onEnd: () async {});
-      await tester.tap(find.text('End Coaching'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('End Personal Coaching?'), findsOneWidget);
-      expect(find.textContaining('Dr Meera Rao'), findsWidgets);
-      expect(find.text('Disable meal reviews'), findsOneWidget);
-      expect(find.text('Disable coach chat and calls'), findsOneWidget);
-      expect(find.text('Remove their access to your profile'), findsOneWidget);
-      // The reassurance is the point — this is what athletes hesitate over.
-      expect(find.textContaining('are kept'), findsOneWidget);
-      expect(find.textContaining('request a new coach right away'), findsOneWidget);
-    });
-
-    testWidgets('Cancel does nothing at all', (tester) async {
-      var called = false;
-      await pump(tester, onEnd: () async => called = true);
-
-      await tester.tap(find.text('End Coaching'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Cancel'));
-      await tester.pumpAndSettle();
-
-      expect(called, isFalse);
-      expect(find.text('End Personal Coaching?'), findsNothing);
-    });
-
-    testWidgets('confirming runs the termination and reports it', (tester) async {
-      var called = false;
-      await pump(tester, onEnd: () async => called = true);
-
-      await tester.tap(find.text('End Coaching'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(TextButton, 'End Coaching').last);
-      await tester.pumpAndSettle();
-
-      expect(called, isTrue);
-      expect(find.textContaining('Personal Coaching ended'), findsOneWidget);
-      expect(find.textContaining('unchanged'), findsOneWidget);
-    });
-
-    testWidgets('a failure is surfaced, not swallowed', (tester) async {
-      await pump(tester, onEnd: () async => throw Exception('Network unreachable'));
-
-      await tester.tap(find.text('End Coaching'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(TextButton, 'End Coaching').last);
-      await tester.pumpAndSettle();
-
-      expect(find.text('Network unreachable'), findsOneWidget);
     });
   });
 

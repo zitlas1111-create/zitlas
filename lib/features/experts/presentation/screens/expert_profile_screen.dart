@@ -12,6 +12,7 @@ import '../../expert_profile_controller.dart';
 import '../../models/expert_listing.dart';
 import '../widgets/request_review_sheet.dart';
 import '../widgets/personal_coaching_sheet.dart';
+import '../widgets/active_coaching_banner.dart';
 
 /// Native rebuild of `frontend/pages/coaches/cprofile.html` + `cprofile.js`
 /// — the athlete-facing Expert Profile page. Section order matches the
@@ -95,6 +96,13 @@ class _ExpertProfileBodyState extends State<_ExpertProfileBody> {
             SliverToBoxAdapter(child: _Hero(expert: e)),
             SliverToBoxAdapter(child: _QuickInfo(expert: e)),
             SliverToBoxAdapter(child: _Ctas(controller: controller)),
+            if (_isActiveCoachOfThisExpert(controller))
+              SliverToBoxAdapter(
+                child: ActiveCoachingBanner(
+                  relationship: controller.myCoachingRelationship!,
+                  onEndCoaching: controller.endCoaching,
+                ),
+              ),
             SliverToBoxAdapter(child: _StatusBanner(controller: controller)),
             if (e.about != null) SliverToBoxAdapter(child: _Section(title: 'About', child: Text(e.about!, style: const TextStyle(fontSize: 13, color: ZitlasTokens.textSecondary, height: 1.5)))),
             SliverToBoxAdapter(child: _CertificatesSection(controller: controller)),
@@ -123,6 +131,14 @@ class _ExpertProfileBodyState extends State<_ExpertProfileBody> {
         break;
     }
   }
+}
+
+/// True only when [controller.myCoachingRelationship] is ACTIVE and is a
+/// relationship with THIS expert — an athlete coaching with someone else
+/// entirely must never see End Coaching on a different expert's profile.
+bool _isActiveCoachOfThisExpert(ExpertProfileController controller) {
+  final rel = controller.myCoachingRelationship;
+  return rel != null && rel.isActive && rel.coachId == controller.expertId;
 }
 
 void _openChat(BuildContext context, ExpertProfileController controller) {

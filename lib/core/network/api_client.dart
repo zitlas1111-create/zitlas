@@ -13,6 +13,12 @@ import 'api_exception.dart';
 /// This does not implement retry/caching — those are feature-layer concerns.
 /// It only standardizes: base URL, JSON encode/decode, timeouts, and
 /// converting non-2xx responses into a single [ApiException] type.
+///
+/// Every log line carries the COMPLETE method + URL. A log that says only
+/// the base URL ("something failed talking to zitlas.com") cannot distinguish
+/// "this route is missing" from "the whole server is down", which is exactly
+/// the ambiguity that made a missing `/api/coaching/end` look like a network
+/// fault for days.
 class ApiClient {
   ApiClient({http.Client? httpClient, String? baseUrl})
     : _client = httpClient ?? http.Client(),
@@ -43,11 +49,11 @@ class ApiClient {
   }
 
   Future<dynamic> get(String path, {Map<String, dynamic>? query}) {
-    return _send(() async {
-      final res = await _client
-          .get(_uri(path, query), headers: await _headers(json: false))
-          .timeout(Env.apiTimeout);
-      return res;
+    final uri = _uri(path, query);
+    return _send('GET', uri, () async {
+      final headers = await _headers(json: false);
+      _logRequest('GET', uri, headers, null);
+      return _client.get(uri, headers: headers).timeout(Env.apiTimeout);
     });
   }
 
@@ -57,37 +63,33 @@ class ApiClient {
     Map<String, dynamic>? query,
     Duration? timeout,
   }) {
-    return _send(() async {
-      final res = await _client
-          .post(
-            _uri(path, query),
-            headers: await _headers(),
-            body: body == null ? null : jsonEncode(body),
-          )
+    final uri = _uri(path, query);
+    return _send('POST', uri, () async {
+      final headers = await _headers();
+      _logRequest('POST', uri, headers, body);
+      return _client
+          .post(uri, headers: headers, body: body == null ? null : jsonEncode(body))
           .timeout(timeout ?? Env.apiTimeout);
-      return res;
     });
   }
 
   Future<dynamic> patch(String path, {Object? body, Map<String, dynamic>? query}) {
-    return _send(() async {
-      final res = await _client
-          .patch(
-            _uri(path, query),
-            headers: await _headers(),
-            body: body == null ? null : jsonEncode(body),
-          )
+    final uri = _uri(path, query);
+    return _send('PATCH', uri, () async {
+      final headers = await _headers();
+      _logRequest('PATCH', uri, headers, body);
+      return _client
+          .patch(uri, headers: headers, body: body == null ? null : jsonEncode(body))
           .timeout(Env.apiTimeout);
-      return res;
     });
   }
 
   Future<dynamic> delete(String path, {Map<String, dynamic>? query}) {
-    return _send(() async {
-      final res = await _client
-          .delete(_uri(path, query), headers: await _headers(json: false))
-          .timeout(Env.apiTimeout);
-      return res;
+    final uri = _uri(path, query);
+    return _send('DELETE', uri, () async {
+      final headers = await _headers(json: false);
+      _logRequest('DELETE', uri, headers, null);
+      return _client.delete(uri, headers: headers).timeout(Env.apiTimeout);
     });
   }
 
@@ -99,14 +101,16 @@ class ApiClient {
     required String fieldName,
     Map<String, String>? fields,
   }) {
-    return _send(() async {
-      final request = http.MultipartRequest('POST', _uri(path));
+    final uri = _uri(path);
+    return _send('POST', uri, () async {
+      final request = http.MultipartRequest('POST', uri);
       final token = await authTokenProvider?.call();
       if (token != null) {
         request.headers['Authorization'] = 'Bearer $token';
       }
       if (fields != null) request.fields.addAll(fields);
       request.files.add(await http.MultipartFile.fromPath(fieldName, file.path));
+      _logRequest('POST', uri, request.headers, '<multipart: $fieldName=${file.path}>');
       final streamed = await _client.send(request).timeout(Env.apiTimeout);
       return http.Response.fromStream(streamed);
     });
@@ -126,8 +130,9 @@ class ApiClient {
     Map<String, String>? fields,
     Duration? timeout,
   }) {
-    return _send(() async {
-      final request = http.MultipartRequest('POST', _uri(path));
+    final uri = _uri(path);
+    return _send('POST', uri, () async {
+      final request = http.MultipartRequest('POST', uri);
       final token = await authTokenProvider?.call();
       if (token != null) {
         request.headers['Authorization'] = 'Bearer $token';
@@ -135,6 +140,12 @@ class ApiClient {
       if (fields != null) request.fields.addAll(fields);
       request.files.add(
         http.MultipartFile.fromBytes(fileField, fileBytes, filename: fileName),
+      );
+      _logRequest(
+        'POST',
+        uri,
+        request.headers,
+        '<multipart: $fileField=$fileName, ${fileBytes.length} bytes>',
       );
       final streamed = await _client.send(request).timeout(timeout ?? Env.apiTimeout);
       return http.Response.fromStream(streamed);
@@ -150,17 +161,16 @@ class ApiClient {
     Object? body,
     Duration? timeout,
   }) async {
+    final uri = _uri(path);
     late final http.Response res;
     try {
+      final headers = await _headers();
+      _logRequest('POST', uri, headers, body);
       res = await _client
-          .post(
-            _uri(path),
-            headers: await _headers(),
-            body: body == null ? null : jsonEncode(body),
-          )
+          .post(uri, headers: headers, body: body == null ? null : jsonEncode(body))
           .timeout(timeout ?? Env.apiTimeout);
     } on Exception catch (e) {
-      _logTransportFailure(e);
+      _logTransportFailure('POST', uri, e);
       throw ApiException(message: e.toString());
     }
 
@@ -173,7 +183,7 @@ class ApiClient {
       } on FormatException {
         detail = null;
       }
-      _log('HTTP ${res.statusCode} from $_baseUrl (bytes) — detail: ${detail ?? '(none)'}');
+      _logResponse('POST', uri, res.statusCode, detail);
       throw ApiException(
         message: detail ?? 'Request failed (${res.statusCode})',
         statusCode: res.statusCode,
@@ -182,15 +192,19 @@ class ApiClient {
     return res.bodyBytes;
   }
 
-  Future<dynamic> _send(Future<http.Response> Function() request) async {
+  Future<dynamic> _send(
+    String method,
+    Uri uri,
+    Future<http.Response> Function() request,
+  ) async {
     late final http.Response res;
     try {
       res = await request();
     } on http.ClientException catch (e) {
-      _logTransportFailure(e);
+      _logTransportFailure(method, uri, e);
       throw ApiException(message: e.message);
     } on Exception catch (e) {
-      _logTransportFailure(e);
+      _logTransportFailure(method, uri, e);
       throw ApiException(message: e.toString());
     }
 
@@ -201,7 +215,7 @@ class ApiClient {
       // A non-JSON body on a 2xx almost always means we hit something that
       // isn't the API (a proxy/captive-portal/HTML error page) — surfacing
       // that as "malformed response" beats a raw parse crash.
-      _log('Non-JSON response (${res.statusCode}) from $_baseUrl — first 120 chars: '
+      _log('$method $uri -> ${res.statusCode} NON-JSON body — first 120 chars: '
           '${res.body.length > 120 ? res.body.substring(0, 120) : res.body}');
       throw ApiException(
         message: 'Server returned a non-JSON response',
@@ -211,7 +225,7 @@ class ApiClient {
 
     if (res.statusCode < 200 || res.statusCode >= 300) {
       final detail = decoded is Map<String, dynamic> ? decoded['detail'] : null;
-      _log('HTTP ${res.statusCode} from $_baseUrl — detail: ${detail ?? '(none)'}');
+      _logResponse(method, uri, res.statusCode, detail?.toString());
       throw ApiException(
         message: detail?.toString() ?? 'Request failed (${res.statusCode})',
         statusCode: res.statusCode,
@@ -222,12 +236,44 @@ class ApiClient {
     return decoded;
   }
 
-  /// Debug-only. Logs the base URL and failure class — never the auth
-  /// header, request body, or response payload (all of which can carry
-  /// tokens or personal data).
-  void _logTransportFailure(Object e) {
+  /// Debug-only. Logs the COMPLETE method + URL, the header names (with the
+  /// bearer token redacted — a Firebase ID token in logcat is a working
+  /// credential for anyone with `adb`), and the request body.
+  void _logRequest(String method, Uri uri, Map<String, String> headers, Object? body) {
+    if (!kDebugMode) return;
+    final safeHeaders = {
+      for (final e in headers.entries)
+        e.key: e.key.toLowerCase() == 'authorization'
+            ? 'Bearer <redacted, ${e.value.length} chars>'
+            : e.value,
+    };
+    _log('--> $method $uri');
+    _log('    headers: $safeHeaders');
+    final rendered = body == null
+        ? '(none)'
+        : (body is String ? body : jsonEncode(body));
+    _log('    body: ${rendered.length > 500 ? '${rendered.substring(0, 500)}…' : rendered}');
+  }
+
+  void _logResponse(String method, Uri uri, int status, String? detail) {
+    _log('<-- $status $method $uri — detail: ${detail ?? '(none)'}');
+    // 405 from THIS backend is a special, badly-misleading case. FastAPI
+    // serves the whole frontend from `app.mount("/", StaticFiles(...))` as a
+    // catch-all, and StaticFiles only implements GET/HEAD. So a POST to a
+    // path no API route claims does not 404 — it falls through to the static
+    // mount and comes back 405. Verified against production: POST to
+    // `/zzz-not-an-api-path` also answers 405. Read it as "route not found
+    // on the deployed build", never as "wrong HTTP method".
+    if (status == 405) {
+      _log('    NOTE: 405 here means NO API ROUTE MATCHED $uri and the request '
+          'fell through to the StaticFiles catch-all (GET/HEAD only). The route '
+          'is missing from the DEPLOYED build — check the deployment, not the verb.');
+    }
+  }
+
+  void _logTransportFailure(String method, Uri uri, Object e) {
     _log(
-      'Transport failure talking to $_baseUrl (${e.runtimeType}). '
+      'TRANSPORT FAILURE on $method $uri (${e.runtimeType}). '
       'If this is a physical device, confirm API_BASE_URL is reachable from '
       'the phone — localhost/127.0.0.1 resolves to the phone itself.',
     );

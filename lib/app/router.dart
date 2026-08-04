@@ -8,7 +8,6 @@ import '../features/auth/presentation/screens/expert_application_review_screen.d
 import '../features/auth/presentation/screens/login_screen.dart';
 import '../features/auth/presentation/screens/splash_screen.dart';
 import '../features/chat/presentation/screens/chat_screen.dart';
-import '../features/coaching/presentation/screens/coaching_screen.dart';
 import '../features/dashboard/presentation/screens/dashboard_screen.dart';
 import '../features/diet/presentation/screens/diet_screen.dart';
 import '../features/expert_dashboard/presentation/screens/expert_dashboard_screen.dart';
@@ -82,7 +81,6 @@ GoRouter buildRouter(AuthState authState) {
         path: '/expert-dashboard',
         builder: (context, state) => const ExpertDashboardScreen(),
       ),
-      GoRoute(path: '/coaching', builder: (context, state) => const CoachingScreen()),
       GoRoute(path: '/reviews/:id', builder: (context, state) => const ReviewsScreen()),
       GoRoute(
         path: '/chat/:roomId',

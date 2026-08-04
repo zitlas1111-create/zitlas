@@ -13,23 +13,22 @@ import 'section_header.dart';
 /// Accept (the dashboard holds a live listener), and it is still there after a
 /// logout, an app restart or a reinstall — nothing about the assignment lives
 /// on the handset.
+///
+/// End Coaching does NOT live here — it lives on the Coach Profile screen
+/// (`ActiveCoachingBanner`, opened via the Profile action below) so there is
+/// exactly one End Coaching button in the app, not one per surface that
+/// happens to know about the relationship.
 class MyCoachCard extends StatelessWidget {
   const MyCoachCard({
     super.key,
     required this.coach,
     required this.athleteId,
-    this.onEndCoaching,
   });
 
   final AssignedCoach coach;
 
   /// Needed to build the chat room id — see [_roomId].
   final String athleteId;
-
-  /// End Coaching. This card only renders for an ACTIVE relationship, so the
-  /// action is never shown to someone without a coach — there is no state in
-  /// which a disabled "End Coaching" appears.
-  final Future<void> Function()? onEndCoaching;
 
   @override
   Widget build(BuildContext context) {
@@ -156,99 +155,9 @@ class MyCoachCard extends StatelessWidget {
               ),
             ],
           ),
-          if (onEndCoaching != null) ...[
-            const SizedBox(height: 6),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton(
-                onPressed: () => _confirmEnd(context),
-                style: TextButton.styleFrom(
-                  foregroundColor: DashboardColors.textMuted,
-                  textStyle: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700),
-                  minimumSize: Size.zero,
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                ),
-                child: const Text('End Coaching'),
-              ),
-            ),
-          ],
         ],
       ),
     );
-  }
-
-  /// Spells out exactly what ends and — just as importantly — what does not.
-  ///
-  /// An athlete hesitating over this button is usually worried they will lose
-  /// their plans. They will not, and the dialog says so rather than leaving
-  /// them to find out.
-  Future<void> _confirmEnd(BuildContext context) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: DashboardColors.bgCard,
-        title: const Text(
-          'End Personal Coaching?',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Are you sure you want to end your Personal Coaching with '
-              '${coach.coachName}? This will:',
-              style: const TextStyle(fontSize: 13, height: 1.45),
-            ),
-            const SizedBox(height: 10),
-            const _Bullet('End your coaching relationship'),
-            const _Bullet('Remove their access to your profile'),
-            const _Bullet('Disable meal reviews'),
-            const _Bullet('Disable coach chat and calls'),
-            const SizedBox(height: 8),
-            const Text(
-              'Your diet plans, workouts, chat history and progress are kept — '
-              'only access to them ends. You can request a new coach right away.',
-              style: TextStyle(
-                fontSize: 12,
-                height: 1.45,
-                color: DashboardColors.textSecondary,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text(
-              'End Coaching',
-              style: TextStyle(color: DashboardColors.error, fontWeight: FontWeight.w800),
-            ),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-
-    try {
-      await onEndCoaching!();
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(const SnackBar(
-          content: Text('Personal Coaching ended. Your plans and history are unchanged.'),
-        ));
-    } catch (e) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(
-          content: Text(e.toString().replaceFirst('Exception: ', '')),
-        ));
-    }
   }
 
   /// `chat_<athleteId>_<expertId>` — the SAME deterministic id
@@ -369,28 +278,6 @@ class _CoachAction extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-
-class _Bullet extends StatelessWidget {
-  const _Bullet(this.text);
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 3),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('•  ', style: TextStyle(fontSize: 13)),
-          Expanded(
-            child: Text(text, style: const TextStyle(fontSize: 12.5, height: 1.4)),
-          ),
-        ],
       ),
     );
   }

@@ -177,9 +177,32 @@ class DashboardRepository {
     return _firestore.collection('personal_coaching').doc(uid).snapshots().asyncMap(
       (snap) async {
         final data = snap.data();
-        if (data == null || data['status'] != 'active') return null;
+        if (kDebugMode) {
+          debugPrint(
+            '[COACH VISIBILITY] personal_coaching/$uid — '
+            'docExists=${snap.exists} '
+            'coachId=${data?['coachId']} '
+            'status=${data?['status']} '
+            'endDate=${data?['endDate']}',
+          );
+        }
+        if (data == null || data['status'] != 'active') {
+          if (kDebugMode) {
+            debugPrint(
+              data == null
+                  ? '[COACH VISIBILITY] -> assignedCoach=null — no personal_coaching doc for this athlete'
+                  : "[COACH VISIBILITY] -> assignedCoach=null — status is '${data['status']}', not 'active'",
+            );
+          }
+          return null;
+        }
         final coachId = data['coachId'] as String?;
-        if (coachId == null) return null;
+        if (coachId == null) {
+          if (kDebugMode) {
+            debugPrint('[COACH VISIBILITY] -> assignedCoach=null — status is active but coachId is missing');
+          }
+          return null;
+        }
 
         Map<String, dynamic>? expert;
         try {
@@ -190,7 +213,16 @@ class DashboardRepository {
           if (kDebugMode) debugPrint('[COACH] expert profile unavailable: $e');
         }
 
-        return AssignedCoach.from(relationship: data, expert: expert);
+        final assigned = AssignedCoach.from(relationship: data, expert: expert);
+        if (kDebugMode) {
+          debugPrint(
+            assigned == null
+                ? '[COACH VISIBILITY] -> assignedCoach=null — status active but AssignedCoach.from rejected the data (coachId blank?)'
+                : '[COACH VISIBILITY] -> assignedCoach=AssignedCoach(coachId=${assigned.coachId}, '
+                    'coachName=${assigned.coachName}) — MyCoachCard + End Coaching button WILL render',
+          );
+        }
+        return assigned;
       },
     );
   }

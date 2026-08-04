@@ -166,7 +166,6 @@ class _DashboardBodyState extends State<_DashboardBody> with WidgetsBindingObser
                             MyCoachCard(
                               coach: controller.assignedCoach!,
                               athleteId: controller.uid,
-                              onEndCoaching: controller.endCoaching,
                             ),
                             const SizedBox(height: 16),
                           ] else if (!controller.userDocLoading) ...[

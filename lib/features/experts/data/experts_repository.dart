@@ -79,6 +79,16 @@ class ExpertsRepository {
     return _db
         .collection('expert_certificates')
         .where('expertId', isEqualTo: expertId)
+        // REQUIRED, not cosmetic. Security Rules evaluate a LIST against the
+        // QUERY, not per returned document: a non-owner may read a cert only
+        // when `verificationStatus == 'verified'`, and Firestore can only
+        // prove that if the query itself constrains that field. Without this
+        // line the whole listener fails with PERMISSION_DENIED and the
+        // athlete sees no certificates at all. cprofile.js:103-105 carries
+        // the identical pair of filters — this had simply been dropped in the
+        // port. It also matches what this section claims to be: "Verified
+        // Certificates".
+        .where('verificationStatus', isEqualTo: 'verified')
         .snapshots()
         .map((snap) {
           final list = snap.docs.map((d) => ExpertCertificate.fromMap(d.id, d.data())).toList();
