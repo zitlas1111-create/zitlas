@@ -115,7 +115,7 @@ class DietMealCard extends StatelessWidget {
                 ),
             ],
           ),
-          if (footer != null) footer!,
+          ?footer,
         ],
       ),
     );

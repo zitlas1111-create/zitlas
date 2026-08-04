@@ -34,7 +34,7 @@ void main() {
     final db = FakeFirebaseFirestore();
     await db.collection('users').doc(uid).set({
       'name': 'Test Athlete',
-      if (wallet != null) 'wallet': wallet,
+      'wallet': ?wallet,
     });
     return db;
   }

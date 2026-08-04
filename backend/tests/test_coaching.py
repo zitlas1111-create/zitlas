@@ -34,6 +34,19 @@ def fake_db(monkeypatch):
     monkeypatch.setattr(firestore_service, "get_client", lambda: client)
     monkeypatch.setattr(firestore, "transactional", fake_transactional)
 
+    # Force PAID pricing for the whole suite.
+    #
+    # routes/coaching.py zeroes every amount while CLIENT_TRIAL_MODE or
+    # PLATFORM_CHARGES_FREE is on (the current promo policy), which made these
+    # tests assert 499 against a runtime-configured 0 and fail — they were
+    # silently coupled to a deployment flag rather than to the escrow they are
+    # meant to cover. Pinning both here tests the MECHANISM: reserve, debit,
+    # release, fee split. The free-platform path is a single documented branch
+    # (`amount -> 0`) and is exercised by test_free_platform_mode_reserves_zero
+    # below, which pins the flags the other way.
+    monkeypatch.setattr(coaching, "CLIENT_TRIAL_MODE", False)
+    monkeypatch.setattr(coaching, "PLATFORM_CHARGES_FREE", False)
+
     client.store["experts/expert_1"] = {
         "name": "Coach Test",
         "pricing": {"coachingDietPrice": 499, "coachingTrainingPrice": 699, "coachingCompletePrice": 999},
@@ -582,8 +595,11 @@ def test_ending_frees_the_athlete_to_request_again(fake_db, app, client):
     _as(app, ATHLETE_UID)
     assert client.post("/api/coaching/end").status_code == 200
 
+    # Same plan, so this asserts the RELATIONSHIP guard released — not the
+    # wallet. (The first coaching already spent 499 of the 1000, so a pricier
+    # plan would fail on balance and prove nothing about ending.)
     again = client.post("/api/coaching/request",
-                        json={"expertId": EXPERT_UID, "planType": "training"})
+                        json={"expertId": EXPERT_UID, "planType": "diet"})
     assert again.status_code == 200, again.text
 
 
@@ -597,3 +613,28 @@ def test_an_athlete_can_only_end_their_own_coaching(fake_db, app, client):
     assert r.status_code == 404
 
     assert fake_db.store[f"personal_coaching/{ATHLETE_UID}"]["status"] == "active"
+
+
+def test_free_platform_mode_reserves_zero(fake_db, app, client, monkeypatch):
+    """The other side of the flag the fixture pins.
+
+    With the free-platform policy on, the entire escrow still runs — a zero is
+    reserved, the balance check cannot fail, and /accept debits zero — so the
+    flag flips pricing without changing a single code path.
+    """
+    monkeypatch.setattr(coaching, "PLATFORM_CHARGES_FREE", True)
+    _set_wallet(fake_db, ATHLETE_UID, balance=0)
+    _as(app, ATHLETE_UID)
+
+    r = client.post("/api/coaching/request", json={"expertId": EXPERT_UID, "planType": "diet"})
+    assert r.status_code == 200, r.text
+    assert r.json()["amount"] == 0
+
+    wallet = fake_db.store[f"users/{ATHLETE_UID}"]["wallet"]
+    assert wallet["reserved"] == 0
+
+    _as(app, EXPERT_UID)
+    accept = client.post("/api/coaching/accept", json={"requestId": r.json()["requestId"]})
+    assert accept.status_code == 200, accept.text
+    assert fake_db.store[f"personal_coaching/{ATHLETE_UID}"]["status"] == "active"
+    assert fake_db.store[f"users/{ATHLETE_UID}"]["wallet"]["balance"] == 0
