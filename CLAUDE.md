@@ -2,6 +2,25 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Repository layout
+
+`ZITLAS_FULL` is the single repository for the whole product. The former
+`zitlas` (website) and `zitlas_mobile` (Flutter) repos were consolidated into
+it; neither exists any more, and nothing should be copied back out.
+
+```
+backend/            ONE FastAPI backend — serves BOTH clients
+frontend/website/   the website (plain HTML/CSS/JS, no build step)
+mobile/             the Flutter app (android/ ios/ lib/ assets/ web/ …)
+food_dataset/       ONE food database
+food_profiles/      ONE food-profile rule set
+docs/               architecture + migration inventory
+tests/              Firestore rules test harness
+```
+
+Both clients talk to the same backend and the same Firebase project. There is
+one `render.yaml`, one `firebase.json`, one `firestore.rules`.
+
 ## Running the App
 
 ```bash
@@ -9,7 +28,16 @@ cd backend
 uvicorn main:app --reload
 ```
 
-Opens at `http://127.0.0.1:8000`. The FastAPI backend serves the entire frontend as static files (mounted last, catches all non-API routes). Root `/` redirects to the dashboard.
+Opens at `http://127.0.0.1:8000`. The FastAPI backend serves the website
+(`frontend/website/`) as static files (mounted last, catches all non-API
+routes). Root `/` redirects to the login page.
+
+```bash
+cd mobile
+flutter run
+```
+
+The Flutter app points at the same backend (`lib/core/config/env.dart`).
 
 **Environment:** Create `backend/.env` with API keys:
 - `GROQ_API_KEY` — primary LLM provider
@@ -36,21 +64,31 @@ FastAPI server in `main.py`. All API prefixes:
 
 **RAG pipeline** (`services/rag_service.py` + `services/kb_manager.py`): 4 goal-specific knowledge bases (`weight_loss`, `muscle_gain`, `general_fitness`, `transformation`). FAISS indexes are lazy-loaded on first request and LRU-evicted (max 2 in RAM simultaneously). Pre-built indexes live in `backend/vector_store/<goal>/`. Source PDFs are NOT in the repo; only the serialized FAISS index and chunk pickle files are.
 
-### Frontend (`frontend/`)
+### Website (`frontend/website/`)
 
 No build step — plain HTML/CSS/JS files served as static assets. No npm, no bundler, no TypeScript. Each page is a self-contained directory with its own `.html`, `.css`, and `.js`.
 
-**Shared components:** `frontend/components/navbar.js`, `frontend/components/wallet.js`, `frontend/assets/js/firebase-config.js`, `frontend/assets/js/i18n.js` (loaded via `<script>` tags in each page's HTML).
+**Shared components:** `frontend/website/components/navbar.js`, `frontend/website/components/wallet.js`, `frontend/website/assets/js/firebase-config.js`, `frontend/website/assets/js/i18n.js` (loaded via `<script>` tags in each page's HTML).
+
+Paths *inside* the site are still root-relative (`/assets/...`, `/pages/...`) because the backend mounts `frontend/website/` at `/` — only the on-disk location changed during consolidation, never the served URL.
 
 **All JS files use an IIFE pattern** (`(function(){ 'use strict'; ... })()`), except `expert-dashboard.js` which is a plain top-level script.
 
+### Mobile app (`mobile/`)
+
+A real Flutter application (`com.zitlas.app`), **not** a webview wrapper — Android and iOS both exist. Feature-first layout under `mobile/lib/features/<feature>/{data,models,presentation}` with shared infrastructure in `mobile/lib/core/`. Routing is `go_router` (`lib/app/router.dart`).
+
+The historical Capacitor Android wrapper (the old `zitlas/android/`) was superseded by this app and removed during consolidation.
+
 ### Step Counter System
 
-Android app is the web frontend wrapped in Capacitor (`android/`, `appId com.zitlas.app`, `webDir: frontend`). No iOS project exists.
+Steps are captured natively by the Flutter app (`mobile/lib/core/steps/`) and, on the website, by the JS pipeline below. Both write the same `users/{uid}/activity/{date}` day documents, so neither is authoritative over the other — whichever ran most recently wins.
 
-**Data sources (never both — no double counting):** Health Connect is the source of truth when installed+granted (native plugin `HealthConnectPlugin.java` + `HealthConnectManager.kt`, aggregate reads). Fallback: hardware `TYPE_STEP_COUNTER` via `StepSensorPlugin.java` — the chip counts steps since boot with the app dead/locked, so background tracking = read the cumulative value on next open and diff against a persisted baseline (no service, no battery cost).
+**Data sources (never both — no double counting):** Health Connect is the source of truth when installed+granted. Fallback: hardware `TYPE_STEP_COUNTER` — the chip counts steps since boot with the app dead/locked, so background tracking = read the cumulative value on next open and diff against a persisted baseline (no service, no battery cost).
 
-**JS pipeline (load order matters):** `health-connect.js` → `streak-service.js` → `activity-service.js` (daily model, history 90d, goal, Firestore sync `users/{uid}/activity/{date}`, offline pending queue) → `step-sensor.js` (baseline math `computeDelta()` — reboot detection, anti-cheat cap ~5 steps/sec, day-boundary handling; live foreground watch) → `activity-sync.js` (orchestrator: sync on open/visible/midnight, 60s HC poll while visible, evening reminder). `activity-sync.syncTodayActivity()` calls `ZitlasStepSensor.setEnabled(false)` whenever HC answers.
+**Flutter side:** `mobile/android/app/src/main/kotlin/com/zitlas/app/StepTrackerPlugin.kt` (+ `StepDayBoundary.kt`) is the native channel; `mobile/lib/core/steps/` holds the Dart layer (`step_tracking_service.dart`, `step_sensor_baseline.dart` — the same reboot-detection and anti-cheat cap as the web `computeDelta()`, `step_background_worker.dart`, `step_history.dart`).
+
+**Website JS pipeline (load order matters):** `health-connect.js` → `streak-service.js` → `activity-service.js` (daily model, history 90d, goal, Firestore sync `users/{uid}/activity/{date}`, offline pending queue) → `step-sensor.js` (baseline math `computeDelta()` — reboot detection, anti-cheat cap ~5 steps/sec, day-boundary handling; live foreground watch) → `activity-sync.js` (orchestrator: sync on open/visible/midnight, 60s HC poll while visible, evening reminder). `activity-sync.syncTodayActivity()` calls `ZitlasStepSensor.setEnabled(false)` whenever HC answers.
 
 **Midnight reset:** `archiveYesterdayActivity()` — date-keyed model; any sync pass after midnight archives the stale "today" into history+Firestore, settles streak, starts fresh. In-app `setTimeout` to 00:00:05 covers the app-stays-open case.
 
@@ -171,4 +209,8 @@ New schema detection happens inside the `zitlas_workout_plan` read (step 3). If 
 
 ## Deployment
 
-Deployed on Render (see `render.yaml`). `rootDir: backend`, start command: `uvicorn main:app --host 0.0.0.0 --port $PORT`. Frontend is served as static files by the same FastAPI process — no separate static host needed.
+**Backend + website** — one Render service (see `render.yaml`). `rootDir: backend`, start command: `uvicorn main:app --host 0.0.0.0 --port $PORT`. The website is served as static files by that same FastAPI process from `frontend/website/`, so there is no separate static host and no second deployment.
+
+**Mobile** — built from `mobile/` (`flutter build appbundle` / `flutter build ipa`) and shipped through the stores. It calls the same Render backend; there is no mobile-specific backend.
+
+**Firebase** — one project, one rule set: `firebase deploy --only firestore:rules,storage` from the repo root.

@@ -50,8 +50,10 @@ from routes import swap
 from services import rag_service
 
 # ── Directory paths ──────────────────────────────────────────────────────────
-BASE_DIR     = Path(__file__).parent          # backend/
-FRONTEND_DIR = BASE_DIR.parent / "frontend"  # frontend/
+BASE_DIR     = Path(__file__).parent                        # backend/
+# The website lives at frontend/website/ so that frontend/ can hold any future
+# web target alongside it; mobile/ is the Flutter client and is not served here.
+FRONTEND_DIR = BASE_DIR.parent / "frontend" / "website"     # frontend/website/
 
 
 # ── Lifespan: startup tasks ───────────────────────────────────────────────────

@@ -1,21 +1,34 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# ZITLAS_FULL — single repository for backend + website + Flutter app.
+# Paths are repo-root relative; the Flutter project now lives under mobile/.
+# ─────────────────────────────────────────────────────────────────────────────
+
 # Environment / secrets
 .env
 *.env
 *firebase-adminsdk*.json
 *serviceAccountKey*.json
 
-# Flutter / Dart
+# Flutter / Dart (mobile/)
 .dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies
 .packages
 build/
+
+# IDE / editor
 *.iml
 .idea/
+.vscode/
+
+# Gradle caches / build state (regenerated on every Android build)
+.gradle/
+.kotlin/
+mobile/android/.cxx/
 **/Flutter/ephemeral/
 **/flutter/ephemeral/
-android/local.properties
-android/key.properties
+mobile/android/local.properties
+mobile/android/key.properties
 **/*.keystore
 **/*.jks
 
@@ -28,19 +41,18 @@ __pycache__/
 # Runtime-generated (ephemeral on Render — see backend/routes/certificates.py)
 backend/uploads/
 
+# Prebuilt RAG indexes — regenerate with `python backend/prebuild_indexes.py`.
+# Tracked deliberately for now so a fresh deploy has working RAG search on the
+# first request; drop the leading '#' if you'd rather build them at deploy time.
+#backend/vector_store/
+
 # Node
 node_modules/
+
+# Firestore rules test harness
+tests/firestore-rules/node_modules/
+tests/firestore-rules/*.log
 
 # OS
 .DS_Store
 Thumbs.db
-
-tests/firestore-rules/node_modules/
-
-# Firestore test generated files
-tests/firestore-rules/*.log
-tests/firestore-rules/node_modules/
-
-# Python generated cache
-__pycache__/
-*.pyc
