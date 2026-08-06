@@ -638,3 +638,71 @@ def test_free_platform_mode_reserves_zero(fake_db, app, client, monkeypatch):
     assert accept.status_code == 200, accept.text
     assert fake_db.store[f"personal_coaching/{ATHLETE_UID}"]["status"] == "active"
     assert fake_db.store[f"users/{ATHLETE_UID}"]["wallet"]["balance"] == 0
+
+
+# ── POST /api/coaching/end — athlete-initiated end of an active relationship ──
+
+def _reserve_accept_active(fake_db, app, client):
+    """Drive a request -> accept so an ACTIVE relationship exists. Returns
+    the request_id."""
+    _set_wallet(fake_db, ATHLETE_UID, balance=1000)
+    _as(app, ATHLETE_UID)
+    rid = client.post("/api/coaching/request", json={"expertId": EXPERT_UID, "planType": "diet"}).json()["requestId"]
+    _as(app, EXPERT_UID)
+    assert client.post("/api/coaching/accept", json={"requestId": rid}).status_code == 200
+    assert fake_db.store[f"personal_coaching/{ATHLETE_UID}"]["status"] == "active"
+    return rid
+
+
+def test_end_coaching_flips_active_to_ended(fake_db, app, client):
+    rid = _reserve_accept_active(fake_db, app, client)
+
+    _as(app, ATHLETE_UID)
+    r = client.post("/api/coaching/end")
+    assert r.status_code == 200, r.text
+    assert r.json()["success"] is True
+    assert r.json()["already"] is False
+
+    # (5,6,7) relationship flipped active -> ended, attributed to the athlete.
+    rel = fake_db.store[f"personal_coaching/{ATHLETE_UID}"]
+    assert rel["status"] == "ended"
+    assert rel["endedBy"] == "athlete"
+    assert "endedAt" in rel
+
+    # The originating request is closed so it leaves the expert's live queue.
+    assert fake_db.store[f"personal_coach_requests/{rid}"]["status"] == "ended"
+
+    # Both parties notified.
+    notifs = [d for p, d in fake_db.store.items() if p.startswith("notifications/")]
+    assert any(n["userId"] == ATHLETE_UID and n["type"] == "coaching_ended" for n in notifs)
+    assert any(n["userId"] == EXPERT_UID and n["type"] == "coaching_ended" for n in notifs)
+
+
+def test_end_coaching_without_relationship_returns_404(fake_db, app, client):
+    _as(app, ATHLETE_UID)  # no relationship ever created
+    r = client.post("/api/coaching/end")
+    assert r.status_code == 404
+    assert r.json()["detail"] == "no_coaching_relationship"
+
+
+def test_end_coaching_is_idempotent(fake_db, app, client):
+    _reserve_accept_active(fake_db, app, client)
+    _as(app, ATHLETE_UID)
+
+    first = client.post("/api/coaching/end")
+    assert first.status_code == 200 and first.json()["already"] is False
+
+    # Second end is a no-op success — must not error and must not re-notify.
+    before = sum(1 for p in fake_db.store if p.startswith("notifications/"))
+    second = client.post("/api/coaching/end")
+    assert second.status_code == 200, second.text
+    assert second.json()["already"] is True
+    after = sum(1 for p in fake_db.store if p.startswith("notifications/"))
+    assert after == before, "a repeated end must not send duplicate notifications"
+    assert fake_db.store[f"personal_coaching/{ATHLETE_UID}"]["status"] == "ended"
+
+
+def test_end_coaching_requires_auth(app, client):
+    # No dependency override -> real verify_firebase_token -> 401 (no token).
+    r = client.post("/api/coaching/end")
+    assert r.status_code == 401

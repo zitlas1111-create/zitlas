@@ -4243,56 +4243,59 @@
       endConfirmBtn.addEventListener('click', function() {
         var uid = _getMyUserId();
         if (!uid || !_myCoaching) { closeEndCoachingModal(); return; }
+        if (typeof getIdToken !== 'function') { showToast('Connection unavailable — please try again.'); return; }
         var requestId = _myCoaching.requestId;
-        console.log('[COACHING] ending — personal_coaching/' + uid);
+        console.log('[COACHING] ending via POST /api/coaching/end — athlete=' + uid);
 
         endConfirmBtn.disabled = true;
         endConfirmBtn.textContent = 'Ending…';
         var _endedAtIso = new Date().toISOString();
-        ZitlasDB.collection('personal_coaching').doc(uid).update({
-          status:   'ended',
-          endedAt:  _endedAtIso,
-          endedBy:  'athlete',
-          reason:   'athlete',
-        }).then(function() {
-          if (requestId) {
-            ZitlasDB.collection('personal_coach_requests').doc(requestId)
-              .update({ status: 'ended' })
-              .catch(function(e) { console.warn('[COACHING] request status update failed', e); });
-          }
-          /* Optimistic local update — flips every Personal Coaching button
-             on this page back to "Personal Coach" immediately, without
-             waiting for the personal_coaching onSnapshot listener to
-             round-trip. Purely a UI-freshness improvement: _openRequestFor
-             above is already correct even if this were skipped (it
-             derives from live listener data), but there's no reason to
-             make the athlete wait on network latency to see their own
-             action reflected. The listener's eventual snapshot remains
-             the source of truth and simply confirms this a moment later. */
-          _myCoaching = Object.assign({}, _myCoaching, {
-            status: 'ended', endedAt: _endedAtIso, endedBy: 'athlete', reason: 'athlete',
+
+        /* SINGLE SOURCE OF TRUTH / CLIENT PARITY: end the relationship through
+           the shared backend endpoint — identical to the Flutter client
+           (ExpertsRepository.endCoaching -> POST /api/coaching/end). The
+           backend flips personal_coaching -> 'ended', closes the originating
+           personal_coach_request, and notifies BOTH parties inside one
+           transaction (routes/coaching.py end_coaching). This replaces the
+           website's previous direct Firestore writes + client-side
+           notification, which duplicated business logic across clients and
+           skipped the request-closure/notification steps the backend owns. */
+        getIdToken().then(function(token) {
+          return fetch('/api/coaching/end', {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
           });
-          if (requestId) {
-            var _idx = _myRequests.findIndex(function(r) { return r.requestId === requestId; });
-            if (_idx !== -1) _myRequests[_idx] = Object.assign({}, _myRequests[_idx], { status: 'ended' });
-          }
-          updateCoachButtons();
-          /* Dismisses any Diet/Workout Review (the SEPARATE, older
-             one-off-review system) this device has cached, so it can't
-             keep showing an interactive "your nutritionist updated your
-             plan" banner after coaching ends — the plan itself stays
-             visible per the comment above, only the pending-review
-             association is retired. No relationshipStatus override here:
-             this handler already wrote 'ended' immediately above. */
-          if (typeof ZitlasCoachingReset !== 'undefined') ZitlasCoachingReset.clearAll({});
-          closeEndCoachingModal();
-          showToast('Personal coaching ended. Your existing plans remain unchanged.');
-          if (typeof ZitlasNotify !== 'undefined' && _myCoaching.coachId) {
-            ZitlasNotify.send(_myCoaching.coachId, {
-              title: 'Coaching partnership ended',
-              message: (_myCoaching.athleteName || 'An athlete') + ' ended their coaching with you.',
-              category: 'expert', type: 'coaching_ended', action: 'expert_dashboard', priority: 'high',
+        }).then(function(res) {
+          return res.json().catch(function() { return {}; }).then(function(data) {
+            return { status: res.status, data: data };
+          });
+        }).then(function(result) {
+          // 200 = ended now; 404 = already ended / no active relationship —
+          // both mean "you no longer have an active coach", so converge the UI.
+          if ((result.status === 200 && result.data.success) || result.status === 404) {
+            /* Optimistic local update — flips every Personal Coaching button
+               back to "Personal Coach" immediately; the personal_coaching
+               onSnapshot listener confirms moments later and remains the
+               source of truth. */
+            _myCoaching = Object.assign({}, _myCoaching, {
+              status: 'ended', endedAt: _endedAtIso, endedBy: 'athlete', reason: 'athlete',
             });
+            if (requestId) {
+              var _idx = _myRequests.findIndex(function(r) { return r.requestId === requestId; });
+              if (_idx !== -1) _myRequests[_idx] = Object.assign({}, _myRequests[_idx], { status: 'ended' });
+            }
+            updateCoachButtons();
+            /* Dismisses any cached Diet/Workout Review (the SEPARATE, older
+               one-off-review system) so it can't keep showing an interactive
+               "your nutritionist updated your plan" banner after coaching
+               ends — the plan itself stays visible, only the pending-review
+               association is retired. */
+            if (typeof ZitlasCoachingReset !== 'undefined') ZitlasCoachingReset.clearAll({});
+            closeEndCoachingModal();
+            showToast('Personal coaching ended. Your existing plans remain unchanged.');
+          } else {
+            console.error('[COACHING] end failed', result);
+            showToast('Could not end coaching — please try again.');
           }
         }).catch(function(err) {
           console.error('[COACHING] end coaching failed', err);

@@ -144,6 +144,11 @@ class _ProfileBody extends StatelessWidget {
                           host.startTour(tourUid);
                         },
                       ),
+                      // Admin-only: certificate review console. Renders ONLY
+                      // for users carrying the backend `admin` custom claim
+                      // (invisible to everyone else), mirroring the website
+                      // where the admin pages are reachable by admins only.
+                      const _AdminConsoleRow(),
                     ],
                   ),
                   const SizedBox(height: 28),
@@ -455,6 +460,50 @@ class _StepTrackingRowState extends State<_StepTrackingRow> {
               await showStepConsentSheet(context, service: _service);
               if (mounted) setState(() => _service = StepTrackingService());
             },
+    );
+  }
+}
+
+/// Certificate-review entry, shown ONLY to users with the backend `admin`
+/// custom claim — invisible to every normal user (renders nothing), matching
+/// the website where the admin console is admin-reachable only. The claim is
+/// authoritative and not client-forgeable (backend-set); the destination
+/// screen re-checks it too, so this row is convenience, not the gate.
+class _AdminConsoleRow extends StatefulWidget {
+  const _AdminConsoleRow();
+
+  @override
+  State<_AdminConsoleRow> createState() => _AdminConsoleRowState();
+}
+
+class _AdminConsoleRowState extends State<_AdminConsoleRow> {
+  bool _isAdmin = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _check();
+  }
+
+  Future<void> _check() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+      final res = await user.getIdTokenResult();
+      if (mounted && res.claims?['admin'] == true) setState(() => _isAdmin = true);
+    } catch (_) {
+      // No claim / offline — stay hidden. Never surface admin UI on doubt.
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_isAdmin) return const SizedBox.shrink();
+    return _SettingsRow(
+      icon: Icons.verified_user_outlined,
+      label: 'Certificate Review',
+      subtitle: 'Admin — approve or reject expert certificates',
+      onTap: () => context.push('/admin'),
     );
   }
 }

@@ -1,6 +1,7 @@
 import 'package:go_router/go_router.dart';
 
 import '../core/widgets/app_shell.dart';
+import '../features/admin/presentation/screens/admin_screen.dart';
 import '../features/ai_coach/presentation/screens/ai_coach_screen.dart';
 import '../features/assessment/presentation/screens/assessment_screen.dart';
 import '../features/auth/auth_state.dart';
@@ -98,6 +99,10 @@ GoRouter buildRouter(AuthState authState) {
         ),
       ),
       GoRoute(path: '/notifications', builder: (context, state) => const NotificationsScreen()),
+      // Admin certificate console — parity with the website's cert-audit /
+      // admin-review pages. The screen itself claim-gates (backend `admin`
+      // custom claim); a non-admin who reaches it sees an access-denied view.
+      GoRoute(path: '/admin', builder: (context, state) => const AdminScreen()),
       GoRoute(path: '/membership', builder: (context, state) => const MembershipScreen()),
       GoRoute(path: '/profile/personal-info', builder: (context, state) => const PersonalInfoScreen()),
       GoRoute(path: '/profile/help-support', builder: (context, state) => const HelpSupportScreen()),
