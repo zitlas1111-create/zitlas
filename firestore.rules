@@ -250,12 +250,18 @@ service cloud.firestore {
                 && isActiveCoachOf(resource.data.athleteId)));
       allow delete: if false;
     }
+    // Same lifecycle as meal_checkins: the athlete keeps their own submissions
+    // forever; the COACH's read/review access is revoked the moment coaching
+    // ends (gated on the active relationship, not raw coachId), so an ex-coach
+    // can no longer see or review workout check-ins.
     match /workout_checkins/{id} {
       allow read: if signedIn()
-        && (resource.data.athleteId == request.auth.uid || resource.data.coachId == request.auth.uid);
+        && (resource.data.athleteId == request.auth.uid
+            || (resource.data.coachId == request.auth.uid && isActiveCoachOf(resource.data.athleteId)));
       allow create: if signedIn() && request.resource.data.athleteId == request.auth.uid;
       allow update: if signedIn()
-        && (resource.data.athleteId == request.auth.uid || resource.data.coachId == request.auth.uid);
+        && (resource.data.athleteId == request.auth.uid
+            || (resource.data.coachId == request.auth.uid && isActiveCoachOf(resource.data.athleteId)));
       allow delete: if false;
     }
     match /health_alerts/{id} {
@@ -322,17 +328,22 @@ service cloud.firestore {
     }
 
     // ── coaching_notifications — toast; recipient reads/consumes ──
+    // Real doc schema — BOTH clients (diet.js/coaching-workspace.js/day.js/
+    // health-status.js on web; meal_checkin_repository.dart et al. on Flutter)
+    // write { toId: <recipient>, fromId: <sender>, text, type, read }. The
+    // coach/athlete toast listener queries `where('toId','==',uid)` and marks
+    // read via `update({read:true})`. Reads MUST therefore gate on `toId`, not
+    // on athleteId/coachId/recipientId (which these docs never carry) — the
+    // earlier rule would have denied the live listener on both clients.
     match /coaching_notifications/{id} {
-      allow read: if signedIn()
-        && (resource.data.athleteId == request.auth.uid
-            || resource.data.coachId == request.auth.uid
-            || resource.data.recipientId == request.auth.uid);
-      allow create: if signedIn();
+      allow read:   if signedIn() && resource.data.toId == request.auth.uid;
+      allow create: if signedIn() && request.resource.data.fromId == request.auth.uid;
+      // Recipient marks their own received toast read (the only mutation the
+      // listener performs).
+      allow update: if signedIn() && resource.data.toId == request.auth.uid
+                    && changedOnly(['read']);
       allow delete: if signedIn()
-        && (resource.data.athleteId == request.auth.uid
-            || resource.data.coachId == request.auth.uid
-            || resource.data.recipientId == request.auth.uid);
-      allow update: if false;
+                    && (resource.data.toId == request.auth.uid || resource.data.fromId == request.auth.uid);
     }
 
     // ── MONEY — client deny-all (backend Admin SDK bypasses) ──

@@ -91,7 +91,8 @@ beforeEach(async () => {
     await db.doc(`workout_checkins/wc1`).set({ athleteId: A, coachId: C, status: 'pending' });
     await db.doc(`coaching_meal_requests/cmr1`).set({ athleteId: A, coachId: C, status: 'pending' });
     await db.doc(`expert_reviews/rr1`).set({ reviewId: 'rr1', athleteId: A, expertId: C, status: 'APPROVED' });
-    await db.doc(`coaching_notifications/cn1`).set({ athleteId: A, coachId: C, title: 'toast' });
+    // Real schema: toId=recipient, fromId=sender, read flag (athlete A -> coach C).
+    await db.doc(`coaching_notifications/cn1`).set({ toId: C, fromId: A, type: 'meal_checkin', text: 'toast', read: false });
     await db.doc(`notifications/n1`).set({ notificationId: 'n1', userId: A, isRead: false, title: 't' });
     await db.doc(`expert_certificates/cert1`).set({ certId: 'cert1', expertId: C, verificationStatus: 'pending_review' });
     // WebRTC call signaling under the A<->C chat room.
@@ -331,15 +332,28 @@ describe('expert_reviews — participant access', () => {
   });
 });
 
-describe('coaching_notifications — recipient access', () => {
-  it('athlete recipient CAN read', async () => {
-    await assertSucceeds(asA().doc(`coaching_notifications/cn1`).get());
-  });
-  it('coach recipient CAN read', async () => {
+describe('coaching_notifications — toId/fromId schema (real, both clients)', () => {
+  // cn1 = { toId: C (coach recipient), fromId: A (athlete sender) }.
+  it('recipient (toId) CAN read — the where(toId==uid) listener query works', async () => {
     await assertSucceeds(asC().doc(`coaching_notifications/cn1`).get());
+  });
+  it('sender (fromId, not recipient) CANNOT read', async () => {
+    await assertFails(asA().doc(`coaching_notifications/cn1`).get());
   });
   it('unrelated user CANNOT read', async () => {
     await assertFails(asB().doc(`coaching_notifications/cn1`).get());
+  });
+  it('recipient CAN mark it read (update read only)', async () => {
+    await assertSucceeds(asC().doc(`coaching_notifications/cn1`).update({ read: true }));
+  });
+  it('non-recipient CANNOT mark it read', async () => {
+    await assertFails(asB().doc(`coaching_notifications/cn1`).update({ read: true }));
+  });
+  it('sender CAN create a toast addressed FROM themselves', async () => {
+    await assertSucceeds(asA().doc(`coaching_notifications/cn2`).set({ toId: C, fromId: A, type: 'info', text: 'x', read: false }));
+  });
+  it('CANNOT forge a toast as if from another user', async () => {
+    await assertFails(asA().doc(`coaching_notifications/cn3`).set({ toId: C, fromId: B, type: 'info', text: 'x', read: false }));
   });
 });
 
@@ -589,7 +603,12 @@ describe('end coaching — revocation', () => {
 
 // The ex-coach's loss of access, verified against a RETIRED relationship.
 describe('end coaching — the ex-coach', () => {
-  before(async () => {
+  // beforeEach (NOT before): the suite's top-level beforeEach re-seeds the
+  // relationship to status:'active' before every test, so a one-shot `before`
+  // here would be clobbered back to active and these revocation assertions
+  // would falsely fail. beforeEach runs after the outer one (mocha ordering),
+  // so 'ended' is what each test actually sees.
+  beforeEach(async () => {
     await testEnv.withSecurityRulesDisabled(async (ctx) => {
       await ctx.firestore().doc(`personal_coaching/${A}`).set(
         { athleteId: A, coachId: C, status: 'ended', endDateTs: future }, { merge: true });
@@ -606,6 +625,9 @@ describe('end coaching — the ex-coach', () => {
   });
   it('CANNOT read the athlete meal photos', async () => {
     await assertFails(asC().doc('meal_checkins/mc1').get());
+  });
+  it('CANNOT read the athlete workout check-ins', async () => {
+    await assertFails(asC().doc('workout_checkins/wc1').get());
   });
   it('CANNOT publish a new plan', async () => {
     await assertFails(
