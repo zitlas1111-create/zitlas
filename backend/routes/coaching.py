@@ -607,19 +607,40 @@ async def end_coaching(caller: dict = Depends(verify_firebase_token)):
 
     @firestore.transactional
     def _txn(tx):
+        # ── ALL READS FIRST ──────────────────────────────────────────────
+        # Firestore transactions require every read to happen before any
+        # write; a get(transaction=tx) after an update/set/delete raises
+        # ReadAfterWriteError. So both documents are read up front, decisions
+        # made in memory, and only then are the writes issued.
         rel_snap = rel_ref.get(transaction=tx)
         if not rel_snap.exists:
             raise HTTPException(status_code=404, detail="no_coaching_relationship")
         rel = rel_snap.to_dict() or {}
 
         # Idempotent: a double-tap, or a retry after a dropped response, is
-        # not an error and must not re-notify the coach a second time.
+        # not an error and must not re-notify the coach a second time. No write
+        # has happened yet, so returning here leaves the transaction read-only.
         if rel.get("status") != "active":
             print(f"[COACHING END] already {rel.get('status')} — no-op")
             return {"already": True, "coachId": rel.get("coachId"),
                     "coachName": rel.get("coachName"),
                     "athleteName": rel.get("athleteName")}
 
+        # Read the originating request (still BEFORE any write) and decide, in
+        # memory, whether it should be closed. Only ever the athlete's OWN
+        # request.
+        request_id = rel.get("requestId")
+        req_ref = None
+        close_request = False
+        if request_id:
+            req_ref = db.collection("personal_coach_requests").document(request_id)
+            req_snap = req_ref.get(transaction=tx)
+            close_request = (
+                req_snap.exists
+                and (req_snap.to_dict() or {}).get("athleteId") == athlete_uid
+            )
+
+        # ── WRITES AFTER ALL READS ───────────────────────────────────────
         _now = now()
         tx.update(rel_ref, {
             "status": "ended",
@@ -627,15 +648,8 @@ async def end_coaching(caller: dict = Depends(verify_firebase_token)):
             "endedBy": "athlete",
             "reason": "athlete",
         })
-
-        # The originating request, so the expert's queue stops showing this as
-        # a live client. Only ever the athlete's OWN request.
-        request_id = rel.get("requestId")
-        if request_id:
-            req_ref = db.collection("personal_coach_requests").document(request_id)
-            req_snap = req_ref.get(transaction=tx)
-            if req_snap.exists and (req_snap.to_dict() or {}).get("athleteId") == athlete_uid:
-                tx.update(req_ref, {"status": "ended", "updatedAt": _now.isoformat()})
+        if close_request and req_ref is not None:
+            tx.update(req_ref, {"status": "ended", "updatedAt": _now.isoformat()})
 
         return {"already": False, "coachId": rel.get("coachId"),
                 "coachName": rel.get("coachName"),
