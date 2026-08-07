@@ -120,7 +120,18 @@ class _NotificationsBody extends StatelessWidget {
         }
         break;
       case 'expert_dashboard':
+        // Coach side of Personal Coaching — now the Website module in a WebView.
         context.go('/expert-dashboard');
+        break;
+      case 'coaching_workspace':
+        // Athlete side of Personal Coaching — open the active-coaching WebView
+        // workspace directly (chat, meal reviews, coach plan, End Coaching).
+        // actionId carries the coach id; without it fall back to browse.
+        if (n.actionId != null && n.actionId!.isNotEmpty) {
+          context.push('/coaching-workspace?coachId=${n.actionId}');
+        } else {
+          context.go('/experts');
+        }
         break;
       case 'profile':
         context.go('/profile');

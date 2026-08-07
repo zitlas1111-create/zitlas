@@ -66,5 +66,15 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<!-- Media access. Needed by the native meal-snap (image_picker) AND by the
+	     Personal Coaching WebView's file chooser when the athlete attaches a
+	     photo to a coach chat. Without these keys iOS terminates the app the
+	     moment the picker/capture is invoked. -->
+	<key>NSCameraUsageDescription</key>
+	<string>ZITLAS uses the camera so you can snap a meal for coach review and attach photos in coach chat.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>ZITLAS needs photo access so you can attach meal and progress photos for your coach to review.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>ZITLAS uses the microphone for voice messages to Zino and your coach.</string>
 </dict>
 </plist>

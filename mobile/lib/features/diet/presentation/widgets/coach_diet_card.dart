@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/zitlas_tokens.dart';
 import '../../../coaching/models/coach_diet_plan.dart';
+import '../../diet_controller.dart';
+import 'meal_snap_button.dart';
 
 /// The coach-authored diet, on the athlete's Diet screen.
 ///
@@ -23,6 +25,8 @@ class CoachDietCard extends StatelessWidget {
     required this.updatedAt,
     this.selections = const {},
     this.onSelect,
+    this.controller,
+    this.athleteName,
   });
 
   final CoachDietPlan plan;
@@ -37,6 +41,13 @@ class CoachDietCard extends StatelessWidget {
   final Map<String, int> selections;
 
   final void Function(String day, String mealId, int optionIndex)? onSelect;
+
+  /// When set, each coach meal gets a "Snap Meal" row so the athlete sends the
+  /// photo against the COACH's prescription (the plan they're actually
+  /// following while coaching is active), not the AI reference plan below.
+  /// Null on any screen that only displays the coach plan.
+  final DietController? controller;
+  final String? athleteName;
 
   @override
   Widget build(BuildContext context) {
@@ -98,6 +109,8 @@ class CoachDietCard extends StatelessWidget {
               meal: meal,
               selected: selections['${day.day}:${meal.id}'] ?? 0,
               onSelect: onSelect,
+              controller: controller,
+              athleteName: athleteName,
             ),
           const SizedBox(height: 8),
         ],
@@ -183,12 +196,16 @@ class _MealBlock extends StatelessWidget {
     required this.meal,
     required this.selected,
     required this.onSelect,
+    this.controller,
+    this.athleteName,
   });
 
   final String day;
   final CoachMeal meal;
   final int selected;
   final void Function(String day, String mealId, int optionIndex)? onSelect;
+  final DietController? controller;
+  final String? athleteName;
 
   @override
   Widget build(BuildContext context) {
@@ -236,6 +253,16 @@ class _MealBlock extends StatelessWidget {
               onTap: multiple && onSelect != null
                   ? () => onSelect!(day, meal.id, i)
                   : null,
+            ),
+          // Snap this meal against the COACH's prescription. Keyed on the coach
+          // meal name so the check-in lands on the right meal in the coach's
+          // review workspace. Only present when a controller is supplied (i.e.
+          // coaching is active); MealSnapRow itself re-checks hasActiveCoach.
+          if (controller != null && athleteName != null)
+            MealSnapRow(
+              controller: controller!,
+              mealName: meal.name,
+              athleteName: athleteName!,
             ),
         ],
       ),

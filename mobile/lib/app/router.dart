@@ -9,9 +9,12 @@ import '../features/auth/presentation/screens/expert_application_review_screen.d
 import '../features/auth/presentation/screens/login_screen.dart';
 import '../features/auth/presentation/screens/splash_screen.dart';
 import '../features/chat/presentation/screens/chat_screen.dart';
+import '../features/coaching_webview/coaching_webview_screen.dart';
 import '../features/dashboard/presentation/screens/dashboard_screen.dart';
 import '../features/diet/presentation/screens/diet_screen.dart';
-import '../features/expert_dashboard/presentation/screens/expert_dashboard_screen.dart';
+// NOTE: ExpertDashboardScreen (native coach dashboard) is intentionally NOT
+// imported — /expert-dashboard now renders CoachingWebViewScreen. The native
+// screen stays in the tree, dormant, for the eventual return to native parity.
 import '../features/experts/presentation/screens/expert_profile_screen.dart';
 import '../features/experts/presentation/screens/experts_screen.dart';
 import '../features/health/presentation/screens/step_history_route.dart';
@@ -78,9 +81,22 @@ GoRouter buildRouter(AuthState authState) {
       // Full-screen flows outside the bottom-nav shell.
       GoRoute(path: '/assessment', builder: (context, state) => const AssessmentScreen()),
       GoRoute(path: '/ai-coach', builder: (context, state) => const AiCoachScreen()),
+      // Personal Coaching (coach side) is served by the Website inside a
+      // secure WebView until native Flutter reaches parity. The native
+      // ExpertDashboardScreen is kept in the tree (dormant) so this can be
+      // flipped back with a one-line change.
       GoRoute(
         path: '/expert-dashboard',
-        builder: (context, state) => const ExpertDashboardScreen(),
+        builder: (context, state) => CoachingWebViewScreen.expertDashboard(),
+      ),
+      // Athlete's active coaching workspace (chat, meal reviews, coach notes,
+      // remaining days, End Coaching) — the Website module in a WebView.
+      // Reached from the "Open Coaching" CTA and coaching notification taps.
+      GoRoute(
+        path: '/coaching-workspace',
+        builder: (context, state) => CoachingWebViewScreen.athleteWorkspace(
+          coachId: state.uri.queryParameters['coachId'] ?? '',
+        ),
       ),
       GoRoute(path: '/reviews/:id', builder: (context, state) => const ReviewsScreen()),
       GoRoute(

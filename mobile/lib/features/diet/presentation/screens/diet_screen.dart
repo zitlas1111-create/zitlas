@@ -162,6 +162,11 @@ class _DietContent extends StatelessWidget {
             updatedAt: controller.coachPlan?.dietUpdatedAt,
             selections: controller.coachPlan?.selections ?? const {},
             onSelect: controller.selectCoachMealOption,
+            // Meal Snap lives on the COACH plan while coaching is active — the
+            // athlete follows (and snaps against) the coach's prescription, and
+            // the AI plan below is a read-only reference.
+            controller: controller,
+            athleteName: userName,
           ),
         DietDayFocusCard(day: day),
         if (day.theme != null || day.nutritionTip != null) const SizedBox(height: 16),
@@ -169,13 +174,18 @@ class _DietContent extends StatelessWidget {
           final meal = day.meals[mealIndex];
           return DietMealCard(
             meal: meal,
-            // Meal Snap renders itself as nothing for an athlete without an
-            // active Personal Coach, so this is safe to always pass.
-            footer: MealSnapRow(
-              controller: controller,
-              mealName: meal.mealName,
-              athleteName: userName,
-            ),
+            // When a coach diet is active the snap moved UP to the coach plan
+            // (that is the plan the athlete follows), and this AI plan is a
+            // read-only reference — so no snap here. Without a coach diet the
+            // snap sits on the AI plan as before (and renders as nothing unless
+            // an active coach exists, so the no-coach case is unchanged).
+            footer: controller.activeCoachDiet != null
+                ? null
+                : MealSnapRow(
+                    controller: controller,
+                    mealName: meal.mealName,
+                    athleteName: userName,
+                  ),
             onSwap: () => showMealSwapSheet(
               context,
               controller: controller,

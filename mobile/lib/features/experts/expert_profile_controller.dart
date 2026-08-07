@@ -286,7 +286,24 @@ class ExpertProfileController extends ChangeNotifier {
   String chatId() => _repository.chatIdFor(athleteId: userId, expertId: expertId);
 
   /// The single, canonical End Coaching call — see `ActiveCoachingBanner`.
-  Future<void> endCoaching() => _repository.endCoaching(userId);
+  ///
+  /// After the backend confirms, the relationship is flipped to `'ended'`
+  /// LOCALLY and the UI is notified at once — the same optimistic refresh the
+  /// website does (`cprofile.js`: `_myCoaching.status='ended'; updateCoachButtons()`).
+  /// Without this the banner would linger until the `personal_coaching`
+  /// snapshot round-tripped back through Firestore, which on any latency reads
+  /// as "End Coaching did nothing". The `_coachRelSub` listener later emits the
+  /// same `'ended'` status — idempotent, so applying it twice is harmless. The
+  /// optimistic update runs ONLY after the await succeeds, so a failed request
+  /// (which rethrows) correctly leaves the banner up for the error toast.
+  Future<void> endCoaching() async {
+    await _repository.endCoaching(userId);
+    final rel = myCoachingRelationship;
+    if (rel != null && rel.status == 'active') {
+      myCoachingRelationship = rel.copyWith(status: 'ended');
+      _safeNotify();
+    }
+  }
 
   void _safeNotify() {
     if (!_disposed) notifyListeners();

@@ -62,6 +62,14 @@ dependencies:
   razorpay_flutter: ^1.4.5
   firebase_storage: ^13.4.6
   flutter_image_compress: ^2.5.1
+  # Personal Coaching is served by the Website inside a secure, chromeless
+  # WebView (see lib/features/coaching_webview/) until native Flutter reaches
+  # feature parity. webview_flutter_android is pinned explicitly because the
+  # coaching screen uses its AndroidWebViewController for the file chooser
+  # (chat image upload) and geolocation/permission callbacks.
+  webview_flutter: ^4.13.0
+  webview_flutter_android: ^4.9.0
+  url_launcher: ^6.3.1
 
 dev_dependencies:
   flutter_test:

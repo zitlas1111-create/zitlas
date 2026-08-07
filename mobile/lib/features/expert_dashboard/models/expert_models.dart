@@ -450,6 +450,25 @@ class CoachingRelationship {
 
   bool get hasEnded => status == 'ended';
 
+  /// Returns a copy with an overridden [status]. Used for the optimistic
+  /// End-Coaching refresh (cprofile.js sets `_myCoaching.status='ended'` the
+  /// instant the POST returns rather than waiting for the `personal_coaching`
+  /// snapshot to round-trip back). Every other field is carried over unchanged.
+  CoachingRelationship copyWith({String? status}) {
+    return CoachingRelationship(
+      id: id,
+      status: status ?? this.status,
+      athleteId: athleteId,
+      athleteName: athleteName,
+      coachId: coachId,
+      coachName: coachName,
+      planType: planType,
+      planLabel: planLabel,
+      startDate: startDate,
+      endDate: endDate,
+    );
+  }
+
   int? get daysRemaining {
     final end = endDate;
     if (end == null) return null;

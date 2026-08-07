@@ -31,8 +31,17 @@
 
     <!-- Talk with Zino: microphone capture for speech-to-text. Recorded audio
          is uploaded for transcription and the temp file deleted immediately —
-         ZITLAS never retains a copy of the athlete's speech. -->
+         ZITLAS never retains a copy of the athlete's speech. Also grants the
+         mic for coach voice/video calls inside the Personal Coaching WebView
+         (webrtc-call.js getUserMedia). -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+
+    <!-- Camera for coach voice/video calls inside the Personal Coaching WebView
+         (webrtc-call.js getUserMedia). The native meal-snap uses the system
+         camera app via image_picker and needs no permission of its own; this
+         line exists purely so the WebView can grant a getUserMedia camera
+         request during a live call. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
 
     <!-- Zino's daily reminders are handed to AlarmManager, which forgets
          everything on reboot. This lets flutter_local_notifications' boot

@@ -12,7 +12,11 @@ import '../../expert_profile_controller.dart';
 import '../../models/expert_listing.dart';
 import '../widgets/request_review_sheet.dart';
 import '../widgets/personal_coaching_sheet.dart';
-import '../widgets/active_coaching_banner.dart';
+// NOTE: ActiveCoachingBanner (native End Coaching / chat entry) is intentionally
+// no longer used here — the active coaching workspace is now the Website module
+// in a WebView, reached via the '/coaching-workspace' route from
+// _OpenCoachingCta below. The banner widget stays in the tree, dormant, for
+// the eventual return to native parity.
 
 /// Native rebuild of `frontend/pages/coaches/cprofile.html` + `cprofile.js`
 /// — the athlete-facing Expert Profile page. Section order matches the
@@ -98,9 +102,9 @@ class _ExpertProfileBodyState extends State<_ExpertProfileBody> {
             SliverToBoxAdapter(child: _Ctas(controller: controller)),
             if (_isActiveCoachOfThisExpert(controller))
               SliverToBoxAdapter(
-                child: ActiveCoachingBanner(
-                  relationship: controller.myCoachingRelationship!,
-                  onEndCoaching: controller.endCoaching,
+                child: _OpenCoachingCta(
+                  coachName: e.name,
+                  coachId: controller.expertId,
                 ),
               ),
             SliverToBoxAdapter(child: _StatusBanner(controller: controller)),
@@ -143,6 +147,70 @@ bool _isActiveCoachOfThisExpert(ExpertProfileController controller) {
 
 void _openChat(BuildContext context, ExpertProfileController controller) {
   context.push('/chat/${controller.chatId()}?expertId=${controller.expertId}&expertName=${Uri.encodeComponent(controller.expert!.name)}');
+}
+
+/// Shown on the profile of the athlete's ACTIVE coach. Opens the full Personal
+/// Coaching workspace — chat, meal reviews, coach notes, remaining days, the
+/// coach-authored plan and End Coaching — served by the Website in a WebView
+/// (`/coaching-workspace`). Replaces the old native ActiveCoachingBanner.
+class _OpenCoachingCta extends StatelessWidget {
+  const _OpenCoachingCta({required this.coachName, required this.coachId});
+
+  final String coachName;
+  final String coachId;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: ZitlasTokens.bgCard,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: ZitlasTokens.primary.withValues(alpha: 0.4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text('🏋️', style: TextStyle(fontSize: 20)),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Personal Coaching active',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    color: ZitlasTokens.textPrimary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Chat with $coachName, send meals for review, follow your coach plan '
+            'and manage your coaching.',
+            style: const TextStyle(
+              fontSize: 12.5,
+              height: 1.45,
+              color: ZitlasTokens.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: () => context.push('/coaching-workspace?coachId=$coachId'),
+              icon: const Icon(Icons.open_in_new_rounded, size: 18),
+              label: const Text('Open Coaching'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _Hero extends StatelessWidget {
