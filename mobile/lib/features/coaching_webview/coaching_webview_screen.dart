@@ -79,6 +79,10 @@ class _CoachingWebViewScreenState extends State<CoachingWebViewScreen> {
   /// rejected — an account/data problem, not an auth one).
   bool _sawAuthOk = false;
 
+  /// True once a logout is underway, so the 'logout' message and the login
+  /// redirect it triggers don't each try to sign out / navigate.
+  bool _loggingOut = false;
+
   /// Fires if the sign-in produces neither auth-ok nor auth-fail in time, so a
   /// silent stall becomes a visible, retryable error instead of a spinner.
   Timer? _authTimer;
@@ -170,6 +174,8 @@ class _CoachingWebViewScreenState extends State<CoachingWebViewScreen> {
     _log('BRIDGE » $m');
     if (m == 'need-token') {
       _provideToken();
+    } else if (m == 'logout') {
+      _onLogout();
     } else if (m.startsWith('auth-ok')) {
       _onAuthOk(m);
     } else if (m.startsWith('auth-fail:')) {
@@ -267,6 +273,27 @@ class _CoachingWebViewScreenState extends State<CoachingWebViewScreen> {
     _showError(_messageForAuthCode(code));
   }
 
+  /// The embedded page logged out (it already tore down its Firestore listeners
+  /// and cleared web storage first). The native app owns the real session, so
+  /// finish the logout natively: sign out of Firebase, which the router's auth
+  /// guard turns into a redirect to /login, and leave the WebView. This is why
+  /// the website's logout hands off to us instead of navigating to its own
+  /// login page (which the WebView blocks).
+  Future<void> _onLogout() async {
+    if (_loggingOut) return; // may arrive via both the 'logout' message and the login redirect
+    _loggingOut = true;
+    _log('STEP logout — native sign-out + leave WebView');
+    _authTimer?.cancel();
+    final router = GoRouter.of(context);
+    try {
+      await FirebaseAuth.instance.signOut();
+    } catch (e) {
+      _log('native signOut failed: $e');
+    }
+    if (!mounted) return;
+    router.go('/login');
+  }
+
   /// Maps a token-endpoint HTTP status to a human message. 404/405 means the
   /// route is missing from the deployed backend (ApiClient documents this).
   String _messageForStatus(int? status) {
@@ -360,15 +387,20 @@ class _CoachingWebViewScreenState extends State<CoachingWebViewScreen> {
     // The native app is already authenticated, so the embedded module must
     // NEVER show the website's own login page.
     if (uri.path.toLowerCase().contains('/login')) {
-      _log('STEP nav-login-intercept — sawAuthOk=$_sawAuthOk');
-      if (_sawAuthOk) {
-        // Signed in, yet the page still bounced to login → the page's own guard
-        // rejected this account (e.g. users/{uid} unreadable/missing). Reloading
-        // won't help; surface it instead of looping.
-        _showError('Your coaching profile could not be opened. Please contact support.');
+      _log('STEP nav-login-intercept — sawAuthOk=$_sawAuthOk loggingOut=$_loggingOut');
+      if (_loggingOut) {
+        // Logout already in progress (via the 'logout' message) — just block the
+        // website login; the native sign-out is taking us to the native login.
+      } else if (_sawAuthOk) {
+        // We WERE signed in and the page is now heading to login — a logout or a
+        // session end (the website's own onAuthStateChanged(null) fires this
+        // during signOut, possibly before its 'logout' message reaches us).
+        // Finish it natively and leave, rather than re-authenticating (which
+        // would defeat logout).
+        _onLogout();
       } else {
-        // Normal first-load race: the page's guard ran before sign-in landed.
-        // Ensure a token is on its way and WAIT for auth-ok — do NOT reload.
+        // First-load race: the page's guard ran before sign-in landed. Ensure a
+        // token is on its way and WAIT for auth-ok — do NOT reload.
         _provideToken();
       }
       return NavigationDecision.prevent;
