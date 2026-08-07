@@ -38,6 +38,22 @@ class AssessmentController extends ChangeNotifier {
     _loadPreferredRegion();
   }
 
+  bool _disposed = false;
+
+  // Guards dispose-during-notify: an async region/assessment callback can fire
+  // after this controller is disposed (the athlete leaves the screen).
+  @override
+  void notifyListeners() {
+    if (_disposed) return;
+    super.notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
+
   final String uid;
   final AssessmentRepository _repository;
   final DietRegionRepository? regionRepository;

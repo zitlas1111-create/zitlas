@@ -24,6 +24,22 @@ class ZinoTourController extends ChangeNotifier {
   final List<ZinoTourStop> _stops;
   final bool _hasActiveCoach;
 
+  bool _disposed = false;
+
+  // Guards dispose-during-notify: a tour step advanced from an async callback
+  // can fire after the tour overlay (and this controller) is torn down.
+  @override
+  void notifyListeners() {
+    if (_disposed) return;
+    super.notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
+
   int _index = 0;
   bool _running = false;
   bool _completed = false;

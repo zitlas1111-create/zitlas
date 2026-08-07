@@ -3,31 +3,31 @@
    ══════════════════════════════════════════════════════════════════════
 
    Loaded ONLY on the pages the Flutter app embeds as the Personal Coaching
-   module (cprofile.html, expert-dashboard.html), immediately AFTER
-   firebase-config.js so `firebase`/`ZitlasAuth` already exist.
+   module (cprofile.html, expert-dashboard.html, expert-review.html,
+   modify-diet.html, modify-workout.html), immediately AFTER firebase-config.js
+   so `firebase`/`ZitlasAuth` already exist.
 
-   Does two things, and only when actually running inside the app's WebView:
+   AUTH BRIDGE. The native Flutter app is signed in with the native Firebase
+   SDK; this page runs the Firebase JS SDK, and the two sessions are NOT shared.
+   Without a web session every onSnapshot (chat, meal reviews, coaching status)
+   is denied by Firestore rules. So: on first load, once Firebase reports NO
+   restored session, we ask Flutter for a custom token; Flutter replies by
+   calling window.__zitlasWebviewSignIn(token) → signInWithCustomToken → a real
+   web session for the SAME uid. The JS SDK then keeps its own refresh token so
+   the session persists across app launches.
 
-   1. AUTH BRIDGE. The native Flutter app is signed in with the native Firebase
-      SDK; this page runs the Firebase JS SDK, and the two sessions are NOT
-      shared. Without a web session every onSnapshot (chat, meal reviews,
-      coaching status) is denied by Firestore rules and the page looks broken.
-      So: on first load, once Firebase reports NO restored session, we ask
-      Flutter for a custom token (pull-based — timing-safe, we wait for the
-      SDK to finish restoring any persisted session first). Flutter replies by
-      calling window.__zitlasWebviewSignIn(token), which does
-      signInWithCustomToken → a real web session for the SAME uid. After that
-      the JS SDK keeps its own refresh token, so the session persists across
-      app launches (WebView storage) and this handshake never runs again.
-
-   2. NATIVE FEEL. Hides the site's global chrome (bottom navbar, wallet
-      launcher, Zino FAB) so the embedded page is JUST Personal Coaching, with
-      no website navigation inside the app. Injected here (one place) rather
-      than in each page's CSS so it can never drift out of sync.
+   Every stage is logged with a [WEBVIEW] prefix AND (where it matters) reported
+   back to Flutter over the `ZitlasWebview` channel as a structured message, so
+   the native logs show exactly which stage failed:
+       need-token            — no web session, asking Flutter for a token
+       auth-start            — signInWithCustomToken invoked
+       auth-ok:<uid>         — signInWithCustomToken resolved
+       auth-fail:<code>      — signInWithCustomToken rejected (Firebase code)
+       auth-state:<uid|null> — onAuthStateChanged transition
 
    Detection: `?webview=1` in the URL, OR the presence of the `ZitlasWebview`
-   JavaScript channel that Flutter injects. A normal browser has neither, so
-   this file is inert on the public website.
+   channel Flutter injects. A normal browser has neither, so this file is inert
+   on the public website.
 */
 (function () {
   'use strict';
@@ -36,7 +36,18 @@
                   !!window.ZitlasWebview;
   if (!isWebview) return;
 
-  console.log('[WEBVIEW] bridge active');
+  /* Log locally AND to Flutter (the native side forwards console too, but an
+     explicit channel message survives even if console forwarding is off). */
+  function report(msg) {
+    try { console.log('[WEBVIEW] ' + msg); } catch (e) {}
+    try {
+      if (window.ZitlasWebview && typeof window.ZitlasWebview.postMessage === 'function') {
+        window.ZitlasWebview.postMessage(msg);
+      }
+    } catch (e) {}
+  }
+
+  report('bridge-active path=' + window.location.pathname);
 
   /* ── 1. Native feel: hide global site chrome ───────────────────────── */
   document.documentElement.classList.add('webview-mode');
@@ -49,32 +60,57 @@
       'html.webview-mode #zwBtn,' +           /* wallet launcher (wallet.js) */
       'html.webview-mode #zwPanel' +          /* wallet slide-over panel */
       '{display:none !important;}' +
-      /* Reclaim the space the fixed bottom nav used to reserve. */
       'html.webview-mode body{padding-bottom:0 !important;}';
     (document.head || document.documentElement).appendChild(style);
   } catch (e) {
     console.warn('[WEBVIEW] chrome-hide style failed', e);
   }
 
+  /* Decode a JWT payload WITHOUT verifying — for logging non-secret claims only
+     (aud / iss / sub / exp), so a custom-token-mismatch is obvious in the logs.
+     A signature is never logged. */
+  function decodeJwtClaims(jwt) {
+    try {
+      var parts = String(jwt).split('.');
+      if (parts.length < 2) return null;
+      var b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      var pad = b64.length % 4; if (pad) b64 += '===='.slice(pad);
+      var json = decodeURIComponent(atob(b64).split('').map(function (c) {
+        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+      }).join(''));
+      return JSON.parse(json);
+    } catch (e) { return null; }
+  }
+
   /* ── 2. Auth bridge ─────────────────────────────────────────────────── */
 
-  /* Called BY FLUTTER (via runJavaScript) with a freshly minted custom token.
-     Idempotent: harmless to call when already signed in as the same uid. */
+  /* Called BY FLUTTER (via runJavaScript) with a freshly minted custom token. */
   window.__zitlasWebviewSignIn = function (customToken) {
     if (!customToken) {
-      console.warn('[WEBVIEW] sign-in called with empty token');
+      report('auth-fail:empty-token');
       return;
     }
+    var claims = decodeJwtClaims(customToken);
+    if (claims) {
+      report('token-claims aud=' + claims.aud + ' iss=' + (claims.iss || '').slice(0, 40) +
+             ' sub=' + (claims.sub || '').slice(0, 40) + ' uid=' + claims.uid + ' exp=' + claims.exp);
+    } else {
+      report('token-claims UNPARSEABLE (token is not a JWT?)');
+    }
+    report('auth-start');
     try {
       firebase.auth().signInWithCustomToken(customToken)
         .then(function (cred) {
-          console.log('[WEBVIEW] signed in uid=' + (cred.user && cred.user.uid));
+          report('auth-ok:' + (cred.user && cred.user.uid));
         })
         .catch(function (err) {
-          console.error('[WEBVIEW] signInWithCustomToken failed', err && err.code, err && err.message);
+          var code = (err && err.code) || 'unknown';
+          report('auth-fail:' + code);
+          try { console.error('[WEBVIEW] signInWithCustomToken error', err && err.message); } catch (e) {}
         });
     } catch (e) {
-      console.error('[WEBVIEW] sign-in threw', e);
+      report('auth-fail:threw');
+      try { console.error('[WEBVIEW] sign-in threw', e); } catch (_) {}
     }
   };
 
@@ -82,43 +118,38 @@
   function requestTokenFromFlutter() {
     if (tokenRequested) return;
     tokenRequested = true;
-    try {
-      if (window.ZitlasWebview && typeof window.ZitlasWebview.postMessage === 'function') {
-        console.log('[WEBVIEW] no web session — requesting token from Flutter');
-        window.ZitlasWebview.postMessage('need-token');
-      } else {
-        console.warn('[WEBVIEW] ZitlasWebview channel missing — cannot request token');
-      }
-    } catch (e) {
-      console.error('[WEBVIEW] token request failed', e);
+    if (window.ZitlasWebview && typeof window.ZitlasWebview.postMessage === 'function') {
+      report('need-token');
+    } else {
+      report('auth-fail:no-channel');
     }
   }
 
   /* Wait for the SDK to finish restoring any PERSISTED session before deciding
-     we need a token — firebase.auth().currentUser is null synchronously on a
-     cold load even when a valid session is about to be restored. */
+     we need a token — currentUser is null synchronously on a cold load even
+     when a valid session is about to be restored. */
   var settled = false;
   function settle(hasUser) {
     if (settled) return;
     settled = true;
     if (!hasUser) requestTokenFromFlutter();
-    else console.log('[WEBVIEW] existing web session restored — no token needed');
+    else report('session-restored');
   }
 
   try {
     firebase.auth().onAuthStateChanged(function (user) {
+      report('auth-state:' + (user ? user.uid : 'null'));
       settle(!!user);
     });
   } catch (e) {
-    /* firebase not ready (should not happen — we load after firebase-config.js) */
-    console.error('[WEBVIEW] onAuthStateChanged unavailable', e);
+    report('auth-fail:no-firebase');
+    try { console.error('[WEBVIEW] onAuthStateChanged unavailable', e); } catch (_) {}
   }
 
-  /* Safety net: if onAuthStateChanged never fires (unexpected), still ask for a
-     token after a short grace period so the page can authenticate. */
+  /* Safety net: if onAuthStateChanged never fires, still ask for a token. */
   window.setTimeout(function () {
     var cur = null;
     try { cur = firebase.auth().currentUser; } catch (e) {}
     settle(!!cur);
-  }, 2000);
+  }, 2500);
 })();

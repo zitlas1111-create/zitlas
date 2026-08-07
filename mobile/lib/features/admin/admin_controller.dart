@@ -83,8 +83,19 @@ class AdminController extends ChangeNotifier {
     }
   }
 
+  bool _disposed = false;
+
+  // Guards dispose-during-notify: an async Firestore snapshot can arrive after
+  // this controller is disposed. A disposed notifier stops notifying.
+  @override
+  void notifyListeners() {
+    if (_disposed) return;
+    super.notifyListeners();
+  }
+
   @override
   void dispose() {
+    _disposed = true;
     _sub?.cancel();
     super.dispose();
   }

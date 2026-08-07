@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../core/theme/zitlas_tokens.dart';
+import '../../../../core/utils/safe_image.dart';
 import '../../data/experts_repository.dart';
 import '../../experts_controller.dart';
 import '../../models/expert_listing.dart';
@@ -345,7 +346,7 @@ class _Avatar extends StatelessWidget {
     return CircleAvatar(
       radius: radius,
       backgroundColor: ZitlasTokens.primary.withValues(alpha: 0.15),
-      backgroundImage: expert.image != null && expert.image!.isNotEmpty ? NetworkImage(expert.image!) : null,
+      backgroundImage: safeImageProvider(expert.image),
       onBackgroundImageError: expert.image != null ? (_, _) {} : null,
       child: expert.image == null || expert.image!.isEmpty
           ? Text(expert.initials, style: TextStyle(color: ZitlasTokens.primaryDark, fontWeight: FontWeight.w800, fontSize: radius * 0.6))

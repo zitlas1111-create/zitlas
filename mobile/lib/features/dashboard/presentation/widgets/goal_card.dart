@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../../../core/utils/safe_image.dart';
 import '../../dashboard_controller.dart';
 import '../dashboard_visuals.dart';
 import 'reset_goal_dialog.dart';
@@ -181,7 +182,7 @@ class _GoalPlayerPanel extends StatelessWidget {
           ],
         ),
       ),
-      child: photoUrl == null
+      child: !isNetworkImageUrl(photoUrl)
           ? Center(child: _Initials(initials))
           : Image.network(
               photoUrl!,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/zitlas_tokens.dart';
+import '../../../../core/utils/safe_image.dart';
 import '../../../expert_dashboard/models/expert_models.dart' show ExpertProfile;
 import '../../diet_controller.dart';
 
@@ -142,7 +143,7 @@ class _RequestReviewSheetState extends State<_RequestReviewSheet> {
                                 CircleAvatar(
                                   radius: 20,
                                   backgroundColor: ZitlasTokens.border,
-                                  backgroundImage: expert.photo != null ? NetworkImage(expert.photo!) : null,
+                                  backgroundImage: safeImageProvider(expert.photo),
                                   child: expert.photo == null
                                       ? Text(expert.name.isNotEmpty ? expert.name[0].toUpperCase() : '?')
                                       : null,

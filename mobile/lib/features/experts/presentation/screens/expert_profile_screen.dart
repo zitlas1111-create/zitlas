@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../core/theme/zitlas_tokens.dart';
+import '../../../../core/utils/safe_image.dart';
 import '../../../auth/auth_state.dart';
 import '../../../expert_dashboard/models/expert_models.dart';
 import '../../data/experts_repository.dart';
@@ -233,7 +234,7 @@ class _Hero extends StatelessWidget {
           CircleAvatar(
             radius: 44,
             backgroundColor: ZitlasTokens.primary.withValues(alpha: 0.15),
-            backgroundImage: expert.image != null && expert.image!.isNotEmpty ? NetworkImage(expert.image!) : null,
+            backgroundImage: safeImageProvider(expert.image),
             child: expert.image == null || expert.image!.isEmpty
                 ? Text(expert.initials, style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w800, color: ZitlasTokens.primaryDark))
                 : null,

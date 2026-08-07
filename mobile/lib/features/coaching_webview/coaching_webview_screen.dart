@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -16,13 +19,11 @@ import '../../core/network/api_exception.dart';
 /// WebView until native Flutter reaches feature parity. This is the ONLY
 /// WebView in the app — every other module is native.
 ///
-/// It feels native because:
-///  * no browser chrome, URL bar, or external-browser hand-off (external links
-///    open in the system browser, everything on zitlas.com stays in-place);
-///  * the Android back button walks the page's own history before leaving;
-///  * pull-to-refresh reloads the page;
-///  * the athlete never logs in again — the native Firebase session is bridged
-///    to a real web session via a one-time custom-token exchange.
+/// The whole authentication pipeline is instrumented: every stage prints a
+/// `[COACHING WEBVIEW]` line, the embedded page's console is mirrored to the
+/// native log as `[WV-CONSOLE]`, and the bridge reports the signInWithCustomToken
+/// result back over the `ZitlasWebview` channel (`auth-ok`/`auth-fail:<code>`),
+/// so a failure names the EXACT stage instead of a silent reload loop.
 class CoachingWebViewScreen extends StatefulWidget {
   const CoachingWebViewScreen({
     super.key,
@@ -69,18 +70,22 @@ class _CoachingWebViewScreenState extends State<CoachingWebViewScreen> {
   bool _failed = false;
   bool _tokenInFlight = false;
 
-  /// Message shown on the error view. Set by [_showError] so a token/auth
-  /// failure explains itself instead of a generic "check your connection".
+  /// Message shown on the error view.
   String? _errorMessage;
 
-  /// Bounds the "blocked a login redirect → re-auth → reload" recovery so a
-  /// genuine auth failure surfaces the error view instead of looping forever.
-  int _loginRecoveries = 0;
-  static const _maxLoginRecoveries = 3;
+  /// Set once the bridge reports a successful signInWithCustomToken. Used to
+  /// tell a normal first-load login-redirect (session not established yet, wait)
+  /// apart from a post-auth bounce (signed in, but the page's own guard still
+  /// rejected — an account/data problem, not an auth one).
+  bool _sawAuthOk = false;
 
-  /// Live vertical scroll offset of the embedded page, fed by
-  /// [WebViewController.setOnScrollPositionChange]. Pull-to-refresh only arms
-  /// while the page is scrolled to the very top.
+  /// Fires if the sign-in produces neither auth-ok nor auth-fail in time, so a
+  /// silent stall becomes a visible, retryable error instead of a spinner.
+  Timer? _authTimer;
+  static const _authTimeout = Duration(seconds: 15);
+
+  /// Live vertical scroll offset of the embedded page (pull-to-refresh arms
+  /// only while scrolled to the very top).
   double _scrollY = 0;
   double _pullStartDy = 0;
   bool _arming = false;
@@ -94,6 +99,7 @@ class _CoachingWebViewScreenState extends State<CoachingWebViewScreen> {
   @override
   void initState() {
     super.initState();
+    _log('STEP init — url=$_url');
     _controller = WebViewController.fromPlatformCreationParams(
       const PlatformWebViewControllerCreationParams(),
       onPermissionRequest: _onWebPermissionRequest,
@@ -101,19 +107,26 @@ class _CoachingWebViewScreenState extends State<CoachingWebViewScreen> {
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(Colors.transparent)
       ..addJavaScriptChannel('ZitlasWebview', onMessageReceived: _onJsMessage)
+      // Mirror the embedded page's console to the native log — this is how the
+      // page's OWN guard logs ([AUTH UID], [USER DOC], [EXPERT DOC], Firebase
+      // errors) become visible while diagnosing the auth pipeline.
+      ..setOnConsoleMessage(_onConsole)
       ..setOnScrollPositionChange((ScrollPositionChange c) => _scrollY = c.y)
       ..setNavigationDelegate(
         NavigationDelegate(
-          onPageStarted: (_) {
+          onPageStarted: (url) {
+            _log('STEP page-started — $url');
             if (mounted) setState(() => _loading = true);
           },
-          onPageFinished: (_) {
+          onPageFinished: (url) {
+            _log('STEP page-finished — $url');
             if (mounted) setState(() => _loading = false);
           },
           onWebResourceError: (WebResourceError err) {
-            // Only a failure of the MAIN document is fatal; sub-resource errors
-            // (an image, an analytics beacon) must not blank the whole screen.
+            // Only a MAIN-document failure is fatal; sub-resource errors (an
+            // image, a beacon) must not blank the whole screen.
             if (err.isForMainFrame ?? true) {
+              _log('STEP FAILURE web-resource — ${err.errorCode} ${err.description}');
               _showError('Could not load coaching. Check your connection and retry.');
             }
           },
@@ -135,49 +148,71 @@ class _CoachingWebViewScreenState extends State<CoachingWebViewScreen> {
 
   @override
   void dispose() {
+    _authTimer?.cancel();
     _api.close();
     super.dispose();
   }
 
-  // ── Auth bridge ────────────────────────────────────────────────────────
+  void _log(String msg) {
+    if (kDebugMode) debugPrint('[COACHING WEBVIEW] $msg');
+  }
+
+  // ── WebView console mirror ──────────────────────────────────────────────
+
+  void _onConsole(JavaScriptConsoleMessage m) {
+    if (kDebugMode) debugPrint('[WV-CONSOLE ${m.level.name}] ${m.message}');
+  }
+
+  // ── Auth bridge (message router) ────────────────────────────────────────
 
   void _onJsMessage(JavaScriptMessage message) {
-    // The only message the page sends: "I have no web session, send a token".
-    if (message.message == 'need-token') _provideToken();
+    final m = message.message;
+    _log('BRIDGE » $m');
+    if (m == 'need-token') {
+      _provideToken();
+    } else if (m.startsWith('auth-ok')) {
+      _onAuthOk(m);
+    } else if (m.startsWith('auth-fail:')) {
+      _onAuthFail(m.substring('auth-fail:'.length));
+    }
+    // Everything else (bridge-active, token-claims, auth-state, session-restored)
+    // is diagnostic and already logged above.
   }
 
   /// Mints a custom token for the CURRENT native user and hands it to the page,
-  /// which signs in with it (`window.__zitlasWebviewSignIn`). This is what lets
-  /// the athlete skip a second login.
-  ///
-  /// Returns true only if a token was actually delivered to the page. On ANY
-  /// failure it shows the error view and returns false — it never silently
-  /// no-ops, because a silent failure is exactly what turned a dead
-  /// `/api/auth/webview-token` (405) into a page that reload-looped forever.
-  /// Overlapping calls are coalesced (returns false, does not re-fetch).
+  /// which signs in with it. Logs the HTTP result and the (non-secret) JWT
+  /// claims so a bad/mismatched token is obvious. On any failure it shows the
+  /// error view and returns false — it never silently no-ops.
   Future<bool> _provideToken() async {
-    if (_tokenInFlight) return false;
+    if (_tokenInFlight) {
+      _log('STEP token — already in flight, coalescing');
+      return false;
+    }
     _tokenInFlight = true;
+    _log('STEP token-request START → POST /api/auth/webview-token');
     try {
       final res = await _api.post('/api/auth/webview-token');
       final token = (res is Map) ? res['customToken'] as String? : null;
       if (token == null || token.isEmpty) {
+        _log('STEP token-request FAILURE — 200 but no customToken in body');
         _showError('Coaching sign-in is unavailable right now. Please try again.');
         return false;
       }
+      _log('STEP token-request SUCCESS — got token (${token.length} chars)');
+      _logJwtClaims(token);
       // A Firebase custom token is a JWT (no quotes/backslashes), but escape
       // defensively before embedding it in a JS string literal.
       final safe = token.replaceAll(r'\', r'\\').replaceAll("'", r"\'");
       await _controller.runJavaScript("window.__zitlasWebviewSignIn('$safe');");
-      if (kDebugMode) debugPrint('[COACHING WEBVIEW] custom token delivered to page');
+      _log('STEP token-inject SUCCESS — delivered to page, awaiting auth-ok/auth-fail');
+      _startAuthTimeout();
       return true;
     } on ApiException catch (e) {
-      // 401/403/404/405/500 — a clear, specific message, and NO retry loop.
-      if (kDebugMode) debugPrint('[COACHING WEBVIEW] token endpoint ${e.statusCode}: ${e.message}');
+      _log('STEP token-request FAILURE — HTTP ${e.statusCode}: ${e.message}');
       _showError(_messageForStatus(e.statusCode));
       return false;
     } catch (e) {
-      if (kDebugMode) debugPrint('[COACHING WEBVIEW] token fetch failed: $e');
+      _log('STEP token-request FAILURE — $e');
       _showError('Could not connect to coaching. Check your connection and retry.');
       return false;
     } finally {
@@ -185,9 +220,55 @@ class _CoachingWebViewScreenState extends State<CoachingWebViewScreen> {
     }
   }
 
-  /// Maps a token-endpoint HTTP status to a human message. 404/405 specifically
-  /// means the route is missing from the deployed backend (see ApiClient's own
-  /// note) — telling the athlete to check their connection would be a lie.
+  /// Decodes and logs the NON-SECRET JWT claims (aud/iss/sub/uid/exp) — never
+  /// the signature — so a custom-token-mismatch (wrong project) is diagnosable
+  /// from the native log alone.
+  void _logJwtClaims(String jwt) {
+    if (!kDebugMode) return;
+    try {
+      final parts = jwt.split('.');
+      if (parts.length < 2) {
+        _log('JWT — not a JWT (${parts.length} segments)');
+        return;
+      }
+      var b64 = parts[1].replaceAll('-', '+').replaceAll('_', '/');
+      b64 = b64.padRight(b64.length + (4 - b64.length % 4) % 4, '=');
+      final claims = jsonDecode(utf8.decode(base64.decode(b64))) as Map<String, dynamic>;
+      _log('JWT claims — aud=${claims['aud']} iss=${claims['iss']} '
+          'uid=${claims['uid']} exp=${claims['exp']}');
+    } catch (e) {
+      _log('JWT — could not decode claims: $e');
+    }
+  }
+
+  void _startAuthTimeout() {
+    _authTimer?.cancel();
+    _authTimer = Timer(_authTimeout, () {
+      if (!mounted || _sawAuthOk || _failed) return;
+      _log('STEP auth TIMEOUT — no auth-ok/auth-fail in ${_authTimeout.inSeconds}s');
+      _showError('Coaching sign-in timed out. Please retry.');
+    });
+  }
+
+  void _onAuthOk(String raw) {
+    _authTimer?.cancel();
+    _sawAuthOk = true;
+    _log('STEP auth SUCCESS — $raw (page will render via its own auth listener)');
+    // The page renders itself on its onAuthStateChanged(user); just make sure
+    // no stale error/spinner is showing.
+    if (mounted && (_failed || _loading)) {
+      setState(() { _failed = false; _loading = false; _errorMessage = null; });
+    }
+  }
+
+  void _onAuthFail(String code) {
+    _authTimer?.cancel();
+    _log('STEP auth FAILURE — signInWithCustomToken code=$code');
+    _showError(_messageForAuthCode(code));
+  }
+
+  /// Maps a token-endpoint HTTP status to a human message. 404/405 means the
+  /// route is missing from the deployed backend (ApiClient documents this).
   String _messageForStatus(int? status) {
     switch (status) {
       case 401:
@@ -205,10 +286,25 @@ class _CoachingWebViewScreenState extends State<CoachingWebViewScreen> {
     }
   }
 
-  /// Single choke point for showing the error view. Stops the loading spinner
-  /// and records the reason; the view offers Retry (which resets the recovery
-  /// budget) so the athlete is never stranded on a blank screen.
+  /// Maps a Firebase signInWithCustomToken error code to a human message.
+  String _messageForAuthCode(String code) {
+    if (code.contains('custom-token-mismatch') || code.contains('invalid-custom-token')) {
+      // Server minted a token for a different Firebase project than the website
+      // uses — a config problem, not something a retry fixes.
+      return 'Coaching sign-in is misconfigured on the server. Please contact support.';
+    }
+    if (code.contains('network')) {
+      return 'Network problem during coaching sign-in. Check your connection and retry.';
+    }
+    if (code == 'no-channel' || code == 'no-firebase') {
+      return 'Coaching could not start. Please reopen it.';
+    }
+    return 'Coaching sign-in did not complete. Please retry.';
+  }
+
+  /// Single choke point for the error view.
   void _showError(String message) {
+    _authTimer?.cancel();
     if (!mounted) return;
     setState(() {
       _failed = true;
@@ -222,9 +318,8 @@ class _CoachingWebViewScreenState extends State<CoachingWebViewScreen> {
   Future<void> _onWebPermissionRequest(WebViewPermissionRequest request) async {
     final wantsCamera = request.types.contains(WebViewPermissionResourceType.camera);
     final wantsMic = request.types.contains(WebViewPermissionResourceType.microphone);
+    _log('STEP web-permission — camera=$wantsCamera mic=$wantsMic');
 
-    // Ensure the OS-level runtime grant first — granting to the page while the
-    // app itself lacks the permission just yields a black/silent stream.
     var granted = true;
     if (wantsCamera) {
       granted = granted && (await Permission.camera.request()).isGranted;
@@ -249,10 +344,9 @@ class _CoachingWebViewScreenState extends State<CoachingWebViewScreen> {
         imageQuality: 85,
       );
       if (file == null) return const <String>[];
-      // Android's WebView expects file:// URIs back.
       return <String>[Uri.file(file.path).toString()];
     } catch (e) {
-      if (kDebugMode) debugPrint('[COACHING WEBVIEW] file pick failed: $e');
+      _log('file pick failed: $e');
       return const <String>[];
     }
   }
@@ -264,17 +358,24 @@ class _CoachingWebViewScreenState extends State<CoachingWebViewScreen> {
     if (uri == null) return NavigationDecision.navigate;
 
     // The native app is already authenticated, so the embedded module must
-    // NEVER show the website's own login page. It can only try during the brief
-    // first-load window before the custom-token sign-in lands (the page's auth
-    // guard sees no web session yet and redirects). Block it and recover.
+    // NEVER show the website's own login page.
     if (uri.path.toLowerCase().contains('/login')) {
-      _recoverFromLoginRedirect();
+      _log('STEP nav-login-intercept — sawAuthOk=$_sawAuthOk');
+      if (_sawAuthOk) {
+        // Signed in, yet the page still bounced to login → the page's own guard
+        // rejected this account (e.g. users/{uid} unreadable/missing). Reloading
+        // won't help; surface it instead of looping.
+        _showError('Your coaching profile could not be opened. Please contact support.');
+      } else {
+        // Normal first-load race: the page's guard ran before sign-in landed.
+        // Ensure a token is on its way and WAIT for auth-ok — do NOT reload.
+        _provideToken();
+      }
       return NavigationDecision.prevent;
     }
 
-    // Non-http(s) schemes (tel:, mailto:, intent:, whatsapp:) and links to a
-    // different host leave the WebView and open in the system handler — the
-    // embedded module never becomes a general-purpose browser.
+    // Non-http(s) schemes and other hosts leave the WebView via the system
+    // handler — the embedded module never becomes a general-purpose browser.
     final isHttp = uri.scheme == 'http' || uri.scheme == 'https';
     final sameHost = uri.host.isEmpty || uri.host == _appHost;
     if (isHttp && sameHost) return NavigationDecision.navigate;
@@ -283,43 +384,19 @@ class _CoachingWebViewScreenState extends State<CoachingWebViewScreen> {
     return NavigationDecision.prevent;
   }
 
-  /// Re-establishes the web session (in case it lapsed) and reloads the
-  /// intended coaching page, so the athlete lands back in the module rather
-  /// than on a login screen. Bounded, so a real auth failure ends on the error
-  /// view instead of an endless reload loop.
-  Future<void> _recoverFromLoginRedirect() async {
-    if (_loginRecoveries >= _maxLoginRecoveries) {
-      _showError('Coaching sign-in did not complete. Please retry.');
-      return;
-    }
-    _loginRecoveries++;
-    final delivered = await _provideToken();
-    // If the token could not be delivered (e.g. the endpoint is down / 405),
-    // _provideToken already showed the error. Do NOT reload — reloading would
-    // just hit the same failure again. This is what breaks the infinite loop.
-    if (!delivered) return;
-    // Token delivered: give signInWithCustomToken a moment to persist, then
-    // reload so the page's guard finds the session instead of redirecting.
-    await Future<void>.delayed(const Duration(milliseconds: 900));
-    if (mounted) _controller.loadRequest(Uri.parse(_url));
-  }
-
   Future<void> _launchExternal(Uri uri) async {
     try {
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
       }
     } catch (e) {
-      if (kDebugMode) debugPrint('[COACHING WEBVIEW] external launch failed: $e');
+      _log('external launch failed: $e');
     }
   }
 
   // ── Pull-to-refresh ─────────────────────────────────────────────────────
-  //
   // A passive [Listener] observes pointer moves WITHOUT entering the gesture
-  // arena, so the WebView keeps scrolling normally. When the page is at the top
-  // and the finger is dragged down past a threshold, we fire the standard
-  // Material refresh indicator, which reloads the page.
+  // arena, so the WebView keeps scrolling normally.
 
   void _onPointerDown(PointerDownEvent e) {
     _arming = _scrollY <= 0.5;
@@ -339,10 +416,7 @@ class _CoachingWebViewScreenState extends State<CoachingWebViewScreen> {
   }
 
   Future<void> _onRefresh() async {
-    _failed = false;
     await _controller.reload();
-    // Give the load a moment so the spinner doesn't vanish before content
-    // starts painting; onPageFinished clears the loading flag properly.
     await Future<void>.delayed(const Duration(milliseconds: 600));
   }
 
@@ -357,18 +431,17 @@ class _CoachingWebViewScreenState extends State<CoachingWebViewScreen> {
         // Capture the router BEFORE the await so we never touch BuildContext
         // across the async gap.
         final router = GoRouter.of(context);
-        // 1) Walk the page's OWN history first (e.g. coach dashboard → back to
-        //    the review list) so back feels native inside the workspace.
+        // 1) Walk the page's OWN history first (native-feeling back inside the
+        //    workspace).
         if (await _controller.canGoBack()) {
           await _controller.goBack();
           return;
         }
         if (!mounted) return;
-        // 2) Otherwise leave the workspace safely. If this screen was pushed,
-        //    pop it; if it is the ONLY route (reached via context.go, e.g. a
-        //    notification tap or the coach dashboard), popping would crash with
-        //    "popped the last page off the stack" — so go to the dashboard
-        //    instead. Never leaves GoRouter with zero pages.
+        // 2) Leave the workspace safely. If pushed, pop; if this is the ONLY
+        //    route (reached via context.go — a notification tap or the coach
+        //    dashboard), popping would crash with "popped the last page off the
+        //    stack", so go to the dashboard. Never leaves GoRouter empty.
         if (router.canPop()) {
           router.pop();
         } else {
@@ -392,15 +465,12 @@ class _CoachingWebViewScreenState extends State<CoachingWebViewScreen> {
       onPointerCancel: (_) => _arming = false,
       child: RefreshIndicator(
         key: _refreshKey,
-        // Never auto-trigger off scroll notifications (a WebView emits none) —
-        // we drive it manually via _refreshKey.currentState.show().
         notificationPredicate: (_) => false,
         onRefresh: _onRefresh,
         child: Stack(
           children: [
             WebViewWidget(controller: _controller),
-            if (_loading)
-              const LinearProgressIndicator(minHeight: 2),
+            if (_loading) const LinearProgressIndicator(minHeight: 2),
           ],
         ),
       ),
@@ -430,16 +500,16 @@ class _CoachingWebViewScreenState extends State<CoachingWebViewScreen> {
             const SizedBox(height: 18),
             FilledButton(
               onPressed: () {
-                // Fresh attempt: clear the error AND reset the recovery budget
-                // and in-flight guard, so the athlete gets a clean retry rather
-                // than an already-exhausted one.
+                // Fresh attempt: clear error + the auth signals so a retry is
+                // clean rather than already-exhausted.
                 setState(() {
                   _failed = false;
                   _loading = true;
                   _errorMessage = null;
                 });
-                _loginRecoveries = 0;
+                _sawAuthOk = false;
                 _tokenInFlight = false;
+                _authTimer?.cancel();
                 _controller.loadRequest(Uri.parse(_url));
               },
               child: const Text('Retry'),

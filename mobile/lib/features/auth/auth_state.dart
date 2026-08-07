@@ -124,8 +124,20 @@ class AuthState extends ChangeNotifier {
     notifyListeners();
   }
 
+  bool _disposed = false;
+
+  // Guards "A ChangeNotifier was used after being disposed" / dispose-during-
+  // notify: an async Firebase auth callback can fire after this provider is
+  // torn down (navigation). A disposed notifier simply stops notifying.
+  @override
+  void notifyListeners() {
+    if (_disposed) return;
+    super.notifyListeners();
+  }
+
   @override
   void dispose() {
+    _disposed = true;
     _sub?.cancel();
     super.dispose();
   }

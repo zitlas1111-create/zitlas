@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../../../core/utils/safe_image.dart';
 import '../auth_visuals.dart';
 import 'auth_icons.dart';
 
@@ -59,8 +60,7 @@ class _GoogleRolePickerSheetState extends State<_GoogleRolePickerSheet> {
                     CircleAvatar(
                       radius: 20,
                       backgroundColor: AuthColors.border,
-                      backgroundImage:
-                          widget.user.photoURL != null ? NetworkImage(widget.user.photoURL!) : null,
+                      backgroundImage: safeImageProvider(widget.user.photoURL),
                     ),
                     const SizedBox(width: 12),
                     Expanded(

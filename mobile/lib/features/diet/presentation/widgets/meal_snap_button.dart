@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../../core/theme/zitlas_tokens.dart';
+import '../../../../core/utils/safe_image.dart';
 import '../../../coaching/models/meal_checkin.dart';
 import '../../diet_controller.dart';
 
@@ -133,7 +134,7 @@ class _SubmittedMeal extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (checkin.imageUrl != null)
+          if (isNetworkImageUrl(checkin.imageUrl))
             ClipRRect(
               borderRadius: BorderRadius.circular(9),
               child: CachedNetworkImage(

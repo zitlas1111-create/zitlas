@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/zitlas_tokens.dart';
+import '../../../../core/utils/safe_image.dart';
 import '../../data/meal_checkin_repository.dart';
 import '../../models/meal_checkin.dart';
 import '../../models/meal_compliance.dart';
@@ -306,7 +307,7 @@ class _CheckinCardState extends State<_CheckinCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (c.imageUrl != null)
+          if (isNetworkImageUrl(c.imageUrl))
             GestureDetector(
               onTap: () => _openFullImage(context, c.imageUrl!),
               child: ClipRRect(

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../app/theme.dart';
+import '../../../../core/utils/safe_image.dart';
 import '../../../../core/widgets/error_view.dart';
 import '../../../../core/widgets/loading_view.dart';
 import '../../admin_controller.dart';
@@ -204,7 +205,7 @@ class _CertCard extends StatelessWidget {
             Text('AI score: ${cert.verificationScore}',
                 style: const TextStyle(color: ZitlasColors.textMuted, fontSize: 12)),
           ],
-          if (cert.certificateUrl != null && cert.certificateUrl!.isNotEmpty) ...[
+          if (isNetworkImageUrl(cert.certificateUrl)) ...[
             const SizedBox(height: 12),
             ClipRRect(
               borderRadius: BorderRadius.circular(10),
