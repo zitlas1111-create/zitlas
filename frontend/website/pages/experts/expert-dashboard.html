@@ -17,6 +17,10 @@
   <link rel="stylesheet" href="../../assets/css/coaching-workspace.css?v=20260714" />
   <link rel="stylesheet" href="../../assets/css/certificates.css?v=20260714" />
   <script src="../../assets/js/firebase-config.js?v=20260718a"></script>
+  <!-- Auth bridge + native-feel chrome suppression when embedded in the
+       Flutter app's coach dashboard WebView. Inert in a normal browser.
+       MUST load right after firebase-config.js (uses firebase/ZitlasAuth). -->
+  <script src="../../assets/js/webview-bridge.js?v=20260807"></script>
   <script src="../../assets/js/coaching-gate.js?v=20260719"></script>
   <script src="../../assets/js/notification-center.js?v=20260714"></script>
   <script src="../../assets/js/payment-service.js?v=20260722"></script>

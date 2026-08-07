@@ -151,6 +151,10 @@
       case 'expert_profile':   win.location.href = actionId ? '/pages/coaches/cprofile.html?expertId=' + encodeURIComponent(actionId) : '/pages/coaches/coaches.html'; break;
       case 'chat':             win.location.href = actionId ? '/pages/coaches/cprofile.html?expertId=' + encodeURIComponent(actionId) + '&action=ask' : '/pages/coaches/coaches.html'; break;
       case 'expert_dashboard': win.location.href = '/pages/experts/expert-dashboard.html'; break;
+      /* Athlete's active coaching workspace. cprofile.js reads the coach from
+         ?id= (line 54) — NOT ?expertId= — so pass it that way. The Flutter app
+         adds &webview=1 itself when it embeds this page. */
+      case 'coaching_workspace': win.location.href = actionId ? '/pages/coaches/cprofile.html?id=' + encodeURIComponent(actionId) : '/pages/coaches/coaches.html'; break;
       case 'profile':          win.location.href = '/pages/profile/profile.html'; break;
       default: break; /* no-op — stay on the Notification Center */
     }

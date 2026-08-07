@@ -457,9 +457,12 @@ async def accept_request(body: ActionBody, caller: dict = Depends(verify_firebas
             _paid_msg = (f"Your coaching request has been accepted. ₹{int(amount)} has been "
                          "automatically deducted. Your coaching starts now.")
             _free_msg = "Your coaching request has been accepted. Your coaching starts now."
+            # Coaching is now ACTIVE, so tapping this lands the athlete straight
+            # in their coaching workspace (the Website module the Flutter app
+            # embeds as a WebView), not the generic coach profile.
             notify(db, result["athleteId"], "Congratulations!",
                    _paid_msg if amount and int(amount) > 0 else _free_msg,
-                   category="expert", type="coaching_accepted", action="expert_profile",
+                   category="expert", type="coaching_accepted", action="coaching_workspace",
                    action_id=expert_uid, priority="high")
             notify(db, expert_uid, "Payment received",
                    (req.get("athleteName") or "An athlete") + " just started coaching with you.",

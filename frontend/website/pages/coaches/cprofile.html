@@ -22,6 +22,10 @@
   <link rel="stylesheet" href="../../assets/css/verified-badge.css?v=20260714" />
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
   <script src="../../assets/js/firebase-config.js?v=20260718a"></script>
+  <!-- Auth bridge + native-feel chrome suppression when embedded in the
+       Flutter app's Personal Coaching WebView. Inert in a normal browser.
+       MUST load right after firebase-config.js (uses firebase/ZitlasAuth). -->
+  <script src="../../assets/js/webview-bridge.js?v=20260807"></script>
   <!-- cloud-sync was MISSING on this page — review requests created here
        before another page had hydrated the device read zitlas_plan_id as
        null, producing planId-less requests whose completion could never

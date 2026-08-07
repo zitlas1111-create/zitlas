@@ -132,6 +132,40 @@ def set_claims(uid: str, updates: dict) -> bool:
         return False
 
 
+def create_custom_token(uid: str) -> str | None:
+    """Mint a short-lived Firebase custom token for `uid`, or None when the
+    Admin app is unconfigured / minting fails.
+
+    This is the auth bridge for the Personal Coaching WebView: the Flutter app
+    is signed in with the NATIVE Firebase SDK, but the embedded Website runs the
+    Firebase JS SDK, and the two sessions are NOT shared. The Flutter side hands
+    this token to the WebView, which calls `signInWithCustomToken` to establish
+    a real WEB session for the SAME uid — so the Website's `onSnapshot` listeners
+    (chat, meal reviews, coaching status) satisfy the existing Firestore rules
+    without a second login. After that first exchange the JS SDK maintains its
+    own refresh token, so the token's ~1h lifetime does not limit the session.
+
+    Reuses the same dedicated Admin app as set_claims() — no extra credential
+    wiring. NEVER raises."""
+    if not uid:
+        return None
+    app = _get_app()
+    if app is None:
+        return None
+    try:
+        from firebase_admin import auth
+
+        token = auth.create_custom_token(uid, app=app)
+        # The SDK returns bytes; the JSON response and the JS SDK both want str.
+        if isinstance(token, (bytes, bytearray)):
+            token = token.decode("utf-8")
+        print(f"[IDENTITY] custom token minted uid={uid}")
+        return token
+    except Exception as e:
+        print(f"[IDENTITY] create_custom_token failed uid={uid}: {type(e).__name__}: {e}")
+        return None
+
+
 def grant_expert(uid: str) -> bool:
     return set_claims(uid, {"expert": True})
 

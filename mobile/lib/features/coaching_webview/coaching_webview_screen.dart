@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -9,6 +10,7 @@ import 'package:webview_flutter_android/webview_flutter_android.dart';
 
 import '../../core/config/env.dart';
 import '../../core/network/api_client.dart';
+import '../../core/network/api_exception.dart';
 
 /// Personal Coaching, served by the Website inside a secure, chromeless
 /// WebView until native Flutter reaches feature parity. This is the ONLY
@@ -67,6 +69,10 @@ class _CoachingWebViewScreenState extends State<CoachingWebViewScreen> {
   bool _failed = false;
   bool _tokenInFlight = false;
 
+  /// Message shown on the error view. Set by [_showError] so a token/auth
+  /// failure explains itself instead of a generic "check your connection".
+  String? _errorMessage;
+
   /// Bounds the "blocked a login redirect → re-auth → reload" recovery so a
   /// genuine auth failure surfaces the error view instead of looping forever.
   int _loginRecoveries = 0;
@@ -108,7 +114,7 @@ class _CoachingWebViewScreenState extends State<CoachingWebViewScreen> {
             // Only a failure of the MAIN document is fatal; sub-resource errors
             // (an image, an analytics beacon) must not blank the whole screen.
             if (err.isForMainFrame ?? true) {
-              if (mounted) setState(() { _failed = true; _loading = false; });
+              _showError('Could not load coaching. Check your connection and retry.');
             }
           },
           onNavigationRequest: _onNavigation,
@@ -142,27 +148,73 @@ class _CoachingWebViewScreenState extends State<CoachingWebViewScreen> {
 
   /// Mints a custom token for the CURRENT native user and hands it to the page,
   /// which signs in with it (`window.__zitlasWebviewSignIn`). This is what lets
-  /// the athlete skip a second login. Idempotent + guarded against overlap.
-  Future<void> _provideToken() async {
-    if (_tokenInFlight) return;
+  /// the athlete skip a second login.
+  ///
+  /// Returns true only if a token was actually delivered to the page. On ANY
+  /// failure it shows the error view and returns false — it never silently
+  /// no-ops, because a silent failure is exactly what turned a dead
+  /// `/api/auth/webview-token` (405) into a page that reload-looped forever.
+  /// Overlapping calls are coalesced (returns false, does not re-fetch).
+  Future<bool> _provideToken() async {
+    if (_tokenInFlight) return false;
     _tokenInFlight = true;
     try {
       final res = await _api.post('/api/auth/webview-token');
       final token = (res is Map) ? res['customToken'] as String? : null;
       if (token == null || token.isEmpty) {
-        if (kDebugMode) debugPrint('[COACHING WEBVIEW] token endpoint returned no token');
-        return;
+        _showError('Coaching sign-in is unavailable right now. Please try again.');
+        return false;
       }
       // A Firebase custom token is a JWT (no quotes/backslashes), but escape
       // defensively before embedding it in a JS string literal.
       final safe = token.replaceAll(r'\', r'\\').replaceAll("'", r"\'");
       await _controller.runJavaScript("window.__zitlasWebviewSignIn('$safe');");
       if (kDebugMode) debugPrint('[COACHING WEBVIEW] custom token delivered to page');
+      return true;
+    } on ApiException catch (e) {
+      // 401/403/404/405/500 — a clear, specific message, and NO retry loop.
+      if (kDebugMode) debugPrint('[COACHING WEBVIEW] token endpoint ${e.statusCode}: ${e.message}');
+      _showError(_messageForStatus(e.statusCode));
+      return false;
     } catch (e) {
       if (kDebugMode) debugPrint('[COACHING WEBVIEW] token fetch failed: $e');
+      _showError('Could not connect to coaching. Check your connection and retry.');
+      return false;
     } finally {
       _tokenInFlight = false;
     }
+  }
+
+  /// Maps a token-endpoint HTTP status to a human message. 404/405 specifically
+  /// means the route is missing from the deployed backend (see ApiClient's own
+  /// note) — telling the athlete to check their connection would be a lie.
+  String _messageForStatus(int? status) {
+    switch (status) {
+      case 401:
+      case 403:
+        return 'Your session expired. Please sign out and back in, then reopen coaching.';
+      case 404:
+      case 405:
+        return "Coaching isn't available on the server yet. Please try again later.";
+      case 500:
+      case 502:
+      case 503:
+        return 'Coaching is temporarily unavailable. Please try again in a moment.';
+      default:
+        return 'Could not start coaching just now. Please try again.';
+    }
+  }
+
+  /// Single choke point for showing the error view. Stops the loading spinner
+  /// and records the reason; the view offers Retry (which resets the recovery
+  /// budget) so the athlete is never stranded on a blank screen.
+  void _showError(String message) {
+    if (!mounted) return;
+    setState(() {
+      _failed = true;
+      _loading = false;
+      _errorMessage = message;
+    });
   }
 
   // ── Permissions (WebRTC coach calls) ───────────────────────────────────
@@ -237,13 +289,17 @@ class _CoachingWebViewScreenState extends State<CoachingWebViewScreen> {
   /// view instead of an endless reload loop.
   Future<void> _recoverFromLoginRedirect() async {
     if (_loginRecoveries >= _maxLoginRecoveries) {
-      if (mounted) setState(() { _failed = true; _loading = false; });
+      _showError('Coaching sign-in did not complete. Please retry.');
       return;
     }
     _loginRecoveries++;
-    await _provideToken();
-    // Give signInWithCustomToken a moment to persist before reloading, so the
-    // reloaded page finds the session and its guard doesn't redirect again.
+    final delivered = await _provideToken();
+    // If the token could not be delivered (e.g. the endpoint is down / 405),
+    // _provideToken already showed the error. Do NOT reload — reloading would
+    // just hit the same failure again. This is what breaks the infinite loop.
+    if (!delivered) return;
+    // Token delivered: give signInWithCustomToken a moment to persist, then
+    // reload so the page's guard finds the session instead of redirecting.
     await Future<void>.delayed(const Duration(milliseconds: 900));
     if (mounted) _controller.loadRequest(Uri.parse(_url));
   }
@@ -298,11 +354,25 @@ class _CoachingWebViewScreenState extends State<CoachingWebViewScreen> {
       canPop: false,
       onPopInvokedWithResult: (bool didPop, Object? _) async {
         if (didPop) return;
-        final navigator = Navigator.of(context);
+        // Capture the router BEFORE the await so we never touch BuildContext
+        // across the async gap.
+        final router = GoRouter.of(context);
+        // 1) Walk the page's OWN history first (e.g. coach dashboard → back to
+        //    the review list) so back feels native inside the workspace.
         if (await _controller.canGoBack()) {
           await _controller.goBack();
-        } else if (mounted) {
-          navigator.pop();
+          return;
+        }
+        if (!mounted) return;
+        // 2) Otherwise leave the workspace safely. If this screen was pushed,
+        //    pop it; if it is the ONLY route (reached via context.go, e.g. a
+        //    notification tap or the coach dashboard), popping would crash with
+        //    "popped the last page off the stack" — so go to the dashboard
+        //    instead. Never leaves GoRouter with zero pages.
+        if (router.canPop()) {
+          router.pop();
+        } else {
+          router.go('/dashboard');
         }
       },
       child: Scaffold(
@@ -352,21 +422,37 @@ class _CoachingWebViewScreenState extends State<CoachingWebViewScreen> {
               style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 6),
-            const Text(
-              'Check your connection and try again.',
+            Text(
+              _errorMessage ?? 'Check your connection and try again.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white54, fontSize: 13),
+              style: const TextStyle(color: Colors.white54, fontSize: 13),
             ),
             const SizedBox(height: 18),
             FilledButton(
               onPressed: () {
-                setState(() { _failed = false; _loading = true; });
+                // Fresh attempt: clear the error AND reset the recovery budget
+                // and in-flight guard, so the athlete gets a clean retry rather
+                // than an already-exhausted one.
+                setState(() {
+                  _failed = false;
+                  _loading = true;
+                  _errorMessage = null;
+                });
+                _loginRecoveries = 0;
+                _tokenInFlight = false;
                 _controller.loadRequest(Uri.parse(_url));
               },
               child: const Text('Retry'),
             ),
             TextButton(
-              onPressed: () => Navigator.of(context).maybePop(),
+              onPressed: () {
+                final router = GoRouter.of(context);
+                if (router.canPop()) {
+                  router.pop();
+                } else {
+                  router.go('/dashboard');
+                }
+              },
               child: const Text('Go back'),
             ),
           ],
