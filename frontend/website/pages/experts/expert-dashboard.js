@@ -319,7 +319,7 @@ function renderDashboard(expert) {
   if (epcRating)  epcRating.textContent = expert.rating;
   if (epcReviews) epcReviews.textContent = expert.reviewCount + ' reviews';
   if (epcFee)     epcFee.textContent = '₹' + expert.fee;
-  if (epcExp)     epcExp.textContent = expert.experience.replace(' Experience', '');
+  if (epcExp)     epcExp.textContent = String(expert.experience || '').replace(' Experience', '');
 
   /* Stats initialised to zero; listenForReviews() updates them once data loads */
   setStatText('statPending',  'statPendingLabel',  0, 'Pending Reviews', "🎉 You're all caught up.");
@@ -3139,15 +3139,41 @@ function initNavigation() {
    ══════════════════════════════════════════════ */
 
 async function logout() {
+  /* ── 1. Stop EVERY Firestore listener BEFORE signing out ──────────────
+     A snapshot listener that outlives the auth session immediately fires
+     permission-denied, and a snapshot callback running against just-cleared
+     storage was throwing "Cannot read properties of undefined (reading
+     'replace')" mid-logout. So tear the coaching workspace down cleanly
+     (chat, coaching status, meal/workout check-ins, activity, notifications),
+     then terminate the Firestore client, which detaches ALL remaining
+     snapshot listeners this page owns (roster, requests, chat rooms, active
+     chat, coaching relationships, call signaling). */
+  try {
+    if (window.ZitlasCoachingWorkspace && typeof ZitlasCoachingWorkspace.close === 'function') {
+      ZitlasCoachingWorkspace.close();
+    }
+  } catch (e) { console.warn('[ZITLAS] workspace close error:', e); }
+  try {
+    if (typeof firebase !== 'undefined' && firebase.firestore) {
+      // Raced with a timeout so a pending write (e.g. offline) can never strand
+      // the user on "Logging out…"; the listeners still detach as part of it.
+      await Promise.race([
+        firebase.firestore().terminate(),
+        new Promise(function (r) { setTimeout(r, 2500); })
+      ]);
+      console.log('[ZITLAS] all Firestore listeners detached (terminate)');
+    }
+  } catch (e) { console.warn('[ZITLAS] firestore terminate error:', e); }
+
+  /* ── 2. Now end the session — no live listener remains to reject. ────── */
   try {
     if (typeof ZitlasAuth !== 'undefined') await ZitlasAuth.signOut();
   } catch (e) { console.warn('[ZITLAS] signOut error:', e); }
-  /* ACCOUNT GUARD — full user-cache purge (plans, goal, membership,
-     wallet, reviews, chats… not just the handful of auth keys the old
-     list covered). The old partial clear was the multi-user data-leak
-     root cause: the next account to sign in on this browser inherited
-     everything the list missed. Fallback list kept for the (cached-page)
-     case where the guard isn't loaded. */
+
+  /* ── 3. ONLY AFTER signOut completes: clear local storage. Clearing it
+     while still signed in lets a mid-flight sync re-read or re-upload the
+     account it was meant to wipe. ACCOUNT GUARD does the full user-cache
+     purge; the list is the fallback for a cached page where it isn't loaded. */
   if (typeof ZitlasAccountGuard !== 'undefined') {
     ZitlasAccountGuard.clearUserCache();
   } else {
@@ -3159,7 +3185,16 @@ async function logout() {
   }
   console.log('[LOCAL STORAGE CLEARED]');
   sessionStorage.removeItem('zitlas_guest');
-  window.location.href = '../login/login.html';
+
+  /* ── 4. Leave. Inside the Flutter WebView, hand logout to the native app
+     (it owns the real session and its own login screen); navigating to the
+     website login here would just hit the WebView's login-block and re-auth.
+     In a normal browser, go to the website login. */
+  if (window.ZitlasWebview && typeof window.ZitlasWebview.postMessage === 'function') {
+    window.ZitlasWebview.postMessage('logout');
+  } else {
+    window.location.href = '../login/login.html';
+  }
 }
 
 function initLogout() {

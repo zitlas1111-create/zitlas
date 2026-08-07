@@ -125,6 +125,23 @@
       confirmBtn.textContent = 'Logging out…';
       confirmBtn.disabled = true;
 
+      /* Stop EVERY Firestore listener BEFORE signing out — a listener that
+         outlives the session fires permission-denied. Tear the coaching
+         workspace down cleanly, then terminate the client to detach the rest. */
+      try {
+        if (window.ZitlasCoachingWorkspace && typeof ZitlasCoachingWorkspace.close === 'function') {
+          ZitlasCoachingWorkspace.close();
+        }
+      } catch (e) { console.warn('[ZITLAS] workspace close error:', e); }
+      try {
+        if (typeof firebase !== 'undefined' && firebase.firestore) {
+          await Promise.race([
+            firebase.firestore().terminate(),
+            new Promise(function (r) { setTimeout(r, 2500); })
+          ]);
+        }
+      } catch (e) { console.warn('[ZITLAS] firestore terminate error:', e); }
+
       /* Firebase sign-out (no-op if not configured) */
       try {
         if (typeof ZitlasAuth !== 'undefined') await ZitlasAuth.signOut();
