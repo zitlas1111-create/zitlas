@@ -116,8 +116,11 @@ class _NotificationsBody extends StatelessWidget {
         }
         break;
       case 'chat':
+        // Chat is part of the ONE continuous Website coaching session — opens
+        // the same Coach Profile WebView with action=ask, which auto-opens the
+        // website's own chat via its existing ?action= handling.
         if (n.actionId != null) {
-          context.push('/experts/${n.actionId}?action=ask');
+          context.push('/coach-profile/${n.actionId}?action=ask');
         } else {
           context.go('/experts');
         }
@@ -127,11 +130,12 @@ class _NotificationsBody extends StatelessWidget {
         context.go('/expert-dashboard');
         break;
       case 'coaching_workspace':
-        // Athlete side of Personal Coaching — open the active-coaching WebView
-        // workspace directly (chat, meal reviews, coach plan, End Coaching).
-        // actionId carries the coach id; without it fall back to browse.
+        // Athlete side of Personal Coaching — the SAME Coach Profile WebView;
+        // the website's own JS detects the active relationship and shows the
+        // coaching workspace itself. actionId carries the coach id; without it
+        // fall back to browse.
         if (n.actionId != null && n.actionId!.isNotEmpty) {
-          context.push('/coaching-workspace?coachId=${n.actionId}');
+          context.push('/coach-profile/${n.actionId}');
         } else {
           context.go('/experts');
         }

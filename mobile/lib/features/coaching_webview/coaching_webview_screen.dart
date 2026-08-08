@@ -19,6 +19,22 @@ import '../../core/network/api_exception.dart';
 /// WebView until native Flutter reaches feature parity. This is the ONLY
 /// WebView in the app — every other module is native.
 ///
+/// Once open, the ENTIRE coach journey stays inside this one WebView as a
+/// single continuous Website session — profile, Request Review, Personal
+/// Coach, payment, active coaching, diet/training, meal snap/review, chat,
+/// calls, progress, End Coaching. Nothing about that journey is bounced back
+/// to a native screen; Flutter's only remaining involvement here is what a
+/// website genuinely cannot do for itself:
+///  * the auth bridge (native Firebase session → a real web session, so the
+///    athlete is never asked to log in again — see [_provideToken]);
+///  * logout (the native app owns the real session, so the website hands
+///    logout back to Flutter to finish — see [_onLogout]);
+///  * OS-level capabilities: the camera/gallery file chooser for chat photos,
+///    and camera/mic permission grants for coach voice/video calls.
+/// The Android back button already walks the Website's OWN page history first
+/// (see the `PopScope` in [build]) and only leaves this screen — back to the
+/// native Experts list — once that history is exhausted.
+///
 /// The whole authentication pipeline is instrumented: every stage prints a
 /// `[COACHING WEBVIEW]` line, the embedded page's console is mirrored to the
 /// native log as `[WV-CONSOLE]`, and the bridge reports the signInWithCustomToken
@@ -39,13 +55,31 @@ class CoachingWebViewScreen extends StatefulWidget {
   /// success case — the embedded page provides its own header).
   final String title;
 
-  /// The athlete's active-coaching workspace (chat, meal reviews, coach notes,
-  /// remaining days, End Coaching, coach-authored plan views).
-  factory CoachingWebViewScreen.athleteWorkspace({required String coachId}) {
-    return CoachingWebViewScreen(
-      relativePath: '/pages/coaches/cprofile.html?id=$coachId&webview=1',
-      title: 'Personal Coaching',
-    );
+  /// The COMPLETE coach journey — profile browsing, Request Review, Personal
+  /// Coach, Razorpay payment, and (once coaching is active) the full coaching
+  /// workspace (diet, training, meal snap/review, chat, calls, progress, End
+  /// Coaching) — all rendered by the Website's own `cprofile.html` and kept
+  /// entirely inside this ONE WebView, exactly like a normal browser visit.
+  /// The website's OWN JS decides what to show (browsing UI vs. the active-
+  /// coaching overlay) based on the relationship it reads from Firestore;
+  /// Flutter never intervenes in that decision or hands any of it back to a
+  /// native screen — see the class doc for what IS still Flutter's job.
+  ///
+  /// [action] optionally deep-links straight into one of the website's own
+  /// flows on load — 'verify' (Request Review) | 'coach' (Personal Coach) |
+  /// 'ask' (Chat Now) — reusing `cprofile.js`'s OWN existing `?action=`
+  /// handling (it already auto-clicks the matching button after load), so
+  /// this never duplicates that logic in Dart.
+  ///
+  /// `expertId=` (not `id=`) matches the query key `cprofile.js`'s real page
+  /// `init()` checks FIRST (`params.get('expertId') || params.get('id')`) —
+  /// verified against the live site, not the older `getCoachId()` helper
+  /// (dead code, never called) that only reads `id=`.
+  factory CoachingWebViewScreen.coachProfile({required String expertId, String? action}) {
+    var path = '/pages/coaches/cprofile.html'
+        '?expertId=${Uri.encodeComponent(expertId)}&webview=1';
+    if (action != null && action.isNotEmpty) path += '&action=$action';
+    return CoachingWebViewScreen(relativePath: path, title: 'Coach Profile');
   }
 
   /// The coach/expert portal (roster, reviews, plan editing).
@@ -53,30 +87,6 @@ class CoachingWebViewScreen extends StatefulWidget {
     return const CoachingWebViewScreen(
       relativePath: '/pages/experts/expert-dashboard.html?webview=1',
       title: 'Coach Dashboard',
-    );
-  }
-
-  /// The READ-ONLY Coach Profile an athlete browses before coaching exists —
-  /// bio, certificates, pricing, reviews — rendered by the Website's own
-  /// `cprofile.html` (deliberately NOT the native ExpertProfileScreen; that
-  /// screen stays in the tree only to host the three actions below).
-  ///
-  /// `webviewMode=profile` tells `webview-bridge.js` to intercept the site's
-  /// own "Verify Plan" / "Personal Coach" / "Chat Now" buttons and its header
-  /// back arrow, and hand them to Flutter instead of running the website's own
-  /// JS for them — so Request Review, Personal Coach, Chat, and payment all
-  /// stay on the EXISTING native flow (`/experts/:id?action=...`), and "back"
-  /// always returns to the native Experts list, never `coaches.html`.
-  ///
-  /// `expertId=` (not `id=`) matches the query key `cprofile.js`'s real page
-  /// `init()` checks FIRST (`params.get('expertId') || params.get('id')`) —
-  /// verified against the live site, not the older `getCoachId()` helper
-  /// (dead code, never called) that only reads `id=`.
-  factory CoachingWebViewScreen.coachProfile({required String expertId}) {
-    return CoachingWebViewScreen(
-      relativePath: '/pages/coaches/cprofile.html'
-          '?expertId=${Uri.encodeComponent(expertId)}&webview=1&webviewMode=profile',
-      title: 'Coach Profile',
     );
   }
 
@@ -123,12 +133,6 @@ class _CoachingWebViewScreenState extends State<CoachingWebViewScreen> {
   /// Host of the backend/website, so the navigation delegate can tell an
   /// in-app link (keep in the WebView) from an external one (system browser).
   late final String _appHost = Uri.parse(Env.apiBaseUrl).host;
-
-  /// Non-null only for [CoachingWebViewScreen.coachProfile] — the expert whose
-  /// Website profile is loaded, used to hand "Verify Plan" / "Personal Coach" /
-  /// "Chat Now" back to the EXISTING native flow (`/experts/:id?action=...`)
-  /// when the bridge reports one of those buttons was tapped.
-  late final String? _coachProfileExpertId = Uri.parse(_url).queryParameters['expertId'];
 
   @override
   void initState() {
@@ -206,10 +210,6 @@ class _CoachingWebViewScreenState extends State<CoachingWebViewScreen> {
       _provideToken();
     } else if (m == 'logout') {
       _onLogout();
-    } else if (m == 'profile-back') {
-      _onProfileBack();
-    } else if (m.startsWith('profile-action:')) {
-      _onProfileAction(m.substring('profile-action:'.length));
     } else if (m.startsWith('auth-ok')) {
       _onAuthOk(m);
     } else if (m.startsWith('auth-fail:')) {
@@ -339,38 +339,6 @@ class _CoachingWebViewScreenState extends State<CoachingWebViewScreen> {
     }
   }
 
-  /// The website's own header back arrow (`#backBtn`) was tapped inside the
-  /// Coach Profile. Left alone, that button navigates the WEBVIEW to the
-  /// website's own `coaches.html` listing — never what we want here. The
-  /// bridge intercepts it and asks Flutter to leave instead, landing back on
-  /// the native Experts list.
-  void _onProfileBack() {
-    _log('STEP profile-back — leaving Coach Profile WebView');
-    _leaveScreen(GoRouter.of(context));
-  }
-
-  /// One of the Coach Profile's own action buttons ("Verify Plan" / "Personal
-  /// Coach" / "Chat Now") was tapped. The bridge already prevented the
-  /// website's own JS from running for it. Leave the WebView first — Request
-  /// Review, Personal Coach, Chat, and payment must be 100% native, never
-  /// still-a-WebView underneath — then hand off to the EXISTING native
-  /// deep-link flow (`ExpertProfileScreen._handleDeepLink`, unchanged) for the
-  /// SAME expert, exactly as already happens when these actions are triggered
-  /// from the Experts list's own quick-action buttons.
-  ///
-  /// [action] is one of 'verify' | 'coach' | 'ask' — the same keys
-  /// `_handleDeepLink` already switches on.
-  void _onProfileAction(String action) {
-    final expertId = _coachProfileExpertId;
-    if (expertId == null || expertId.isEmpty) {
-      _log('STEP profile-action IGNORED — no expertId (not a coach-profile screen)');
-      return;
-    }
-    _log('STEP profile-action — action=$action expertId=$expertId');
-    final router = GoRouter.of(context);
-    _leaveScreen(router);
-    router.push('/experts/${Uri.encodeComponent(expertId)}?action=$action');
-  }
 
   /// Maps a token-endpoint HTTP status to a human message. 404/405 means the
   /// route is missing from the deployed backend (ApiClient documents this).

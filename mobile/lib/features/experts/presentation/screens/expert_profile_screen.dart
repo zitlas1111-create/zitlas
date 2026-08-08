@@ -13,20 +13,23 @@ import '../../expert_profile_controller.dart';
 import '../../models/expert_listing.dart';
 import '../widgets/request_review_sheet.dart';
 import '../widgets/personal_coaching_sheet.dart';
-// NOTE: ActiveCoachingBanner (native End Coaching / chat entry) is intentionally
-// no longer used here — the active coaching workspace is now the Website module
-// in a WebView, reached via the '/coaching-workspace' route from
-// _OpenCoachingCta below. The banner widget stays in the tree, dormant, for
-// the eventual return to native parity.
+// NOTE: this whole screen is DORMANT — the entire coach journey (profile,
+// Request Review, Personal Coach, payment, active coaching workspace) is now
+// ONE continuous Website session in CoachingWebViewScreen.coachProfile
+// ('/coach-profile/:id'), reached from the Experts list and coaching
+// notifications. Nothing in the app routes here any more; kept in the tree,
+// unreferenced, for the eventual return to native parity (see
+// ActiveCoachingBanner, similarly dormant).
 
 /// Native rebuild of `frontend/pages/coaches/cprofile.html` + `cprofile.js`
-/// — the athlete-facing Expert Profile page. Section order matches the
-/// website exactly: hero → quick info → CTAs → status banner → About →
-/// Certificates → Expertise → Track record → Services → Pricing → Reviews.
-/// Gallery/availability calendar/WebRTC voice calling are deferred (same
-/// precedent as the Expert Dashboard phase — no phone-dialer alternative
-/// exists in production, only unbuilt WebRTC); certificates, verified
-/// status, pricing and the review-request lifecycle are full parity.
+/// — the athlete-facing Expert Profile page. DORMANT (see note above).
+/// Section order matches the website exactly: hero → quick info → CTAs →
+/// status banner → About → Certificates → Expertise → Track record →
+/// Services → Pricing → Reviews. Gallery/availability calendar/WebRTC voice
+/// calling are deferred (same precedent as the Expert Dashboard phase — no
+/// phone-dialer alternative exists in production, only unbuilt WebRTC);
+/// certificates, verified status, pricing and the review-request lifecycle
+/// are full parity.
 class ExpertProfileScreen extends StatelessWidget {
   const ExpertProfileScreen({super.key, required this.expertId, this.action});
 
@@ -150,10 +153,11 @@ void _openChat(BuildContext context, ExpertProfileController controller) {
   context.push('/chat/${controller.chatId()}?expertId=${controller.expertId}&expertName=${Uri.encodeComponent(controller.expert!.name)}');
 }
 
-/// Shown on the profile of the athlete's ACTIVE coach. Opens the full Personal
-/// Coaching workspace — chat, meal reviews, coach notes, remaining days, the
-/// coach-authored plan and End Coaching — served by the Website in a WebView
-/// (`/coaching-workspace`). Replaces the old native ActiveCoachingBanner.
+/// DORMANT (see file note above) — unreached now that `/coach-profile/:id`
+/// is the sole entry point, which the website's own JS already routes to the
+/// active-coaching workspace when the relationship is active. Kept in the
+/// tree, pointed at the current route name, for the eventual return to
+/// native parity.
 class _OpenCoachingCta extends StatelessWidget {
   const _OpenCoachingCta({required this.coachName, required this.coachId});
 
@@ -203,7 +207,7 @@ class _OpenCoachingCta extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
-              onPressed: () => context.push('/coaching-workspace?coachId=$coachId'),
+              onPressed: () => context.push('/coach-profile/$coachId'),
               icon: const Icon(Icons.open_in_new_rounded, size: 18),
               label: const Text('Open Coaching'),
             ),

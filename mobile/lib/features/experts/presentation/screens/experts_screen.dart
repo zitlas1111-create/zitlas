@@ -217,11 +217,11 @@ class _ExpertCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(kZitlasRadiusMd),
       child: InkWell(
         borderRadius: BorderRadius.circular(kZitlasRadiusMd),
-        // Coach Profile is INTENTIONALLY the Website's cprofile.html in a
-        // WebView, not the native ExpertProfileScreen — see
-        // CoachingWebViewScreen.coachProfile. The "Request Review" and
-        // "Personal Coach" quick-action buttons below are UNCHANGED: they
-        // still go straight to the native '/experts/:id?action=...' flow.
+        // Coach Profile — and the entire coach journey that follows it — is
+        // INTENTIONALLY the Website's cprofile.html in ONE continuous WebView
+        // session, not the native ExpertProfileScreen. The quick-action
+        // buttons below open the SAME WebView with `action=` so the website's
+        // own existing deep-link handling (cprofile.js) auto-opens that flow.
         onTap: () => context.push('/coach-profile/${expert.id}'),
         child: Container(
           padding: const EdgeInsets.all(14),
@@ -299,7 +299,7 @@ class _ExpertCard extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(vertical: 10),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  onPressed: () => context.push('/experts/${expert.id}?action=verify'),
+                  onPressed: () => context.push('/coach-profile/${expert.id}?action=verify'),
                   child: const Text('Request Review', style: TextStyle(fontWeight: FontWeight.w700)),
                 ),
               ),
@@ -313,7 +313,7 @@ class _ExpertCard extends StatelessWidget {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         side: const BorderSide(color: ZitlasTokens.borderSub),
                       ),
-                      onPressed: () => context.push('/experts/${expert.id}?action=coach'),
+                      onPressed: () => context.push('/coach-profile/${expert.id}?action=coach'),
                       child: const Text('Personal Coach', style: TextStyle(fontSize: 12.5, color: ZitlasTokens.textPrimary)),
                     ),
                   ),
@@ -323,7 +323,7 @@ class _ExpertCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                     child: InkWell(
                       borderRadius: BorderRadius.circular(12),
-                      onTap: () => context.push('/experts/${expert.id}?action=ask'),
+                      onTap: () => context.push('/coach-profile/${expert.id}?action=ask'),
                       child: const Padding(
                         padding: EdgeInsets.all(10),
                         child: Icon(Icons.chat_bubble_outline_rounded, size: 18, color: ZitlasTokens.primaryDark),

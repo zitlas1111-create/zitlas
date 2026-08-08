@@ -89,26 +89,21 @@ GoRouter buildRouter(AuthState authState) {
         path: '/expert-dashboard',
         builder: (context, state) => CoachingWebViewScreen.expertDashboard(),
       ),
-      // Athlete's active coaching workspace (chat, meal reviews, coach notes,
-      // remaining days, End Coaching) — the Website module in a WebView.
-      // Reached from the "Open Coaching" CTA and coaching notification taps.
-      GoRoute(
-        path: '/coaching-workspace',
-        builder: (context, state) => CoachingWebViewScreen.athleteWorkspace(
-          coachId: state.uri.queryParameters['coachId'] ?? '',
-        ),
-      ),
-      // Read-only Coach Profile (browsing, before any coaching relationship
-      // exists) — INTENTIONALLY the Website's own cprofile.html in a WebView,
-      // not the native ExpertProfileScreen. That native screen stays in the
-      // tree and is used ONLY as the host for the existing native Request
-      // Review / Personal Coach / Chat flows (`/experts/:id?action=...`),
-      // which the profile WebView hands off to via CoachingWebViewScreen's
-      // profile-action bridge messages.
+      // The COMPLETE coach journey — profile, Request Review, Personal Coach,
+      // payment, and (once active) the full coaching workspace: diet,
+      // training, meal snap/review, chat, calls, progress, End Coaching.
+      // INTENTIONALLY the Website's own cprofile.html in a WebView, kept as
+      // ONE continuous Website session for all of it — never the native
+      // ExpertProfileScreen (that screen stays in the tree, dormant, and is
+      // no longer reached by anything in the normal flow).
+      // `action` (optional) deep-links straight into the website's own
+      // Request-Review / Personal-Coach / Chat flow on load, reusing
+      // cprofile.js's existing `?action=` handling.
       GoRoute(
         path: '/coach-profile/:id',
         builder: (context, state) => CoachingWebViewScreen.coachProfile(
           expertId: state.pathParameters['id']!,
+          action: state.uri.queryParameters['action'],
         ),
       ),
       GoRoute(path: '/reviews/:id', builder: (context, state) => const ReviewsScreen()),

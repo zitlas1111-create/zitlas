@@ -36,16 +36,6 @@
                   !!window.ZitlasWebview;
   if (!isWebview) return;
 
-  /* 'profile' — this load of cprofile.html is the READ-ONLY Coach Profile an
-     athlete browses before any coaching relationship exists (Flutter's
-     CoachingWebViewScreen.coachProfile). Absent for the ACTIVE coaching
-     workspace load of this same page (CoachingWebViewScreen.athleteWorkspace),
-     which stays fully Website-driven with no button interception below. */
-  var webviewMode = (function () {
-    var m = /[?&]webviewMode=([^&]+)/.exec(window.location.search);
-    return m ? decodeURIComponent(m[1]) : null;
-  })();
-
   /* Log locally AND to Flutter (the native side forwards console too, but an
      explicit channel message survives even if console forwarding is off). */
   function report(msg) {
@@ -76,40 +66,16 @@
     console.warn('[WEBVIEW] chrome-hide style failed', e);
   }
 
-  /* ── 1b. Coach Profile mode: hand specific buttons to Flutter ─────────
-     cprofile.js attaches its OWN click handlers to these buttons (opening the
-     website's verify-plan sheet, personal-coaching sheet, and inline chat
-     overlay, or — for the header back arrow — navigating to coaches.html).
-     For a browsing-only Coach Profile those must all be NATIVE instead
-     (Request Review / Personal Coach / Chat / payment stay in Flutter; "back"
-     must return to the Flutter Experts list, never the website's own
-     coaches.html). A capture-phase listener on `document` runs BEFORE any
-     listener attached directly to the button (capture travels document → …→
-     target, ahead of the target's own handlers), so stopImmediatePropagation()
-     here fully suppresses cprofile.js's handler — no edit to cprofile.js
-     itself, and cprofile.html is not converted to Flutter. Wiring by element
-     ID rather than page structure, so it is inert if the markup changes shape
-     but keeps these exact IDs. */
-  if (webviewMode === 'profile') {
-    var PROFILE_ACTION_BUTTONS = {
-      verifyPlanBtn:     'verify', /* "Verify Plan" == Flutter's Request Review */
-      personalCoachBtn:  'coach',
-      inlineChatBtn:     'ask'     /* "Chat Now" */
-    };
-    document.addEventListener('click', function (e) {
-      var el = e.target && e.target.closest
-        ? e.target.closest('#verifyPlanBtn, #personalCoachBtn, #inlineChatBtn, #backBtn')
-        : null;
-      if (!el) return;
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      if (el.id === 'backBtn') {
-        report('profile-back');
-      } else {
-        report('profile-action:' + PROFILE_ACTION_BUTTONS[el.id]);
-      }
-    }, true /* capture */);
-  }
+  /* NOTE: earlier revisions of this bridge intercepted the Coach Profile's own
+     "Verify Plan" / "Personal Coach" / "Chat Now" buttons and header back
+     arrow, handing them to Flutter. That was reverted — the coaching journey
+     (profile → request → personal coaching → payment → active coaching →
+     diet/training/meal review/chat/calls/progress → End Coaching) is now ONE
+     continuous Website session inside the WebView, exactly like a normal
+     browser visit. Nothing about it is intercepted; Razorpay's checkout.js
+     renders in-page (no navigation, so it never leaves the WebView either).
+     Flutter's ONLY remaining involvement is the auth bridge below (a native OS
+     capability the website cannot provide for itself) and logout. */
 
   /* Decode a JWT payload WITHOUT verifying — for logging non-secret claims only
      (aud / iss / sub / exp), so a custom-token-mismatch is obvious in the logs.
