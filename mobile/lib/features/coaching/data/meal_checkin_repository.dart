@@ -84,9 +84,17 @@ class MealCheckinRepository {
 
     if (kDebugMode) debugPrint('[MEAL CHECKIN] submitting $mealName for $athleteId');
 
+    // Decode/normalize the photo ONCE (HEIC/HEIF -> JPEG via the platform's
+    // own codec, or a resize of an already-supported format) and use the
+    // SAME bytes + Content-Type for the upload and the AI estimate below, so
+    // neither can see a different format than the other. Throws a short,
+    // athlete-facing message (never lets a raw exception through) if the
+    // photo is unusable.
+    final prepared = await _uploader.prepare(photo);
+
     final results = await Future.wait([
-      _uploader.upload(photo),
-      _estimateNutrition(photo),
+      _uploader.uploadPrepared(prepared),
+      _estimateNutrition(prepared),
     ]);
     final imageUrl = results[0] as String;
     final estimate = results[1] as Map<String, dynamic>?;
@@ -152,17 +160,19 @@ class MealCheckinRepository {
 
   /// `POST /api/meal/estimate-nutrition` — the route that already exists.
   ///
-  /// Returns null on any failure. Deliberately swallows everything: this is a
-  /// nice-to-have running in parallel with the upload, and the caller treats
-  /// null as "not estimated".
-  Future<Map<String, dynamic>?> _estimateNutrition(File photo) async {
+  /// Takes the SAME prepared (decoded + normalized) bytes [submit] uploads,
+  /// so this never independently re-reads the raw file and risks sending a
+  /// format the backend rejects. Returns null on any failure. Deliberately
+  /// swallows everything: this is a nice-to-have running in parallel with the
+  /// upload, and the caller treats null as "not estimated".
+  Future<Map<String, dynamic>?> _estimateNutrition(PreparedMealPhoto photo) async {
     try {
-      final bytes = await photo.readAsBytes();
       final res = await _api.postMultipartBytes(
         '/api/meal/estimate-nutrition',
         fileField: 'file',
-        fileName: 'meal.jpg',
-        fileBytes: bytes,
+        fileName: photo.fileName,
+        fileBytes: photo.bytes,
+        contentType: photo.contentType,
         timeout: const Duration(seconds: 45),
       );
       if (res is Map<String, dynamic>) return res;

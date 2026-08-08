@@ -39,6 +39,10 @@ dependencies:
   cloud_firestore: ^6.7.1
   firebase_messaging: ^16.4.3
   http: ^1.6.0
+  # Explicit dependency (was previously only transitive via http) — used
+  # directly by ApiClient.postMultipartBytes to set a real Content-Type on
+  # multipart uploads instead of package:http's default application/octet-stream.
+  http_parser: ^4.1.2
   shared_preferences: ^2.5.5
   go_router: ^17.3.0
   provider: ^6.1.5+1

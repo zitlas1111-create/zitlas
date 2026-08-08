@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart' show MediaType;
 
 import '../config/env.dart';
 import 'api_exception.dart';
@@ -127,6 +128,13 @@ class ApiClient {
     required String fileField,
     required String fileName,
     required Uint8List fileBytes,
+    // `MultipartFile.fromBytes` defaults to `application/octet-stream` when
+    // this is omitted — NOT a guess from `fileName`'s extension. A caller
+    // uploading an image MUST pass the real detected type (e.g. 'image/jpeg')
+    // or the backend's content-type allowlist will reject it regardless of
+    // what the actual bytes are. See MealPhotoUploader for the reference
+    // pattern: detect the real format, then pass it here explicitly.
+    String? contentType,
     Map<String, String>? fields,
     Duration? timeout,
   }) {
@@ -139,7 +147,12 @@ class ApiClient {
       }
       if (fields != null) request.fields.addAll(fields);
       request.files.add(
-        http.MultipartFile.fromBytes(fileField, fileBytes, filename: fileName),
+        http.MultipartFile.fromBytes(
+          fileField,
+          fileBytes,
+          filename: fileName,
+          contentType: contentType != null ? MediaType.parse(contentType) : null,
+        ),
       );
       _logRequest(
         'POST',
