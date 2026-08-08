@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
+import '../../core/notifications/fcm_service.dart';
 import '../../core/storage/account_guard.dart';
 import '../../models/user_model.dart';
 import 'data/auth_repository.dart';
@@ -117,6 +118,22 @@ class AuthState extends ChangeNotifier {
   Future<void> sendPasswordReset(String email) => _repository.sendPasswordReset(email);
 
   Future<void> signOut() async {
+    // Detach THIS device from the outgoing account BEFORE Firebase sign-out,
+    // while its uid and a valid auth context still exist (the Firestore write
+    // needs both). Without this the previous account keeps a live token for a
+    // phone somebody else may now be signing into, and the backend would keep
+    // delivering their notifications here — the cross-account leak.
+    //
+    // Best-effort: a failure must never block logout, and it self-corrects
+    // anyway because the next login re-owns the same token document.
+    final outgoingUid = _profile?.uid;
+    if (outgoingUid != null) {
+      try {
+        await FcmService().unregisterDevice(outgoingUid);
+      } catch (e) {
+        if (kDebugMode) debugPrint('[AUTH] FCM unregister failed (non-fatal): $e');
+      }
+    }
     await _repository.signOut();
     await AccountGuard.instance.clearUserCache();
     _profile = null;

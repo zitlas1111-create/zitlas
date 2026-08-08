@@ -226,11 +226,57 @@
     });
   }
 
+  /* ══════════════════════════════════════════════════════════════════
+     PUSH TRIGGERS — ask the backend to deliver a real FCM push
+     ══════════════════════════════════════════════════════════════════
+     send() above writes the in-app notification DOCUMENT; it cannot deliver a
+     push, because only the server holds the FCM credentials. These helpers
+     call the backend endpoints (backend/routes/notifications.py), which
+     re-verify the caller against the underlying chat room / check-in and
+     derive the RECIPIENT themselves — a client can never choose who gets
+     pushed, only re-trigger a notification for a conversation it belongs to.
+
+     Deliberately fire-and-forget: a push is strictly additive to the event
+     that caused it. A failed push must never surface an error over a message
+     that was actually sent, so every failure is logged and swallowed. */
+  function pushTrigger(path, payload) {
+    try {
+      if (typeof getIdToken !== 'function') return Promise.resolve(null);
+      return getIdToken().then(function (token) {
+        return fetch('/api/notifications/' + path, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+          body: JSON.stringify(payload || {}),
+        });
+      }).then(function (res) {
+        if (!res || !res.ok) {
+          console.warn('[PUSH TRIGGER] ' + path + ' -> ' + (res ? res.status : 'no response'));
+          return null;
+        }
+        return res.json().catch(function () { return null; });
+      }).then(function (body) {
+        if (body) console.log('[PUSH TRIGGER] ' + path + ' sent=' + (body.sent != null ? body.sent : '?'));
+        return body;
+      }).catch(function (e) {
+        console.warn('[PUSH TRIGGER] ' + path + ' failed', e && e.message);
+        return null;
+      });
+    } catch (e) {
+      console.warn('[PUSH TRIGGER] ' + path + ' threw', e);
+      return Promise.resolve(null);
+    }
+  }
+
   win.ZitlasNotify = {
     CATEGORY_META: CATEGORY_META,
     PRIORITY_RANK: PRIORITY_RANK,
     metaFor: metaFor,
     send: send,
+    /* Push triggers — see pushTrigger() above. */
+    pushChat: function (chatId, text) { return pushTrigger('chat', { chatId: chatId, text: text }); },
+    pushMealCheckin: function (checkinId) { return pushTrigger('meal-checkin', { checkinId: checkinId }); },
+    pushMealReview: function (checkinId) { return pushTrigger('meal-review', { checkinId: checkinId }); },
+    pushPlanUpdated: function (athleteId, kind) { return pushTrigger('plan-updated', { athleteId: athleteId, kind: kind }); },
     listenAll: listenAll,
     listenUnreadCount: listenUnreadCount,
     markRead: markRead,

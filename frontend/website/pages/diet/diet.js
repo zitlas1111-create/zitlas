@@ -2610,6 +2610,12 @@
           });
           console.log('[MEAL CHECKIN] NOTIFICATION SENT → coach', _pcRel.coachId);
         }
+        // Real FCM push to the coach's phone (the writes above only create
+        // in-app documents). Backend re-reads the check-in, verifies this
+        // caller is the athlete on it, and derives the coach from the doc.
+        if (typeof ZitlasNotify !== 'undefined' && ZitlasNotify.pushMealCheckin) {
+          ZitlasNotify.pushMealCheckin(id);
+        }
       });
     }).then(function () {
       console.log('[MEAL CHECKIN] UPLOAD COMPLETE ✅');

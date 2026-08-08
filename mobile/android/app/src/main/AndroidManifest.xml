@@ -151,6 +151,16 @@
             </intent-filter>
         </receiver>
 
+        <!-- FCM fallback channel. Used ONLY if a message somehow arrives
+             without an android.notification.channel_id (Android 8+ DROPS such a
+             notification silently otherwise). The real per-category channels
+             (zitlas_messages / _coaching / _meal_reviews / _plans / _general)
+             are created by FcmService at runtime and are what the backend
+             targets — see services/push_service.py's channel constants. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="zitlas_general" />
+
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

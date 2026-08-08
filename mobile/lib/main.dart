@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -8,6 +9,23 @@ import 'core/config/firebase_bootstrap.dart';
 import 'core/notifications/zino_notification_scheduler.dart';
 import 'core/steps/step_background_worker.dart';
 import 'core/storage/local_storage_service.dart';
+
+/// FCM background/terminated message handler.
+///
+/// MUST be a top-level (or static) function annotated `@pragma('vm:entry-point')`
+/// — Android spawns a SEPARATE Dart isolate to run it, and the annotation is
+/// what stops tree-shaking from removing it in release builds. Without it,
+/// release builds silently lose background handling.
+///
+/// Deliberately does almost nothing: this isolate has no widget tree, so
+/// touching UI or navigating from here is invalid. The notification itself is
+/// drawn by the OS from the `notification` block the backend sends, and the tap
+/// is handled later by `onMessageOpenedApp`/`getInitialMessage` in the main
+/// isolate — see NotificationRouter.
+@pragma('vm:entry-point')
+Future<void> zitlasFirebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  debugPrint('[FCM BG] ${message.messageId} type=${message.data['type']}');
+}
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -48,6 +66,11 @@ Future<void> main() async {
   var firebaseReady = true;
   try {
     await bootstrapFirebase();
+    // Registered immediately after Firebase init and BEFORE runApp — FCM
+    // requires the background handler to be registered at startup, not lazily
+    // once some screen mounts, or a message arriving while the app is
+    // terminated has nothing to dispatch to.
+    FirebaseMessaging.onBackgroundMessage(zitlasFirebaseMessagingBackgroundHandler);
   } catch (e) {
     debugPrint('[ZITLAS] Firebase unavailable, continuing without it: $e');
     firebaseReady = false;

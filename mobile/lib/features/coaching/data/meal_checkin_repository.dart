@@ -137,6 +137,16 @@ class MealCheckinRepository {
     }
 
     await _notifyCoach(checkin);
+    // Real FCM push so the coach is told on a locked/closed phone — the writes
+    // in _notifyCoach only create in-app documents. The backend re-reads this
+    // check-in, verifies the caller is its athlete, and derives the coach from
+    // the document, so the recipient is never client-supplied. Best-effort:
+    // the check-in is already saved and must not fail over a push.
+    try {
+      await _api.post('/api/notifications/meal-checkin', body: {'checkinId': id});
+    } catch (e) {
+      if (kDebugMode) debugPrint('[MEAL CHECKIN] push trigger failed (non-fatal): $e');
+    }
     return checkin;
   }
 
@@ -167,6 +177,14 @@ class MealCheckinRepository {
     }, SetOptions(merge: true));
 
     await _notifyAthlete(checkin: checkin, reaction: reaction, comment: comment, coachName: coachName);
+    // Push the verdict to the athlete's phone (see submit() for why this is a
+    // backend call and why it is best-effort).
+    try {
+      await _api.post('/api/notifications/meal-review',
+          body: {'checkinId': checkin.checkinId});
+    } catch (e) {
+      if (kDebugMode) debugPrint('[MEAL CHECKIN] review push trigger failed (non-fatal): $e');
+    }
   }
 
   /// `POST /api/meal/estimate-nutrition` — the route that already exists.

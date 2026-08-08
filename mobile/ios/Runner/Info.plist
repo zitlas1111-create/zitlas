@@ -76,5 +76,15 @@
 	<string>ZITLAS needs photo access so you can attach meal and progress photos for your coach to review.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>ZITLAS uses the microphone for voice messages to Zino and your coach.</string>
+	<!-- Push notifications. `remote-notification` lets iOS wake the app for a
+	     data message while backgrounded; without it, background delivery is
+	     limited to what the OS draws from the notification payload alone.
+	     FirebaseAppDelegateProxyEnabled stays at its default (true) so
+	     firebase_messaging can swizzle the APNs callbacks itself — the Flutter
+	     plugin's supported configuration. -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 </dict>
 </plist>

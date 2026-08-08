@@ -330,6 +330,31 @@ service cloud.firestore {
     }
 
     // ── notifications — recipient-only read; mark-read only ──
+    // ── device_tokens/{fcmToken} — per-device FCM registry ──
+    // Keyed BY THE TOKEN so a physical device can only ever name ONE owning
+    // uid: when a second account signs in on the same phone it OVERWRITES this
+    // document, and the previous owner's device list no longer contains it.
+    // That is what structurally prevents cross-account push delivery (a
+    // uid-keyed subcollection would leave the old owner's copy alive and still
+    // receiving). See core/notifications/fcm_service.dart + services/
+    // notification_service.py, which resolves a user's devices with
+    // where('uid','==',uid).
+    //
+    // A client may only ever claim a token FOR ITSELF (request.resource.data.uid
+    // must be its own uid), so it can never point somebody else's device at its
+    // own account or redirect another user's notifications. The backend reads
+    // these with the Admin SDK, which bypasses rules, so no client read of
+    // another user's registration is needed — or allowed.
+    match /device_tokens/{fcmToken} {
+      allow read: if signedIn() && resource.data.uid == request.auth.uid;
+      allow create, update: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.fcmToken is string
+        && request.resource.data.enabled is bool;
+      // Logout cleanup — only the current owner may detach the device.
+      allow delete: if signedIn() && resource.data.uid == request.auth.uid;
+    }
+
     match /notifications/{id} {
       allow read: if signedIn() && resource.data.userId == request.auth.uid;
       // Cross-user by design (sender != recipient); constrained so it can only

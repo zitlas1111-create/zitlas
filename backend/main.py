@@ -44,6 +44,7 @@ from routes import coaching
 from routes import meal_ai
 from routes import payment
 from routes import admin
+from routes import notifications
 from routes import review_apply
 from routes import voice
 from routes import swap
@@ -189,6 +190,7 @@ app.include_router(coaching.router,     prefix="/api/coaching",    tags=["Coachi
 app.include_router(meal_ai.router,      prefix="/api/meal",        tags=["Meal AI"])
 app.include_router(payment.router,      prefix="/api/payment",     tags=["Payment"])
 app.include_router(admin.router,        prefix="/api/admin",       tags=["Admin"])
+app.include_router(notifications.router, prefix="/api/notifications", tags=["Notifications"])
 
 # ── Root redirect ────────────────────────────────────────────────────────────
 @app.get("/")

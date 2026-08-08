@@ -1,5 +1,6 @@
 import 'package:go_router/go_router.dart';
 
+import '../core/notifications/notification_router.dart' show rootNavigatorKey;
 import '../core/widgets/app_shell.dart';
 import '../features/admin/presentation/screens/admin_screen.dart';
 import '../features/ai_coach/presentation/screens/ai_coach_screen.dart';
@@ -39,6 +40,9 @@ import '../features/zino/voice/presentation/zino_call_screen.dart';
 /// feature navigation, role-gating).
 GoRouter buildRouter(AuthState authState) {
   return GoRouter(
+    // Shared with NotificationRouter, which needs a BuildContext to navigate
+    // from an FCM callback (which arrives from outside the widget tree).
+    navigatorKey: rootNavigatorKey,
     initialLocation: '/splash',
     refreshListenable: authState,
     redirect: (context, state) {

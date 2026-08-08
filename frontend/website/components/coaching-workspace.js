@@ -2062,6 +2062,12 @@
       reviewedAt: now, reviewedBy: myName() || 'Coach',
     }).then(function () {
       notify(c.athleteId, '🍽 Coach reviewed your ' + cap(c.mealType) + ' — ' + S.reviewDraft.score + '/10.', 'meal_reviewed');
+      // Push it too, so the athlete hears about the review even with the app
+      // closed. Backend verifies this caller IS the coach on that check-in and
+      // derives the athlete from the document.
+      if (typeof ZitlasNotify !== 'undefined' && ZitlasNotify.pushMealReview) {
+        ZitlasNotify.pushMealReview(c.checkinId);
+      }
       S.reviewDraft = null;
       closeSheet();
       toast('✅ Review sent to ' + (c.athleteName || 'the athlete'));
@@ -2193,6 +2199,12 @@
       })
       .then(function () {
         notify(otherUid(), '💬 New message from ' + (myName() || 'your coaching partner') + '.', 'chat');
+        // Real FCM push so the message reaches a backgrounded/closed app and a
+        // locked phone — notify() above only writes the in-app document. The
+        // backend derives the recipient from the chat room itself.
+        if (typeof ZitlasNotify !== 'undefined' && ZitlasNotify.pushChat) {
+          ZitlasNotify.pushChat(chatId(), text || '📷 Photo');
+        }
       })
       .catch(function (e) { console.error('[CW] chat send failed', e); toast('Message failed to send.'); });
   }

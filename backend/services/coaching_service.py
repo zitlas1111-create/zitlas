@@ -10,7 +10,6 @@ never has to import from a routes module.
 
 from __future__ import annotations
 
-import uuid
 from datetime import datetime, timezone
 
 # Mirrors frontend/assets/js/payment-service.js PLATFORM_FEE_PERCENT.
@@ -23,20 +22,27 @@ def now() -> datetime:
 
 
 def notify(db, user_id, title, message, *, category="expert", type=None,
-           action=None, action_id=None, priority="medium"):
-    """Mirrors frontend/assets/js/notification-center.js's send() doc shape
-    exactly, so notifications.js renders these identically to client-sent ones."""
+           action=None, action_id=None, priority="medium", data=None):
+    """Persist the in-app notification AND push it to the user's devices.
+
+    Mirrors frontend/assets/js/notification-center.js's send() doc shape
+    exactly, so notifications.js renders these identically to client-sent ones.
+
+    Delegates to services/notification_service.send(), which adds the FCM
+    delivery this helper never used to do — every caller of notify() (coaching
+    accepted/rejected/ended, payment, expiry…) therefore started reaching
+    locked phones without any per-route FCM code. Never raises: notification
+    delivery is strictly additive to the event that triggered it.
+    """
     if not user_id:
         return
-    notif_id = "notif_" + uuid.uuid4().hex[:20]
-    db.collection("notifications").document(notif_id).set({
-        "notificationId": notif_id, "userId": user_id,
-        "title": title, "message": message or "",
-        "category": category, "icon": None, "type": type,
-        "action": action, "actionId": action_id, "expertId": None,
-        "isRead": False, "priority": priority,
-        "createdAt": now().isoformat(),
-    })
+    from services import notification_service
+
+    notification_service.send(
+        db, user_id, title, message,
+        category=category, type=type, action=action, action_id=action_id,
+        priority=priority, data=data,
+    )
 
 
 def release_reservation_txn(tx, db, request_ref, req: dict, new_status: str,

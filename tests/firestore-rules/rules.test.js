@@ -209,6 +209,59 @@ describe('expert_certificates — verification tamper', () => {
   });
 });
 
+// device_tokens is the FCM registry keyed BY TOKEN, which is what makes
+// account switching safe on a shared device. These prove the two properties
+// that matter: a user can claim a token only for THEMSELVES, and the incoming
+// account can re-own a token the previous account left behind.
+describe('device_tokens — FCM registry / account switching', () => {
+  const TOKEN = 'fcmTokenXYZ';
+
+  it('a user CAN register this device for THEMSELVES', async () => {
+    await assertSucceeds(asA().doc(`device_tokens/${TOKEN}`).set({
+      fcmToken: TOKEN, uid: A, platform: 'android', deviceId: 'dev1', enabled: true,
+    }));
+  });
+  it('a user CANNOT register a device in ANOTHER user name (no push hijacking)', async () => {
+    await assertFails(asA().doc(`device_tokens/${TOKEN}`).set({
+      fcmToken: TOKEN, uid: B, platform: 'android', deviceId: 'dev1', enabled: true,
+    }));
+  });
+  it('the NEW account CAN re-own a token the previous account left behind (account switch)', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await ctx.firestore().doc(`device_tokens/${TOKEN}`).set({
+        fcmToken: TOKEN, uid: A, platform: 'android', deviceId: 'dev1', enabled: true,
+      });
+    });
+    await assertSucceeds(asB().doc(`device_tokens/${TOKEN}`).set({
+      fcmToken: TOKEN, uid: B, platform: 'android', deviceId: 'dev1', enabled: true,
+    }));
+  });
+  it('a user CANNOT read another user device registration', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await ctx.firestore().doc(`device_tokens/${TOKEN}`).set({
+        fcmToken: TOKEN, uid: A, platform: 'android', deviceId: 'dev1', enabled: true,
+      });
+    });
+    await assertFails(asB().doc(`device_tokens/${TOKEN}`).get());
+  });
+  it('the owner CAN delete their own registration (logout cleanup)', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await ctx.firestore().doc(`device_tokens/${TOKEN}`).set({
+        fcmToken: TOKEN, uid: A, platform: 'android', deviceId: 'dev1', enabled: true,
+      });
+    });
+    await assertSucceeds(asA().doc(`device_tokens/${TOKEN}`).delete());
+  });
+  it('a non-owner CANNOT delete someone else registration', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await ctx.firestore().doc(`device_tokens/${TOKEN}`).set({
+        fcmToken: TOKEN, uid: A, platform: 'android', deviceId: 'dev1', enabled: true,
+      });
+    });
+    await assertFails(asB().doc(`device_tokens/${TOKEN}`).delete());
+  });
+});
+
 describe('personal_coaching — escrow tamper', () => {
   it('athlete CANNOT self-activate a relationship', async () => {
     await assertFails(asA().doc(`personal_coaching/${A}`).update({ status: 'active' }));
