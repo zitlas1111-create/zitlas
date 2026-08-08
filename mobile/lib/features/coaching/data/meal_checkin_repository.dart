@@ -122,8 +122,13 @@ class MealCheckinRepository {
       confidenceScore: estimate == null ? null : asNumOrNull(estimate['confidence_score']),
     );
 
+    // A successful photo upload does NOT mean the review record was created —
+    // verified separately, after the write actually completes.
     await _db.collection('meal_checkins').doc(id).set(checkin.toMap());
-    if (kDebugMode) debugPrint('[MEAL CHECKIN] document created — $id');
+    if (kDebugMode) {
+      debugPrint('[MEAL_REVIEW_CREATE] athleteId=$athleteId coachId=$coachId '
+          'mealId=$id mealType=${checkin.mealType} status=${checkin.status}');
+    }
 
     await _notifyCoach(checkin);
     return checkin;

@@ -400,13 +400,21 @@
           .filter(function (c) { return c.coachId === S.opts.coachId; })
           .sort(function (a, b) { return (b.timestamp || '') < (a.timestamp || '') ? -1 : 1; });
         var pending = S.checkins.filter(function (c) { return c.status === 'pending'; }).length;
+        if (S.opts.role === 'coach') {
+          console.log('[MEAL_REVIEW_FETCH] coachId=' + S.opts.coachId +
+            ' athleteId=' + S.opts.athleteId + ' foundReviews=' + S.checkins.length +
+            ' pending=' + pending);
+        }
         var badge = $('cwCheckinBadge');
         if (badge && S.opts.role === 'coach') {
           badge.textContent = pending;
           badge.style.display = pending > 0 ? 'flex' : 'none';
         }
         if (S.tab === 'checkins') renderCheckins();
-      }, function (e) { console.warn('[CW] meal checkins listener error', e); }));
+      }, function (e) {
+        console.warn('[CW] meal checkins listener error', e);
+        if (S.opts.role === 'coach') console.error('[MEAL_REVIEW_FETCH] DENIED coachId=' + S.opts.coachId + ' athleteId=' + S.opts.athleteId, e);
+      }));
 
     S.unsubs.push(d.collection('workout_checkins')
       .where('athleteId', '==', S.opts.athleteId)
@@ -2009,6 +2017,8 @@
     var btn = $('cwReviewSave');
     if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
     var now = new Date().toISOString();
+    console.log('[MEAL_REVIEW_UPDATE] mealId=' + c.checkinId + ' rating=' + S.reviewDraft.reaction +
+      ' score=' + S.reviewDraft.score + ' feedback=' + JSON.stringify(S.reviewDraft.comment || null));
     d.collection('meal_checkins').doc(c.checkinId).update({
       status: 'reviewed',
       reaction: S.reviewDraft.reaction,

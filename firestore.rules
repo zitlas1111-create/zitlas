@@ -44,8 +44,23 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/personal_coaching/$(athleteId))
         && relData(athleteId).coachId == request.auth.uid
         && relData(athleteId).status == 'active'
-        && ('endDateTs' in relData(athleteId))
-        && request.time < relData(athleteId).endDateTs;
+        // endDateTs is the auto-expiry safety net (a relationship whose 30-day
+        // term passed but whose status the sweep hasn't yet flipped). It was
+        // ONLY added when routes/coaching.py's /accept started writing it —
+        // any relationship accepted before that fix landed has no endDateTs
+        // at all, and this used to hard-require it, so isActiveCoachOf was
+        // UNCONDITIONALLY false for every one of those relationships: the
+        // coach silently lost read access to meal_checkins/workout_checkins/
+        // coaching_plans/chat/the athlete's own profile for a coaching
+        // relationship the athlete's own app still showed as active — no
+        // meal a real athlete snapped ever reached a real coach's Meal
+        // Reviews for one of these. `status` on this doc is backend
+        // (Admin SDK)-only — see the write rule below, a client may only ever
+        // move it to 'reset'/'ended' — so trusting `status == 'active'` alone
+        // when endDateTs is simply ABSENT cannot be spoofed; it only restores
+        // access for relationships that predate the field. When endDateTs IS
+        // present, the strict time check still applies, unchanged.
+        && (!('endDateTs' in relData(athleteId)) || request.time < relData(athleteId).endDateTs);
     }
     // Chat membership via the participants array on the room doc.
     function chatParticipants(roomId) {

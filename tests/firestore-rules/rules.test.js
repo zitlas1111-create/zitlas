@@ -237,6 +237,34 @@ describe('coaching data — coach relationship gating', () => {
   it('assigned coach CAN review a meal checkin', async () => {
     await assertSucceeds(asC().doc(`meal_checkins/mc1`).update({ score: 8, status: 'reviewed' }));
   });
+
+  // Root cause of "coach never sees a submitted meal": relationships accepted
+  // before routes/coaching.py's /accept started writing endDateTs have NO
+  // such field at all, and isActiveCoachOf() used to hard-require it — so the
+  // coach's read was silently denied for every one of those (real, currently
+  // active per `status`) relationships, even though the athlete's own app
+  // showed coaching as active and let them submit the meal in the first
+  // place. `status` on this doc is backend/Admin-SDK-only (see
+  // 'athlete CANNOT self-activate a relationship' above) — a client cannot
+  // spoof this fallback into unlocking an unauthorized relationship.
+  it('active coach with NO endDateTs on the relationship (pre-fix legacy data) CAN still read a meal checkin', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await ctx.firestore().doc(`personal_coaching/${A}`).update({ endDateTs: deleteField() });
+    });
+    await assertSucceeds(asC().doc(`meal_checkins/mc1`).get());
+  });
+  it('active coach with NO endDateTs CAN still read athlete coaching_plans', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await ctx.firestore().doc(`personal_coaching/${A}`).update({ endDateTs: deleteField() });
+    });
+    await assertSucceeds(asC().doc(`coaching_plans/${A}`).get());
+  });
+  it('a GENUINELY expired relationship (endDateTs in the past) still DENIES the coach — the fallback does not weaken the normal case', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await ctx.firestore().doc(`personal_coaching/${A}`).update({ endDateTs: past });
+    });
+    await assertFails(asC().doc(`meal_checkins/mc1`).get());
+  });
 });
 
 describe('chat — participant gating', () => {
