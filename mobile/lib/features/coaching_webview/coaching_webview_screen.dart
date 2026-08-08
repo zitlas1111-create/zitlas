@@ -56,6 +56,30 @@ class CoachingWebViewScreen extends StatefulWidget {
     );
   }
 
+  /// The READ-ONLY Coach Profile an athlete browses before coaching exists —
+  /// bio, certificates, pricing, reviews — rendered by the Website's own
+  /// `cprofile.html` (deliberately NOT the native ExpertProfileScreen; that
+  /// screen stays in the tree only to host the three actions below).
+  ///
+  /// `webviewMode=profile` tells `webview-bridge.js` to intercept the site's
+  /// own "Verify Plan" / "Personal Coach" / "Chat Now" buttons and its header
+  /// back arrow, and hand them to Flutter instead of running the website's own
+  /// JS for them — so Request Review, Personal Coach, Chat, and payment all
+  /// stay on the EXISTING native flow (`/experts/:id?action=...`), and "back"
+  /// always returns to the native Experts list, never `coaches.html`.
+  ///
+  /// `expertId=` (not `id=`) matches the query key `cprofile.js`'s real page
+  /// `init()` checks FIRST (`params.get('expertId') || params.get('id')`) —
+  /// verified against the live site, not the older `getCoachId()` helper
+  /// (dead code, never called) that only reads `id=`.
+  factory CoachingWebViewScreen.coachProfile({required String expertId}) {
+    return CoachingWebViewScreen(
+      relativePath: '/pages/coaches/cprofile.html'
+          '?expertId=${Uri.encodeComponent(expertId)}&webview=1&webviewMode=profile',
+      title: 'Coach Profile',
+    );
+  }
+
   @override
   State<CoachingWebViewScreen> createState() => _CoachingWebViewScreenState();
 }
@@ -99,6 +123,12 @@ class _CoachingWebViewScreenState extends State<CoachingWebViewScreen> {
   /// Host of the backend/website, so the navigation delegate can tell an
   /// in-app link (keep in the WebView) from an external one (system browser).
   late final String _appHost = Uri.parse(Env.apiBaseUrl).host;
+
+  /// Non-null only for [CoachingWebViewScreen.coachProfile] — the expert whose
+  /// Website profile is loaded, used to hand "Verify Plan" / "Personal Coach" /
+  /// "Chat Now" back to the EXISTING native flow (`/experts/:id?action=...`)
+  /// when the bridge reports one of those buttons was tapped.
+  late final String? _coachProfileExpertId = Uri.parse(_url).queryParameters['expertId'];
 
   @override
   void initState() {
@@ -176,6 +206,10 @@ class _CoachingWebViewScreenState extends State<CoachingWebViewScreen> {
       _provideToken();
     } else if (m == 'logout') {
       _onLogout();
+    } else if (m == 'profile-back') {
+      _onProfileBack();
+    } else if (m.startsWith('profile-action:')) {
+      _onProfileAction(m.substring('profile-action:'.length));
     } else if (m.startsWith('auth-ok')) {
       _onAuthOk(m);
     } else if (m.startsWith('auth-fail:')) {
@@ -292,6 +326,50 @@ class _CoachingWebViewScreenState extends State<CoachingWebViewScreen> {
     }
     if (!mounted) return;
     router.go('/login');
+  }
+
+  /// Leaves this screen safely: pops if there is a route underneath (the
+  /// normal case — this screen was pushed), otherwise goes to the dashboard
+  /// so GoRouter is never left with zero pages.
+  void _leaveScreen(GoRouter router) {
+    if (router.canPop()) {
+      router.pop();
+    } else {
+      router.go('/dashboard');
+    }
+  }
+
+  /// The website's own header back arrow (`#backBtn`) was tapped inside the
+  /// Coach Profile. Left alone, that button navigates the WEBVIEW to the
+  /// website's own `coaches.html` listing — never what we want here. The
+  /// bridge intercepts it and asks Flutter to leave instead, landing back on
+  /// the native Experts list.
+  void _onProfileBack() {
+    _log('STEP profile-back — leaving Coach Profile WebView');
+    _leaveScreen(GoRouter.of(context));
+  }
+
+  /// One of the Coach Profile's own action buttons ("Verify Plan" / "Personal
+  /// Coach" / "Chat Now") was tapped. The bridge already prevented the
+  /// website's own JS from running for it. Leave the WebView first — Request
+  /// Review, Personal Coach, Chat, and payment must be 100% native, never
+  /// still-a-WebView underneath — then hand off to the EXISTING native
+  /// deep-link flow (`ExpertProfileScreen._handleDeepLink`, unchanged) for the
+  /// SAME expert, exactly as already happens when these actions are triggered
+  /// from the Experts list's own quick-action buttons.
+  ///
+  /// [action] is one of 'verify' | 'coach' | 'ask' — the same keys
+  /// `_handleDeepLink` already switches on.
+  void _onProfileAction(String action) {
+    final expertId = _coachProfileExpertId;
+    if (expertId == null || expertId.isEmpty) {
+      _log('STEP profile-action IGNORED — no expertId (not a coach-profile screen)');
+      return;
+    }
+    _log('STEP profile-action — action=$action expertId=$expertId');
+    final router = GoRouter.of(context);
+    _leaveScreen(router);
+    router.push('/experts/${Uri.encodeComponent(expertId)}?action=$action');
   }
 
   /// Maps a token-endpoint HTTP status to a human message. 404/405 means the
@@ -470,15 +548,11 @@ class _CoachingWebViewScreenState extends State<CoachingWebViewScreen> {
           return;
         }
         if (!mounted) return;
-        // 2) Leave the workspace safely. If pushed, pop; if this is the ONLY
-        //    route (reached via context.go — a notification tap or the coach
-        //    dashboard), popping would crash with "popped the last page off the
-        //    stack", so go to the dashboard. Never leaves GoRouter empty.
-        if (router.canPop()) {
-          router.pop();
-        } else {
-          router.go('/dashboard');
-        }
+        // 2) Leave the screen safely (pop if pushed; else the dashboard —
+        //    reached via context.go, e.g. a notification tap or the coach
+        //    dashboard, popping would crash with "popped the last page off the
+        //    stack"). Never leaves GoRouter empty.
+        _leaveScreen(router);
       },
       child: Scaffold(
         backgroundColor: Colors.black,
@@ -547,14 +621,7 @@ class _CoachingWebViewScreenState extends State<CoachingWebViewScreen> {
               child: const Text('Retry'),
             ),
             TextButton(
-              onPressed: () {
-                final router = GoRouter.of(context);
-                if (router.canPop()) {
-                  router.pop();
-                } else {
-                  router.go('/dashboard');
-                }
-              },
+              onPressed: () => _leaveScreen(GoRouter.of(context)),
               child: const Text('Go back'),
             ),
           ],

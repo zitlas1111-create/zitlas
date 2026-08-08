@@ -217,7 +217,12 @@ class _ExpertCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(kZitlasRadiusMd),
       child: InkWell(
         borderRadius: BorderRadius.circular(kZitlasRadiusMd),
-        onTap: () => context.push('/experts/${expert.id}'),
+        // Coach Profile is INTENTIONALLY the Website's cprofile.html in a
+        // WebView, not the native ExpertProfileScreen — see
+        // CoachingWebViewScreen.coachProfile. The "Request Review" and
+        // "Personal Coach" quick-action buttons below are UNCHANGED: they
+        // still go straight to the native '/experts/:id?action=...' flow.
+        onTap: () => context.push('/coach-profile/${expert.id}'),
         child: Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(

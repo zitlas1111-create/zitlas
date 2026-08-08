@@ -106,8 +106,11 @@ class _NotificationsBody extends StatelessWidget {
         context.go('/experts');
         break;
       case 'expert_profile':
+        // Coach Profile browsing is the Website's cprofile.html in a WebView
+        // (see CoachingWebViewScreen.coachProfile) — same screen a coach-card
+        // tap on the Experts list opens, so a notification lands the same way.
         if (n.actionId != null) {
-          context.push('/experts/${n.actionId}');
+          context.push('/coach-profile/${n.actionId}');
         } else {
           context.go('/experts');
         }

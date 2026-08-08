@@ -98,6 +98,19 @@ GoRouter buildRouter(AuthState authState) {
           coachId: state.uri.queryParameters['coachId'] ?? '',
         ),
       ),
+      // Read-only Coach Profile (browsing, before any coaching relationship
+      // exists) — INTENTIONALLY the Website's own cprofile.html in a WebView,
+      // not the native ExpertProfileScreen. That native screen stays in the
+      // tree and is used ONLY as the host for the existing native Request
+      // Review / Personal Coach / Chat flows (`/experts/:id?action=...`),
+      // which the profile WebView hands off to via CoachingWebViewScreen's
+      // profile-action bridge messages.
+      GoRoute(
+        path: '/coach-profile/:id',
+        builder: (context, state) => CoachingWebViewScreen.coachProfile(
+          expertId: state.pathParameters['id']!,
+        ),
+      ),
       GoRoute(path: '/reviews/:id', builder: (context, state) => const ReviewsScreen()),
       GoRoute(
         path: '/chat/:roomId',
