@@ -3166,9 +3166,14 @@ async function logout() {
   } catch (e) { console.warn('[ZITLAS] firestore terminate error:', e); }
 
   /* ── 2. Now end the session — no live listener remains to reject. ────── */
+  const uidBeforeLogout = (typeof ZitlasAuth !== 'undefined' && ZitlasAuth.currentUser)
+    ? ZitlasAuth.currentUser.uid : null;
+  console.log('[LOGOUT] Before logout UID:', uidBeforeLogout);
   try {
     if (typeof ZitlasAuth !== 'undefined') await ZitlasAuth.signOut();
   } catch (e) { console.warn('[ZITLAS] signOut error:', e); }
+  console.log('[LOGOUT] After signOut currentUser:',
+    (typeof ZitlasAuth !== 'undefined') ? ZitlasAuth.currentUser : 'ZitlasAuth undefined');
 
   /* ── 3. ONLY AFTER signOut completes: clear local storage. Clearing it
      while still signed in lets a mid-flight sync re-read or re-upload the
@@ -3183,7 +3188,7 @@ async function logout() {
       localStorage.removeItem(k);
     });
   }
-  console.log('[LOCAL STORAGE CLEARED]');
+  console.log('[LOGOUT] Cleared account cache: true');
   sessionStorage.removeItem('zitlas_guest');
 
   /* ── 4. Leave. Inside the Flutter WebView, hand logout to the native app
@@ -5172,8 +5177,11 @@ function _initInboxTabs(expert) {
           _expertStatus === 'approved'      ||
           _expertStatus === 'pending'       ||
           _legacyRole   === 'expert';
+        console.log('[AUTH STATE] Firebase UID:', uid, ' Detected role:', isExpert ? 'expert' : 'athlete');
         if (!isExpert) {
-          /* Athlete tried to access expert dashboard */
+          /* Athlete tried to access expert dashboard — same symmetric guard
+             as dashboard.js's own check for an expert landing there. */
+          console.log('[AUTH STATE] Redirect destination: ../dashboard/dashboard.html');
           window.location.href = '../dashboard/dashboard.html';
           return;
         }

@@ -100,35 +100,57 @@ function getAuthErrorMsg(code) {
 
 
 
+/* ROOT CAUSE this whole block guards against — "log out as Athlete A, log in
+   as Expert B, land on Athlete A's dashboard":
+   The password sign-in path below never had its OWN redirect — it relied
+   ENTIRELY on this passive listener firing for the FRESH sign-in. But this
+   SAME listener also auto-redirects an ALREADY-signed-in user the instant
+   this page loads (e.g. a session that was never genuinely Firebase
+   signed-out). Both paths call the SAME async Firestore role lookup before
+   redirecting, so if a stale pre-existing session's lookup is still in
+   flight when the athlete submits fresh Expert B credentials, EITHER
+   redirect can win the race — non-deterministically landing on the WRONG
+   account's dashboard. `_explicitAuthInProgress`, checked both before AND
+   after the async role lookup, makes this listener a NO-OP for the entire
+   duration of an explicit sign-in attempt, so only that attempt's OWN
+   (guaranteed-fresh) redirect can ever fire. */
+let _explicitAuthInProgress = false;
+
+/* Resolves 'expert' | 'athlete' | null (no users/{uid} doc yet) for `user`.
+   The ONE role-determination rule — shared by the passive listener, the
+   password sign-in path, and Google sign-in, so all three agree on what
+   "expert" means and none of them can drift out of sync with the others. */
+async function resolveRole(user) {
+  const docSnap = await ZitlasDB.collection('users').doc(user.uid).get();
+  if (!docSnap.exists) return null;
+  const data = docSnap.data();
+  const roles        = Array.isArray(data.roles) ? data.roles : [];
+  const expertStatus = data.expert_status || '';
+  const legacyRole   = data.role          || '';
+  const isExpert     =
+    roles.includes('expert')         ||
+    roles.includes('expert_pending') ||
+    expertStatus === 'approved'      ||
+    expertStatus === 'pending'       ||
+    legacyRole   === 'expert';
+  return isExpert ? 'expert' : 'athlete';
+}
+
 if (typeof ZitlasAuth !== 'undefined') {
   ZitlasAuth.onAuthStateChanged(async function (user) {
-    if (!user) return; 
-    console.log('[AUTH] onAuthStateChanged uid=' + user.uid + ' email=' + user.email);
+    if (!user) return;
+    if (_explicitAuthInProgress) return; // an explicit sign-in owns the redirect now
+    console.log('[AUTH STATE] Firebase UID:', user.uid, ' Firebase email:', user.email, ' Firebase auth state: signed-in');
     try {
-      const docSnap = await ZitlasDB.collection('users').doc(user.uid).get();
-      if (!docSnap.exists) return; 
-      const data = docSnap.data();
-      console.log('[USER FOUND] uid=' + user.uid + ' email=' + user.email);
+      const resolvedRole = await resolveRole(user);
+      if (resolvedRole == null) return; // no profile doc yet — nothing to redirect to
+      if (_explicitAuthInProgress) return; // re-check: an explicit sign-in may have started WHILE this was awaiting
+      console.log('[AUTH STATE] Detected role:', resolvedRole, ' Profile UID:', user.uid);
 
-      
-      const roles        = Array.isArray(data.roles) ? data.roles : [];
-      const expertStatus = data.expert_status || '';
-      const legacyRole   = data.role          || '';
-      const isExpert     =
-        roles.includes('expert')         ||
-        roles.includes('expert_pending') ||
-        expertStatus === 'approved'      ||
-        expertStatus === 'pending'       ||
-        legacyRole   === 'expert';
-      const resolvedRole = isExpert ? 'expert' : 'athlete';
-
-      if (isExpert) console.log('[EXPERT FOUND] uid=' + user.uid + ' email=' + user.email);
-
-      
       try {
         await ZitlasDB.collection('users').doc(user.uid).update({
-          name:       user.displayName || data.name  || '',
-          photo:      user.photoURL    || data.photo || data.photo_url || null,
+          name:       user.displayName || '',
+          photo:      user.photoURL    || null,
           last_login: firebase.firestore.FieldValue.serverTimestamp(),
         });
       } catch (_) {}
@@ -145,7 +167,7 @@ if (typeof ZitlasAuth !== 'undefined') {
               ? '../dashboard/dashboard.html?action=set-goal'
               : '../dashboard/dashboard.html';
           }());
-      console.log('[REDIRECT]', dest);
+      console.log('[AUTH STATE] Redirect destination:', dest);
       window.location.replace(dest);
     } catch (e) {
       console.warn('[AUTH] onAuthStateChanged error:', e);
@@ -264,6 +286,9 @@ if (loginForm) {
     }
 
     setLoading(true);
+    // From here on, this explicit attempt owns the redirect — see the
+    // passive onAuthStateChanged listener above for why this matters.
+    _explicitAuthInProgress = true;
 
     try {
       if (isSignupMode) {
@@ -329,13 +354,37 @@ if (loginForm) {
           throw firestoreErr; 
         }
       } else {
-        
-        await ZitlasAuth.signInWithEmailAndPassword(email, password);
+        // Explicit sign-in owns its OWN redirect using THIS uid — it must
+        // never depend on (or race against) the passive listener above,
+        // which is exactly what let a stale previous session's redirect win
+        // over a fresh Expert sign-in. See resolveRole()/the comment above.
+        const cred = await ZitlasAuth.signInWithEmailAndPassword(email, password);
+        const user = cred.user;
         if (rememberInput?.checked) localStorage.setItem('zitlas_remember', 'true');
-        
+        console.log('[LOGIN] New Firebase UID:', user.uid, ' New Firebase email:', user.email);
+
+        const resolvedRole = await resolveRole(user);
+        console.log('[LOGIN] New detected role:', resolvedRole);
+        if (resolvedRole == null) {
+          setLoading(false);
+          _explicitAuthInProgress = false;
+          showToast('Account setup incomplete. Please contact support.');
+          return;
+        }
+        try {
+          await ZitlasDB.collection('users').doc(user.uid).update({
+            name:       user.displayName || '',
+            photo:      user.photoURL    || null,
+            last_login: firebase.firestore.FieldValue.serverTimestamp(),
+          });
+        } catch (_) {}
+        syncFirebaseUser(user, resolvedRole);
+        selectedRole = resolvedRole;
+        showLoginOverlay();
       }
     } catch (err) {
       setLoading(false);
+      _explicitAuthInProgress = false; // this attempt failed — don't leave the passive listener disabled
       showToast(getAuthErrorMsg(err.code));
       if (['auth/user-not-found', 'auth/wrong-password', 'auth/invalid-credential'].includes(err.code)) {
         setInputError('emailGroup');
@@ -373,35 +422,21 @@ if (googleBtn) {
 
     try {
       setGoogleLoading(true);
+      // Same reasoning as the password path above — see the comment on
+      // _explicitAuthInProgress near the passive onAuthStateChanged listener.
+      _explicitAuthInProgress = true;
 
       const provider = new firebase.auth.GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
 
       const result = await ZitlasAuth.signInWithPopup(provider);
       const user   = result.user;
-      console.log('[GOOGLE LOGIN] uid=' + user.uid + ' email=' + user.email);
+      console.log('[LOGIN] New Firebase UID:', user.uid, ' New Firebase email:', user.email);
 
-      
-      const doc = await ZitlasDB.collection('users').doc(user.uid).get();
+      const resolvedRole = await resolveRole(user);
 
-      if (doc.exists) {
-        
-        const data        = doc.data();
-        const roles       = Array.isArray(data.roles) ? data.roles : [];
-        const expertStatus = data.expert_status || '';
-        const legacyRole  = data.role           || '';
-        const isExpert    =
-          roles.includes('expert')         ||
-          roles.includes('expert_pending') ||
-          expertStatus === 'approved'      ||
-          expertStatus === 'pending'       ||
-          legacyRole   === 'expert';
-        const resolvedRole = isExpert ? 'expert' : 'athlete';
-
-        console.log('[USER FOUND] uid=' + user.uid + ' resolvedRole=' + resolvedRole);
-        if (isExpert) console.log('[EXPERT FOUND] uid=' + user.uid + ' email=' + user.email);
-
-        
+      if (resolvedRole != null) {
+        console.log('[LOGIN] New detected role:', resolvedRole);
         try {
           await ZitlasDB.collection('users').doc(user.uid).update({
             name:       user.displayName || '',
@@ -436,7 +471,7 @@ if (googleBtn) {
 
     } catch (err) {
       setGoogleLoading(false);
-      
+      _explicitAuthInProgress = false; // this attempt failed — don't leave the passive listener disabled
       if (err.code === 'auth/popup-closed-by-user' ||
           err.code === 'auth/cancelled-popup-request') return;
       console.error('[ZITLAS] Google sign-in error:', err);

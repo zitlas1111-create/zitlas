@@ -142,10 +142,18 @@
         }
       } catch (e) { console.warn('[ZITLAS] firestore terminate error:', e); }
 
-      /* Firebase sign-out (no-op if not configured) */
+      /* Firebase sign-out — this MUST actually execute; clearing localStorage
+         or navigating away is not a substitute (see the comment on
+         _clearAuthLocalStorage() in login.js for why this specific ordering
+         — signOut BEFORE the cache purge — matters). */
+      const uidBeforeLogout = (typeof ZitlasAuth !== 'undefined' && ZitlasAuth.currentUser)
+        ? ZitlasAuth.currentUser.uid : null;
+      console.log('[LOGOUT] Before logout UID:', uidBeforeLogout);
       try {
         if (typeof ZitlasAuth !== 'undefined') await ZitlasAuth.signOut();
       } catch (e) { console.warn('[ZITLAS] signOut error:', e); }
+      console.log('[LOGOUT] After signOut currentUser:',
+        (typeof ZitlasAuth !== 'undefined') ? ZitlasAuth.currentUser : 'ZitlasAuth undefined');
 
       /* ACCOUNT GUARD — full user-cache purge (plans, goal, membership,
          wallet, reviews, chats… not just auth keys). The old partial
@@ -160,7 +168,7 @@
          'zitlas_expert_applied','zitlas_experts'].forEach(k => localStorage.removeItem(k));
         ['zitlas_guest','zitlas_pending_action','user'].forEach(k => sessionStorage.removeItem(k));
       }
-      console.log('[LOCAL STORAGE CLEARED]');
+      console.log('[LOGOUT] Cleared account cache: true');
 
       window.location.replace('../login/login.html');
     });

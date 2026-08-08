@@ -480,6 +480,12 @@
      AUTH HELPER
   ══════════════════════════════════════════ */
   function isLoggedIn() {
+    // The LIVE Firebase auth state is authoritative when available — by the
+    // time init() runs (see boot() below) ZitlasAuth.currentUser has already
+    // been resolved. localStorage presence remains the fallback for a guest
+    // session (sessionStorage.zitlas_guest) or the brief window before
+    // Firebase has finished restoring a persisted session.
+    if (typeof ZitlasAuth !== 'undefined' && ZitlasAuth.currentUser) return true;
     const result = !!(
       localStorage.getItem('zitlas_token') ||
       localStorage.getItem('zitlas_user')  ||
@@ -2079,20 +2085,53 @@
      the whole init() — when another device changes something while this
      page stays open. Falls straight through to the original behavior for
      logged-out users or when cloud-sync isn't loaded on this page. */
+  function proceedAsAthlete(user) {
+    ZitlasCloudSync.hydrateOnLoad(user.uid).then(function () {
+      init();
+      ZitlasCloudSync.attachRealtime(user.uid, function () {
+        safeRun('renderGoalCard',      renderGoalCard);
+        safeRun('renderSwotWidget',    renderSwotWidget);
+        safeRun('renderTrainingWidget', renderTrainingWidget);
+        /* personalInfo (name/photo) syncs through the same doc — a photo
+           changed on another device updates this screen live */
+        safeRun('applyProfileImages',  applyProfileImages);
+      });
+    });
+  }
+
   function boot() {
     if (typeof ZitlasAuth === 'undefined' || typeof ZitlasCloudSync === 'undefined') { init(); return; }
     ZitlasAuth.onAuthStateChanged(function (user) {
       if (!user) { init(); return; }
-      ZitlasCloudSync.hydrateOnLoad(user.uid).then(function () {
-        init();
-        ZitlasCloudSync.attachRealtime(user.uid, function () {
-          safeRun('renderGoalCard',      renderGoalCard);
-          safeRun('renderSwotWidget',    renderSwotWidget);
-          safeRun('renderTrainingWidget', renderTrainingWidget);
-          /* personalInfo (name/photo) syncs through the same doc — a photo
-             changed on another device updates this screen live */
-          safeRun('applyProfileImages',  applyProfileImages);
-        });
+      console.log('[AUTH STATE] Firebase UID:', user.uid, ' Firebase email:', user.email);
+      // Symmetric with expert-dashboard.js's OWN guard (which bounces a
+      // non-expert here) — an EXPERT account must never render the athlete
+      // dashboard, using stale localStorage from a previous athlete session,
+      // just because it happened to land on this URL. The CURRENT
+      // authenticated uid is the only thing this checks — never a cached
+      // role/name from localStorage.
+      if (typeof ZitlasDB === 'undefined') { proceedAsAthlete(user); return; }
+      ZitlasDB.collection('users').doc(user.uid).get().then(function (docSnap) {
+        if (docSnap.exists) {
+          var data  = docSnap.data();
+          var roles = Array.isArray(data.roles) ? data.roles : [];
+          var isExpert =
+            roles.includes('expert')         ||
+            roles.includes('expert_pending') ||
+            data.expert_status === 'approved' ||
+            data.expert_status === 'pending'  ||
+            data.role === 'expert';
+          console.log('[AUTH STATE] Detected role:', isExpert ? 'expert' : 'athlete', ' Profile UID:', user.uid);
+          if (isExpert) {
+            console.log('[AUTH STATE] Redirect destination: ../experts/expert-dashboard.html');
+            window.location.replace('../experts/expert-dashboard.html');
+            return;
+          }
+        }
+        proceedAsAthlete(user);
+      }).catch(function (e) {
+        console.warn('[ZITLAS] role check failed — proceeding as athlete:', e);
+        proceedAsAthlete(user);
       });
     });
   }
