@@ -12,6 +12,7 @@ import '../core/notifications/notification_router.dart';
 import '../features/auth/auth_state.dart';
 import '../features/auth/data/auth_repository.dart';
 import 'router.dart';
+import 'splash_gate.dart';
 import 'theme.dart';
 
 class ZitlasApp extends StatelessWidget {
@@ -79,10 +80,30 @@ abstract final class _FcmBootstrap {
       if (kDebugMode) debugPrint('[FCM] init failed: $e');
     });
     // A cold start FROM a notification can only navigate once the session is
-    // real and the first frame exists — both are true here.
-    if (NotificationRouter.hasPending) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => NotificationRouter.consumePending());
+    // real AND the splash has released the route.
+    if (NotificationRouter.hasPending) _consumePendingWhenReady();
+  }
+
+  /// Waits for the splash gate before routing a cold-start notification.
+  ///
+  /// Without this the payload would be LOST: while the gate still holds,
+  /// router.redirect() forces every location back to `/splash`, so a push to
+  /// the notification's destination would be redirected away — and the pending
+  /// payload is cleared when consumed, so there would be nothing left to retry.
+  static void _consumePendingWhenReady() {
+    void consume() => WidgetsBinding.instance
+        .addPostFrameCallback((_) => NotificationRouter.consumePending());
+
+    if (SplashGate.instance.isReady) {
+      consume();
+      return;
     }
+    void listener() {
+      if (!SplashGate.instance.isReady) return;
+      SplashGate.instance.removeListener(listener);
+      consume();
+    }
+    SplashGate.instance.addListener(listener);
   }
 
   static void _attachListeners() {

@@ -134,6 +134,47 @@ class _CoachingWebViewScreenState extends State<CoachingWebViewScreen> {
   /// in-app link (keep in the WebView) from an external one (system browser).
   late final String _appHost = Uri.parse(Env.apiBaseUrl).host;
 
+  /// The page this screen was opened ON — its ROOT. Back must never escape
+  /// past it into an unrelated part of the website; at the root the only way
+  /// out is the exit confirmation, which returns to the NATIVE screen below.
+  late final String _rootPath = Uri.parse(_url).path;
+
+  /// Path of the page currently showing, tracked from the navigation callbacks
+  /// (this webview_flutter version has no onUrlChange). Compared against
+  /// [_rootPath] to decide "walk website history" vs "offer to exit".
+  String? _currentPath;
+
+  /// Website pages that legitimately belong to the coaching surface. Anything
+  /// else on our own host — the athlete profile, the site dashboard, the
+  /// website's own Experts list — is NOT part of this flow: Flutter owns those
+  /// screens natively, so navigating there inside the coaching WebView is
+  /// always wrong, and letting one into the history is what made "Back" land
+  /// on the website user profile.
+  static const _coachingPaths = <String>[
+    '/pages/coaches/cprofile.html',
+    '/pages/coaches/expert-review.html',
+    '/pages/experts/expert-dashboard.html',
+    '/pages/experts/modify-diet.html',
+    '/pages/experts/modify-workout.html',
+    '/pages/experts/pricing.html',
+  ];
+
+  static bool _isCoachingPath(String path) {
+    final p = path.toLowerCase();
+    for (final allowed in _coachingPaths) {
+      if (p == allowed || p.endsWith(allowed)) return true;
+    }
+    return false;
+  }
+
+  bool get _isAtRoot {
+    final current = _currentPath;
+    // Before the first page commits, treat it as the root: there is no
+    // website history to walk yet, so Back must offer to exit.
+    if (current == null) return true;
+    return current.toLowerCase() == _rootPath.toLowerCase();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -154,10 +195,12 @@ class _CoachingWebViewScreenState extends State<CoachingWebViewScreen> {
         NavigationDelegate(
           onPageStarted: (url) {
             _log('STEP page-started — $url');
+            _currentPath = Uri.tryParse(url)?.path ?? _currentPath;
             if (mounted) setState(() => _loading = true);
           },
           onPageFinished: (url) {
-            _log('STEP page-finished — $url');
+            _log('STEP page-finished — $url (atRoot=$_isAtRoot)');
+            _currentPath = Uri.tryParse(url)?.path ?? _currentPath;
             if (mounted) setState(() => _loading = false);
           },
           onWebResourceError: (WebResourceError err) {
@@ -329,13 +372,60 @@ class _CoachingWebViewScreenState extends State<CoachingWebViewScreen> {
   }
 
   /// Leaves this screen safely: pops if there is a route underneath (the
-  /// normal case — this screen was pushed), otherwise goes to the dashboard
-  /// so GoRouter is never left with zero pages.
+  /// normal case — this screen was pushed from the native Experts list),
+  /// otherwise goes to the dashboard so GoRouter is never left with zero
+  /// pages. Disposing the WebView (listeners, JS channel, controller) is
+  /// handled by [dispose]; the Firebase session is deliberately untouched —
+  /// leaving coaching is not signing out.
   void _leaveScreen(GoRouter router) {
     if (router.canPop()) {
       router.pop();
     } else {
       router.go('/dashboard');
+    }
+  }
+
+  /// Asks before leaving the coaching surface, then leaves.
+  ///
+  /// Shown when the user is at the WebView ROOT — there is no coaching history
+  /// left to walk, so the only remaining move is out of the module entirely.
+  /// Guarded so the hardware back button and the website's own back arrow
+  /// cannot stack two dialogs.
+  bool _exitDialogOpen = false;
+
+  Future<void> _confirmExit() async {
+    if (_exitDialogOpen || !mounted) return;
+    _exitDialogOpen = true;
+    final router = GoRouter.of(context);
+    try {
+      final leave = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: const Color(0xFF1B1B1F),
+          title: const Text(
+            'Leave coaching?',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16),
+          ),
+          content: Text(
+            'You’ll go back to Experts. Your coaching, messages and plans are '
+            'all saved — nothing is lost.',
+            style: TextStyle(color: Colors.white.withValues(alpha: 0.72), fontSize: 13, height: 1.45),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Exit', style: TextStyle(fontWeight: FontWeight.w800)),
+            ),
+          ],
+        ),
+      );
+      if (leave == true && mounted) _leaveScreen(router);
+    } finally {
+      _exitDialogOpen = false;
     }
   }
 
@@ -456,7 +546,30 @@ class _CoachingWebViewScreenState extends State<CoachingWebViewScreen> {
     // handler — the embedded module never becomes a general-purpose browser.
     final isHttp = uri.scheme == 'http' || uri.scheme == 'https';
     final sameHost = uri.host.isEmpty || uri.host == _appHost;
-    if (isHttp && sameHost) return NavigationDecision.navigate;
+
+    if (isHttp && sameHost) {
+      // ROOT CAUSE of "Back from Coach Profile lands on the website user
+      // profile": pages on our own host that are NOT part of the coaching
+      // surface could be navigated to (the site's shared bottom navbar links
+      // to /pages/profile/profile.html, and cprofile.js falls back to
+      // coaches.html when it cannot resolve an expert). Once such a page
+      // entered the WebView history, walking back landed on it.
+      //
+      // Flutter owns those screens natively, so they are never a legitimate
+      // destination here. Blocking them keeps the history purely coaching —
+      // which is what makes back navigation predictable — and does not depend
+      // on the website's own CSS chrome-hiding having loaded.
+      if (!_isCoachingPath(uri.path)) {
+        _log('STEP nav-blocked (not a coaching page) — ${uri.path}');
+        // The website's own header back arrow navigates to coaches.html, and
+        // its navbar to profile.html. Both mean "the user wants out of here",
+        // so honour that with the SAME exit confirmation the hardware back
+        // button shows — one behaviour, two buttons.
+        _confirmExit();
+        return NavigationDecision.prevent;
+      }
+      return NavigationDecision.navigate;
+    }
 
     _launchExternal(uri);
     return NavigationDecision.prevent;
@@ -506,21 +619,22 @@ class _CoachingWebViewScreenState extends State<CoachingWebViewScreen> {
       canPop: false,
       onPopInvokedWithResult: (bool didPop, Object? _) async {
         if (didPop) return;
-        // Capture the router BEFORE the await so we never touch BuildContext
-        // across the async gap.
-        final router = GoRouter.of(context);
-        // 1) Walk the page's OWN history first (native-feeling back inside the
-        //    workspace).
-        if (await _controller.canGoBack()) {
+        // 1) INTERNAL coaching navigation (profile -> request -> payment ->
+        //    active coaching -> diet/training/chat…): walk the website's own
+        //    history, which feels native and preserves the flow.
+        //
+        //    Anchored on the ROOT rather than on canGoBack() alone: history can
+        //    contain entries from redirects during load, and following those
+        //    blindly is exactly how Back used to escape the coaching surface.
+        if (!_isAtRoot && await _controller.canGoBack()) {
           await _controller.goBack();
           return;
         }
         if (!mounted) return;
-        // 2) Leave the screen safely (pop if pushed; else the dashboard —
-        //    reached via context.go, e.g. a notification tap or the coach
-        //    dashboard, popping would crash with "popped the last page off the
-        //    stack"). Never leaves GoRouter empty.
-        _leaveScreen(router);
+        // 2) At the ROOT there is no coaching history left — the only move is
+        //    out of the module, and that is worth confirming rather than
+        //    dropping the user out of a paid coaching session on a stray tap.
+        await _confirmExit();
       },
       child: Scaffold(
         backgroundColor: Colors.black,

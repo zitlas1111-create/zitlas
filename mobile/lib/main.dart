@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'app/app.dart';
+import 'app/splash_gate.dart';
 import 'core/config/firebase_bootstrap.dart';
 import 'core/notifications/zino_notification_scheduler.dart';
 import 'core/steps/step_background_worker.dart';
@@ -54,6 +55,11 @@ Future<void> main() async {
       systemStatusBarContrastEnforced: false,
     ),
   );
+
+  // Starts the branded splash's minimum-duration clock NOW, so it runs
+  // CONCURRENTLY with Firebase init and the session check below rather than
+  // adding delay after them. See SplashGate.
+  SplashGate.instance.start();
 
   await LocalStorageService.init();
 

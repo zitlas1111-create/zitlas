@@ -1,12 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Modify this file to customize your launch splash screen -->
+<!-- The very FIRST thing shown on a cold start, before the Flutter engine has
+     drawn a single frame. It used to be @android:color/white, which flashed a
+     white screen and then cut to the black ZITLAS splash — the jarring
+     "default loading screen" effect. Matching the splash's own background
+     (ZitlasColors.bgPrimary, #000000) makes the handover invisible: the app
+     appears to open straight into the branded splash. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="@android:color/white" />
-
-    <!-- You can insert your own image assets here -->
-    <!-- <item>
-        <bitmap
-            android:gravity="center"
-            android:src="@mipmap/launch_image" />
-    </item> -->
+    <item android:drawable="@color/zitlas_splash_bg" />
 </layer-list>

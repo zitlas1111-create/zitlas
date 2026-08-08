@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show Listenable;
 import 'package:go_router/go_router.dart';
 
 import '../core/notifications/notification_router.dart' show rootNavigatorKey;
@@ -31,6 +32,7 @@ import '../features/workout/presentation/screens/workout_screen.dart';
 import '../features/zino/data/zino_context_builder.dart';
 import '../features/zino/presentation/screens/zino_screen.dart';
 import '../features/zino/voice/presentation/zino_call_screen.dart';
+import 'splash_gate.dart';
 
 /// Routing foundation. The 5 bottom-nav tabs (matching `components/navbar.js`
 /// on web) live under a [StatefulShellRoute] so each tab keeps its own back
@@ -44,16 +46,23 @@ GoRouter buildRouter(AuthState authState) {
     // from an FCM callback (which arrives from outside the widget tree).
     navigatorKey: rootNavigatorKey,
     initialLocation: '/splash',
-    refreshListenable: authState,
+    // Merged so BOTH inputs to "may we leave the splash yet?" re-trigger the
+    // redirect: the auth status resolving, and the splash's minimum duration
+    // elapsing. A bare timer would otherwise never re-evaluate the redirect.
+    refreshListenable: Listenable.merge([authState, SplashGate.instance]),
     redirect: (context, state) {
       final status = authState.status;
       final loc = state.matchedLocation;
       final onSplash = loc == '/splash';
       final onLogin = loc == '/login';
 
-      // Before Firebase's persisted-session check resolves, stay on the
-      // splash screen — never flash /login or a dashboard first.
-      if (status == AuthStatus.unknown) {
+      // Stay on the branded splash until BOTH are true:
+      //   * Firebase's persisted-session check has resolved (so an
+      //     already-signed-in user never flashes /login first), and
+      //   * the splash's short minimum has elapsed (so a fast startup doesn't
+      //     flicker the logo for two frames).
+      // Whichever finishes last releases the app — see SplashGate.
+      if (status == AuthStatus.unknown || !SplashGate.instance.isReady) {
         return onSplash ? null : '/splash';
       }
 
