@@ -107,6 +107,10 @@ flutter:
   # ZITLAS website auth-page assets, not new artwork.
   assets:
     - assets/images/logo.png
+    # The loading graphic (neon runner badge) shown while a Website WebView
+    # loads — see core/widgets/zitlas_loading_ring.dart. Listed individually
+    # like the rest; the assets block names files, not the directory.
+    - assets/images/lodo.png
     - assets/images/loginbg.png
     - assets/images/homebg.png
     - assets/images/zino.png

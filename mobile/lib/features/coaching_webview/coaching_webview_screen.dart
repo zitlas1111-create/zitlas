@@ -14,6 +14,7 @@ import 'package:webview_flutter_android/webview_flutter_android.dart';
 import '../../core/config/env.dart';
 import '../../core/network/api_client.dart';
 import '../../core/network/api_exception.dart';
+import '../../core/widgets/zitlas_loading_ring.dart';
 
 /// Personal Coaching, served by the Website inside a secure, chromeless
 /// WebView until native Flutter reaches feature parity. This is the ONLY
@@ -103,6 +104,14 @@ class _CoachingWebViewScreenState extends State<CoachingWebViewScreen> {
   bool _loading = true;
   bool _failed = false;
   bool _tokenInFlight = false;
+
+  /// Whether the branded loading cover is still in the widget tree.
+  ///
+  /// Separate from [_loading] so the cover can FADE out (rather than vanish)
+  /// and then be removed once the fade ends — leaving it mounted at opacity 0
+  /// would keep the ring's AnimationController ticking behind a fully loaded
+  /// page for no reason.
+  bool _loadingCoverMounted = true;
 
   /// Message shown on the error view.
   String? _errorMessage;
@@ -196,7 +205,14 @@ class _CoachingWebViewScreenState extends State<CoachingWebViewScreen> {
           onPageStarted: (url) {
             _log('STEP page-started — $url');
             _currentPath = Uri.tryParse(url)?.path ?? _currentPath;
-            if (mounted) setState(() => _loading = true);
+            // Re-mount the cover as well as re-showing it: a later navigation
+            // (or a pull-to-refresh) may have already faded and removed it.
+            if (mounted) {
+              setState(() {
+                _loading = true;
+                _loadingCoverMounted = true;
+              });
+            }
           },
           onPageFinished: (url) {
             _log('STEP page-finished — $url (atRoot=$_isAtRoot)');
@@ -620,7 +636,39 @@ class _CoachingWebViewScreenState extends State<CoachingWebViewScreen> {
         child: Stack(
           children: [
             WebViewWidget(controller: _controller),
-            if (_loading) const LinearProgressIndicator(minHeight: 2),
+            // Branded loading cover: lodo.png with the animated neon ring,
+            // shown while the page loads and faded out once it is ready.
+            //
+            // Driven entirely by the EXISTING WebView loading lifecycle
+            // (onPageStarted sets _loading, onPageFinished clears it) — there
+            // is no artificial delay anywhere, so it disappears exactly when
+            // the website is actually ready.
+            //
+            // `_loadingCoverMounted` keeps it in the tree only until the fade
+            // finishes and then removes it, so the ring's ticker is not left
+            // spinning invisibly behind a loaded page.
+            if (_loadingCoverMounted)
+              Positioned.fill(
+                child: IgnorePointer(
+                  // Blocks taps on a half-loaded page while visible, and gets
+                  // out of the way (including of pull-to-refresh) once faded.
+                  ignoring: !_loading,
+                  child: AnimatedOpacity(
+                    opacity: _loading ? 1 : 0,
+                    duration: const Duration(milliseconds: 280),
+                    curve: Curves.easeOut,
+                    onEnd: () {
+                      if (!_loading && mounted) {
+                        setState(() => _loadingCoverMounted = false);
+                      }
+                    },
+                    child: const ColoredBox(
+                      color: Colors.black,
+                      child: Center(child: ZitlasLoadingRing()),
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
