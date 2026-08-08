@@ -136,21 +136,55 @@
     }
   }
 
+  /* The uid the NATIVE app is signed in as, passed on the URL by
+     CoachingWebViewScreen. The web session must belong to THIS user. */
+  var expectedUid = (function () {
+    var m = /[?&]uid=([^&]+)/.exec(window.location.search);
+    return m ? decodeURIComponent(m[1]) : null;
+  })();
+
   /* Wait for the SDK to finish restoring any PERSISTED session before deciding
      we need a token — currentUser is null synchronously on a cold load even
      when a valid session is about to be restored. */
   var settled = false;
-  function settle(hasUser) {
+  function settle(user) {
     if (settled) return;
     settled = true;
-    if (!hasUser) requestTokenFromFlutter();
-    else report('session-restored');
+
+    if (!user) { requestTokenFromFlutter(); return; }
+
+    /* ROOT CAUSE THIS FIXES — "log out, log in as an EXPERT, land in the
+       ATHLETE area":
+       The Firebase JS SDK persists its OWN session in WebView storage,
+       completely separately from the native Firebase session. Signing out
+       natively does NOT end it. This used to only ask "is there a session?"
+       and, finding the PREVIOUS account's, reported session-restored and never
+       minted a token — so the coaching pages ran as the previous user, read
+       THEIR users/{uid} doc, decided they were not an expert, and bounced to
+       the athlete dashboard. The uid was never compared, so the mismatch was
+       invisible.
+       Now a session belonging to anyone other than the current native user is
+       signed out and replaced with a fresh custom-token sign-in. */
+    if (expectedUid && user.uid !== expectedUid) {
+      report('session-mismatch:' + user.uid + '->' + expectedUid);
+      firebase.auth().signOut()
+        .then(function () {
+          tokenRequested = false; // allow a fresh request for the new user
+          requestTokenFromFlutter();
+        })
+        .catch(function (e) {
+          report('auth-fail:stale-signout-failed');
+          try { console.error('[WEBVIEW] stale session sign-out failed', e); } catch (_) {}
+        });
+      return;
+    }
+    report('session-restored:' + user.uid);
   }
 
   try {
     firebase.auth().onAuthStateChanged(function (user) {
       report('auth-state:' + (user ? user.uid : 'null'));
-      settle(!!user);
+      settle(user);
     });
   } catch (e) {
     report('auth-fail:no-firebase');
@@ -161,6 +195,6 @@
   window.setTimeout(function () {
     var cur = null;
     try { cur = firebase.auth().currentUser; } catch (e) {}
-    settle(!!cur);
+    settle(cur);
   }, 2500);
 })();

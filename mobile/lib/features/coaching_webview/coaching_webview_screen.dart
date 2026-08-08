@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
@@ -15,6 +16,7 @@ import '../../core/config/env.dart';
 import '../../core/network/api_client.dart';
 import '../../core/network/api_exception.dart';
 import '../../core/widgets/zitlas_loading_ring.dart';
+import '../auth/auth_state.dart';
 
 /// Personal Coaching, served by the Website inside a secure, chromeless
 /// WebView until native Flutter reaches feature parity. This is the ONLY
@@ -137,7 +139,23 @@ class _CoachingWebViewScreenState extends State<CoachingWebViewScreen> {
   double _pullStartDy = 0;
   bool _arming = false;
 
-  String get _url => '${Env.apiBaseUrl}${widget.relativePath}';
+  /// The page to load, with the CURRENT native uid appended.
+  ///
+  /// `uid` is what lets webview-bridge.js verify that the web session it
+  /// restored belongs to the user who is signed in natively. The Firebase JS
+  /// SDK persists its own session in WebView storage, which a native sign-out
+  /// does NOT clear — so without this check an account switch would keep
+  /// running the coaching pages as the PREVIOUS user (which is exactly how an
+  /// expert ended up in the athlete area). Not a credential: a uid is not
+  /// secret and grants nothing on its own; the actual sign-in still requires a
+  /// backend-minted custom token.
+  String get _url {
+    final base = '${Env.apiBaseUrl}${widget.relativePath}';
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null || uid.isEmpty) return base;
+    final sep = base.contains('?') ? '&' : '?';
+    return '$base${sep}uid=${Uri.encodeComponent(uid)}';
+  }
 
   /// Host of the backend/website, so the navigation delegate can tell an
   /// in-app link (keep in the WebView) from an external one (system browser).
@@ -396,9 +414,18 @@ class _CoachingWebViewScreenState extends State<CoachingWebViewScreen> {
   void _leaveScreen(GoRouter router) {
     if (router.canPop()) {
       router.pop();
-    } else {
-      router.go('/dashboard');
+      return;
     }
+    // Nothing underneath (this screen was reached with go(), e.g. the
+    // post-login redirect or a notification tap). The fallback MUST be
+    // role-aware: hardcoding '/dashboard' here sent an EXPERT into the athlete
+    // home — a silent role downgrade, and one of the ways an expert ended up in
+    // the athlete area. Read the role from the live AuthState, never a cached
+    // or assumed value.
+    final isExpert = context.read<AuthState>().profile?.resolvedRole == 'expert';
+    final fallback = isExpert ? '/expert-dashboard' : '/dashboard';
+    _log('STEP leave-screen — nothing to pop, role-aware fallback -> $fallback');
+    router.go(fallback);
   }
 
 

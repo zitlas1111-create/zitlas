@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../core/notifications/fcm_service.dart';
 import '../../core/storage/account_guard.dart';
+import '../coaching_webview/coaching_webview_session.dart';
 import '../../models/user_model.dart';
 import 'data/auth_repository.dart';
 
@@ -74,6 +75,17 @@ class AuthState extends ChangeNotifier {
   }
 
   Future<void> _applyAuthenticated(UserModel profile) async {
+    // Role-resolution trace. Deliberately logs only identity/role facts — never
+    // a password, ID token, refresh token or API key.
+    if (kDebugMode) {
+      debugPrint('[AUTH LOGIN SUCCESS] uid=${profile.uid}');
+      debugPrint('[ROLE SOURCE] users/${profile.uid} '
+          '(roles=${profile.roles} expert_status=${profile.expertStatus} role=${profile.role})');
+      debugPrint('[ROLE RESULT] ${profile.resolvedRole}');
+    }
+    // Purges any cached state belonging to a DIFFERENT account before this
+    // session is applied, so the incoming user can never inherit or re-upload
+    // the previous one's data.
     await AccountGuard.instance.beginSession(profile.uid);
     _profile = profile;
     _status = AuthStatus.authenticated;
@@ -134,6 +146,14 @@ class AuthState extends ChangeNotifier {
         if (kDebugMode) debugPrint('[AUTH] FCM unregister failed (non-fatal): $e');
       }
     }
+    // Ends the WEBVIEW's own Firebase session too. The Firebase JS SDK inside
+    // the coaching WebView persists a session in WebView storage that is
+    // entirely separate from the native one, and a native signOut() does NOT
+    // touch it. Leaving it behind is what let the NEXT account open the
+    // coaching pages still running as the PREVIOUS user — the reason an expert
+    // login landed in the athlete area. webview-bridge.js also re-checks the
+    // uid on every load, so this is defence in depth, not the only guard.
+    await CoachingWebViewSession.clear();
     await _repository.signOut();
     await AccountGuard.instance.clearUserCache();
     _profile = null;

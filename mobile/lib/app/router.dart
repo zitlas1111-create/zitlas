@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart' show Listenable;
+import 'package:flutter/foundation.dart' show Listenable, debugPrint, kDebugMode;
 import 'package:go_router/go_router.dart';
 
 import '../core/notifications/notification_router.dart' show rootNavigatorKey;
@@ -40,6 +40,24 @@ import 'splash_gate.dart';
 /// docs/MIGRATION_INVENTORY.md §2 for which web page maps to which route,
 /// and §6 for what's deliberately not wired up yet (real screens, nested
 /// feature navigation, role-gating).
+/// Routes that belong to the ATHLETE experience only. An expert reaching one of
+/// these has been mis-routed (a stale deep link, a notification, or a fallback
+/// that assumed the athlete dashboard), so the redirect sends them to their own
+/// dashboard instead of silently downgrading their role.
+///
+/// Deliberately narrow: it lists the athlete tabs and their sub-pages, NOT
+/// shared surfaces an expert legitimately uses (/notifications, /profile,
+/// /chat, /zino, /wallet, /coach-profile, /experts…), and NOT /under-review,
+/// which an authenticated pending expert lands on on purpose.
+const _athleteOnlyRoutes = <String>[
+  '/dashboard',
+  '/diet',
+  '/training',
+  '/assessment',
+  '/ai-coach',
+  '/activity',
+];
+
 GoRouter buildRouter(AuthState authState) {
   return GoRouter(
     // Shared with NotificationRouter, which needs a BuildContext to navigate
@@ -74,12 +92,36 @@ GoRouter buildRouter(AuthState authState) {
         return onLogin ? null : '/login';
       }
 
+      // Role comes from the authoritative profile (users/{uid} -> roles /
+      // expert_status / role, the SAME algorithm login.js uses — see
+      // UserModel.isExpert). Never from an email, a cached role, or a default.
+      final role = authState.profile?.resolvedRole;
+      final isExpert = role == 'expert';
+
       // Signed in: leave the splash/login screens for the correct
       // dashboard by role. Every other route (including /under-review,
       // which an authenticated pending-expert lands on deliberately) is
       // left alone — this is what prevents redirect loops.
       if (onSplash || onLogin) {
-        return authState.profile?.resolvedRole == 'expert' ? '/expert-dashboard' : '/dashboard';
+        final dest = isExpert ? '/expert-dashboard' : '/dashboard';
+        if (kDebugMode) {
+          debugPrint('[AUTH ROUTING] uid=${authState.profile?.uid} '
+              'roleSource=users/{uid}(roles|expert_status|role) role=$role -> $dest');
+        }
+        return dest;
+      }
+
+      // An EXPERT must never sit inside the athlete shell. Without this, any
+      // path that lands on an athlete tab — a stale deep link, a
+      // notification, or a fallback that assumed '/dashboard' — silently
+      // downgrades an expert into the athlete area with no way back, which is
+      // exactly the reported bug. Symmetric to the guard dashboard.js already
+      // performs on the website.
+      if (isExpert && _athleteOnlyRoutes.any((r) => loc == r || loc.startsWith('$r/'))) {
+        if (kDebugMode) {
+          debugPrint('[AUTH ROUTING] expert on athlete route $loc -> /expert-dashboard');
+        }
+        return '/expert-dashboard';
       }
       return null;
     },
