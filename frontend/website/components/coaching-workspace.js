@@ -414,6 +414,12 @@
           // coach's uid (a DATA mismatch, not a permission/rules issue) — the
           // mismatched coachId values are logged below to make that visible
           // without needing direct database access.
+          console.log('[COACH MEAL REVIEW LOAD] authenticatedCoachUid=' +
+            ((typeof ZitlasAuth !== 'undefined' && ZitlasAuth.currentUser) ? ZitlasAuth.currentUser.uid : null) +
+            ' expertId=' + S.opts.coachId + ' coachId=' + S.opts.coachId +
+            ' athleteId=' + S.opts.athleteId + ' coachingId=' + S.opts.athleteId +
+            ' endpoint=(direct Firestore onSnapshot, no REST endpoint)' +
+            ' responseStatus=SUCCESS recordsReturned=' + S.checkins.length);
           console.log('[COACH_MEAL_REVIEW_FETCH] coachId=' + S.opts.coachId +
             ' athleteId=' + S.opts.athleteId +
             ' query=meal_checkins.where(athleteId==' + S.opts.athleteId + ')' +
@@ -438,6 +444,8 @@
           // failure (permission-denied from Security Rules) — this is
           // distinct from the zero-results case above, which is a successful
           // query that simply matched nothing (or got filtered client-side).
+          console.error('[COACH MEAL REVIEW LOAD] responseStatus=DENIED (permission-denied, not zero-results) ' +
+            'expertId=' + S.opts.coachId + ' coachId=' + S.opts.coachId + ' athleteId=' + S.opts.athleteId, e);
           console.error('[COACH_MEAL_REVIEW_FETCH] DENIED (permission-denied, not zero-results) coachId=' +
             S.opts.coachId + ' athleteId=' + S.opts.athleteId, e);
         }

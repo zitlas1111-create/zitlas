@@ -2583,7 +2583,16 @@
         confidenceScore:   estimate ? estimate.confidenceScore   : null,
       };
       console.log('[MEAL CHECKIN] submitting', doc);
+      // No REST endpoint here — the athlete's browser writes DIRECTLY to
+      // Firestore (client SDK), enforced by firestore.rules' meal_checkins
+      // `create` rule, not a FastAPI route. Logged before the write so a
+      // rejection (permission-denied, invalid data) still shows what was
+      // ATTEMPTED, not just silence.
+      console.log('[MEAL_SNAP_WEBSITE_SUBMIT] athleteId=' + uid + ' expertId=' + _pcRel.coachId +
+        ' coachId=' + _pcRel.coachId + ' coachingId=' + uid + ' mealType=' + doc.mealType +
+        ' write=meal_checkins/' + id + ' (direct Firestore .set(), no backend endpoint)');
       return ZitlasDB.collection('meal_checkins').doc(id).set(doc).then(function () {
+        console.log('[MEAL_SNAP_WEBSITE_SUBMIT] responseStatus=SUCCESS responseBody=written mealId=' + id);
         console.log('[MEAL CHECKIN] MEAL_CHECKINS DOCUMENT CREATED —', id);
         var nid = 'CN_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
         return ZitlasDB.collection('coaching_notifications').doc(nid).set({
@@ -2608,6 +2617,7 @@
       _pcCloseSheet();
       showToast('✅ Sent to your coach for review.');
     }).catch(function (e) {
+      console.error('[MEAL_SNAP_WEBSITE_SUBMIT] responseStatus=FAILED responseBody=' + ((e && (e.code || e.message)) || e));
       console.error('[MEAL CHECKIN] PIPELINE FAILED —', (e && e.message) || e, e);
       showToast(e && e.message ? e.message : 'Could not send — try again.');
       if (btn) { btn.disabled = false; btn.textContent = 'Send'; }
