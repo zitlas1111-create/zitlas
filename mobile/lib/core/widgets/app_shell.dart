@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show SystemNavigator;
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
@@ -171,41 +172,101 @@ class _AppShellState extends State<AppShell> {
         .clamp(0, AppShell._zinoContextForBranch.length - 1)];
     final tour = _tour;
 
-    return ZinoTourHost(
-      startTour: startTourManually,
-      child: Stack(
-        children: [
-          Scaffold(
-            // Zino rides along on every primary tab, matching the website where
-            // `zino.js` self-mounts its FAB on every page — the athlete can ask
-            // a question from wherever they are, and Zino knows where that was.
-            //
-            // TOP-RIGHT, not a bottom FAB: that placement is part of the ZITLAS
-            // design (`.zn-fab { top: …; right: 16px }`), so it is preserved
-            // rather than converted to the usual Android bottom-right
-            // convention.
-            body: ZinoFabOverlay(
-              onTap: () => context.push('/zino?from=$from'),
-              child: widget.navigationShell,
-            ),
-            bottomNavigationBar: BottomNavigationBar(
-              currentIndex: widget.navigationShell.currentIndex,
-              onTap: (index) => widget.navigationShell.goBranch(
-                index,
-                initialLocation: index == widget.navigationShell.currentIndex,
+    // THE ONLY back-press confirmation in ZITLAS. This widget hosts the 5
+    // primary tabs — the app ROOT — so a back press that reaches here has
+    // nothing left to pop and the next one would terminate the app.
+    //
+    // It deliberately does NOT fire for ordinary navigation, which is why no
+    // other screen needs to know it exists:
+    //   * a page pushed INSIDE a tab pops on that branch's navigator;
+    //   * a full-screen route declared OUTSIDE the shell (/coach-profile,
+    //     /zino, /chat, /notifications, /expert-dashboard…) sits ABOVE this
+    //     shell page on the ROOT navigator and pops itself.
+    // In both cases the deeper route handles the pop and this callback is never
+    // reached — so closing the Coach Profile WebView, or any other screen,
+    // shows no warning at all.
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (bool didPop, Object? _) async {
+        if (didPop) return;
+        await _confirmExitApp();
+      },
+      child: ZinoTourHost(
+        startTour: startTourManually,
+        child: Stack(
+          children: [
+            Scaffold(
+              // Zino rides along on every primary tab, matching the website where
+              // `zino.js` self-mounts its FAB on every page — the athlete can ask
+              // a question from wherever they are, and Zino knows where that was.
+              //
+              // TOP-RIGHT, not a bottom FAB: that placement is part of the ZITLAS
+              // design (`.zn-fab { top: …; right: 16px }`), so it is preserved
+              // rather than converted to the usual Android bottom-right
+              // convention.
+              body: ZinoFabOverlay(
+                onTap: () => context.push('/zino?from=$from'),
+                child: widget.navigationShell,
               ),
-              items: [
-                for (final tab in AppShell._tabs)
-                  BottomNavigationBarItem(icon: Icon(tab.icon), label: tab.label),
-              ],
+              bottomNavigationBar: BottomNavigationBar(
+                currentIndex: widget.navigationShell.currentIndex,
+                onTap: (index) => widget.navigationShell.goBranch(
+                  index,
+                  initialLocation: index == widget.navigationShell.currentIndex,
+                ),
+                items: [
+                  for (final tab in AppShell._tabs)
+                    BottomNavigationBarItem(icon: Icon(tab.icon), label: tab.label),
+                ],
+              ),
             ),
-          ),
-          // Above the Scaffold (including the nav bar) so the walkthrough
-          // scrim genuinely blocks interaction with a half-explained screen.
-          if (tour != null) ZinoTourOverlay(controller: tour),
-        ],
+            // Above the Scaffold (including the nav bar) so the walkthrough
+            // scrim genuinely blocks interaction with a half-explained screen.
+            if (tour != null) ZinoTourOverlay(controller: tour),
+          ],
+        ),
       ),
     );
+  }
+
+  /// "Exit ZITLAS?" — shown ONLY when back would terminate the app.
+  ///
+  /// Latched so repeated back presses cannot stack dialogs. Exit uses
+  /// SystemNavigator.pop(), which closes the app the way the OS expects rather
+  /// than killing the process.
+  bool _exitDialogOpen = false;
+
+  Future<void> _confirmExitApp() async {
+    if (_exitDialogOpen || !mounted) return;
+    _exitDialogOpen = true;
+    try {
+      final leave = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text(
+            'Exit ZITLAS?',
+            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+          ),
+          content: const Text(
+            'You’re at the start of the app. Going back again will close ZITLAS.',
+            style: TextStyle(fontSize: 13, height: 1.45),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Exit', style: TextStyle(fontWeight: FontWeight.w800)),
+            ),
+          ],
+        ),
+      );
+      if (leave == true) await SystemNavigator.pop();
+    } finally {
+      _exitDialogOpen = false;
+    }
   }
 }
 
