@@ -126,8 +126,14 @@ class MealCheckinRepository {
     // verified separately, after the write actually completes.
     await _db.collection('meal_checkins').doc(id).set(checkin.toMap());
     if (kDebugMode) {
-      debugPrint('[MEAL_REVIEW_CREATE] athleteId=$athleteId coachId=$coachId '
-          'mealId=$id mealType=${checkin.mealType} status=${checkin.status}');
+      // coachingId: there is no separate field — the relationship is 1:1
+      // keyed by personal_coaching/{athleteId}, so athleteId doubles as the
+      // coaching-session identifier the coach's read rule (isActiveCoachOf)
+      // looks up.
+      debugPrint('[MEAL_SNAP_SUBMIT] athleteId=$athleteId coachId=$coachId '
+          'expertId=$coachId coachingId=$athleteId mealType=${checkin.mealType} '
+          'mealId=$id status=${checkin.status} '
+          'collection/path=meal_checkins/$id');
     }
 
     await _notifyCoach(checkin);

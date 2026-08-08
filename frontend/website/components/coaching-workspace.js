@@ -393,17 +393,37 @@
         if (S.tab === 'diet' && !S.dietDirty) renderTab();
       }, function (e) { console.warn('[CW] meal requests listener error', e); }));
 
+    if (S.opts.role === 'coach') {
+      console.log('[COACH AUTH] firebaseUid=' + ((typeof ZitlasAuth !== 'undefined' && ZitlasAuth.currentUser) ? ZitlasAuth.currentUser.uid : null) +
+        ' expertId=' + S.opts.coachId + ' role=coach' +
+        ' | opening workspace for athleteId=' + S.opts.athleteId);
+    }
     S.unsubs.push(d.collection('meal_checkins')
       .where('athleteId', '==', S.opts.athleteId)
       .onSnapshot(function (snap) {
-        S.checkins = snap.docs.map(function (x) { return x.data(); })
+        var rawDocs = snap.docs.map(function (x) { return x.data(); });
+        S.checkins = rawDocs
           .filter(function (c) { return c.coachId === S.opts.coachId; })
           .sort(function (a, b) { return (b.timestamp || '') < (a.timestamp || '') ? -1 : 1; });
         var pending = S.checkins.filter(function (c) { return c.status === 'pending'; }).length;
         if (S.opts.role === 'coach') {
-          console.log('[MEAL_REVIEW_FETCH] coachId=' + S.opts.coachId +
-            ' athleteId=' + S.opts.athleteId + ' foundReviews=' + S.checkins.length +
-            ' pending=' + pending);
+          // documentsFound = what the QUERY returned (athleteId match only,
+          // before the coachId filter) — reviewsReturned = what's left after
+          // filtering to THIS coach. If documentsFound > 0 but reviewsReturned
+          // is 0, the meal_checkins doc's OWN coachId does not match this
+          // coach's uid (a DATA mismatch, not a permission/rules issue) — the
+          // mismatched coachId values are logged below to make that visible
+          // without needing direct database access.
+          console.log('[COACH_MEAL_REVIEW_FETCH] coachId=' + S.opts.coachId +
+            ' athleteId=' + S.opts.athleteId +
+            ' query=meal_checkins.where(athleteId==' + S.opts.athleteId + ')' +
+            ' documentsFound=' + rawDocs.length +
+            ' reviewsReturned=' + S.checkins.length + ' pending=' + pending);
+          if (rawDocs.length > 0 && S.checkins.length === 0) {
+            console.warn('[COACH_MEAL_REVIEW_FETCH] MISMATCH — query found documents for this athlete, ' +
+              'but NONE have coachId matching this coach. Document coachIds present: ' +
+              JSON.stringify(rawDocs.map(function (c) { return c.coachId; })));
+          }
         }
         var badge = $('cwCheckinBadge');
         if (badge && S.opts.role === 'coach') {
@@ -413,7 +433,14 @@
         if (S.tab === 'checkins') renderCheckins();
       }, function (e) {
         console.warn('[CW] meal checkins listener error', e);
-        if (S.opts.role === 'coach') console.error('[MEAL_REVIEW_FETCH] DENIED coachId=' + S.opts.coachId + ' athleteId=' + S.opts.athleteId, e);
+        if (S.opts.role === 'coach') {
+          // The listener's error callback fires ONLY on a genuine query-level
+          // failure (permission-denied from Security Rules) — this is
+          // distinct from the zero-results case above, which is a successful
+          // query that simply matched nothing (or got filtered client-side).
+          console.error('[COACH_MEAL_REVIEW_FETCH] DENIED (permission-denied, not zero-results) coachId=' +
+            S.opts.coachId + ' athleteId=' + S.opts.athleteId, e);
+        }
       }));
 
     S.unsubs.push(d.collection('workout_checkins')

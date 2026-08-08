@@ -5185,6 +5185,11 @@ function _initInboxTabs(expert) {
           window.location.href = '../dashboard/dashboard.html';
           return;
         }
+        // Authoritative coach identity — compare this exact UID against a
+        // meal record's coachId/expertId when tracing a "meal not visible"
+        // report; never assume a display name is enough to confirm a match.
+        console.log('[COACH AUTH] firebaseUid=' + uid + ' email=' + (firebaseUser.email || '') +
+          ' expertId=' + uid + ' role=expert');
 
         /* ── IDENTITY: experts/{uid} is the single source of truth.
            users/{uid} is only consulted for the role check above. ── */
